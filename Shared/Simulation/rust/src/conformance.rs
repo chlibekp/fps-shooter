@@ -112,3 +112,81 @@ pub fn generate(world: &CollisionWorld, starts: &[Vec3], steps_per_seq: usize) -
     }
     out
 }
+
+/// Small built-in determinism check that the C++ client runs at startup
+/// (`tfps::DeterminismSelfTestHash`). Simulates a fixed input pattern in a
+/// fixed world and hashes every intermediate state's float bits.
+pub fn determinism_selftest_hash() -> u64 {
+    use crate::map::Aabb;
+    use crate::math::Fnv1a64;
+    let world = CollisionWorld {
+        boxes: vec![
+            Aabb {
+                min: Vec3::new(-20.0, -20.0, -1.0),
+                max: Vec3::new(20.0, 20.0, 0.0),
+            },
+            Aabb {
+                min: Vec3::new(3.0, -2.0, 0.0),
+                max: Vec3::new(4.0, 2.0, 0.3),
+            },
+            Aabb {
+                min: Vec3::new(6.0, -6.0, 0.0),
+                max: Vec3::new(6.2, 6.0, 3.0),
+            },
+            Aabb {
+                min: Vec3::new(-2.0, 3.0, 1.4),
+                max: Vec3::new(2.0, 6.0, 1.6),
+            },
+        ],
+    };
+    let dt = crate::tick_dt(64);
+    let mut s = MoveState::at(Vec3::new(0.0, 0.0, 0.5));
+    let mut h = Fnv1a64::default();
+    for i in 0u32..640 {
+        let phase = i / 40;
+        let mut b = match phase % 4 {
+            0 => buttons::FORWARD,
+            1 => buttons::FORWARD | buttons::SPRINT | buttons::RIGHT,
+            2 => buttons::LEFT | buttons::CROUCH,
+            _ => buttons::BACK | buttons::JUMP,
+        };
+        if i % 97 == 0 {
+            b |= buttons::JUMP;
+        }
+        let input = MoveInput {
+            buttons: b,
+            yaw_q: (i.wrapping_mul(371) & 0xFFFF) as u16,
+            pitch_q: 0,
+        };
+        simulate(&mut s, &input, dt, &world);
+        for v in [
+            s.pos.x,
+            s.pos.y,
+            s.pos.z,
+            s.vel.x,
+            s.vel.y,
+            s.vel.z,
+            s.jump_timer,
+        ] {
+            h.write_f32(v);
+        }
+        h.write(&[s.on_ground as u8, s.crouched as u8]);
+    }
+    h.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    /// The C++ client hard-codes this value (TfpsDeterminism.h, kExpectedSelfTestHash). If movement
+    /// changes, update both.
+    pub const EXPECTED_SELFTEST_HASH: u64 = 0x7f55_21bd_5eb3_e7bb;
+
+    #[test]
+    fn selftest_hash_matches_cpp_constant() {
+        let h = super::determinism_selftest_hash();
+        assert_eq!(
+            h, EXPECTED_SELFTEST_HASH,
+            "update EXPECTED_SELFTEST_HASH and the C++ constant to {h:#018x}"
+        );
+    }
+}

@@ -1,0 +1,159 @@
+// Copyright TacticalFPS project.
+#include "TfpsNetSubsystem.h"
+#include "TacticalFPS.h"
+#include "TfpsMapLoader.h"
+
+#include "HAL/PlatformTime.h"
+#include "Misc/App.h"
+#include "NetCore/TfpsDeterminism.h"
+
+void UTfpsNetSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+	bDeterminismOk = tfps::DeterminismSelfTestPasses();
+	if (bDeterminismOk)
+	{
+		UE_LOG(LogTfps, Log, TEXT("Movement determinism self-test passed"));
+	}
+	else
+	{
+		UE_LOG(LogTfps, Error, TEXT("Movement determinism self-test FAILED (hash %016llx, expected %016llx). Client prediction will be corrected by the server constantly; check compiler floating point settings."),
+			static_cast<unsigned long long>(tfps::DeterminismSelfTestHash()), static_cast<unsigned long long>(tfps::kExpectedSelfTestHash));
+	}
+}
+
+void UTfpsNetSubsystem::Deinitialize()
+{
+	Disconnect();
+	Super::Deinitialize();
+}
+
+bool UTfpsNetSubsystem::Connect(const FString& Address, const FString& PlayerName, const FString& MapName)
+{
+	Disconnect();
+	FString Error;
+	tfps::MapDef NewMap;
+	if (!FTfpsMapLoader::Load(MapName, NewMap, Error))
+	{
+		Status = ETfpsConnectionStatus::Failed;
+		StatusText = Error;
+		UE_LOG(LogTfps, Error, TEXT("%s"), *Error);
+		return false;
+	}
+	Map = std::move(NewMap);
+	bHasMap = true;
+	++MapRevision;
+
+	if (!Transport.Open(Address, Error))
+	{
+		Status = ETfpsConnectionStatus::Failed;
+		StatusText = Error;
+		UE_LOG(LogTfps, Error, TEXT("Connect failed: %s"), *Error);
+		return false;
+	}
+	tfps::ClientConfig Config;
+	Config.Name = TCHAR_TO_UTF8(*PlayerName.Left(24));
+	Core = std::make_unique<tfps::ClientCore>(Config, Map, Transport, FPlatformTime::Seconds());
+	ServerAddress = Address;
+	LocalName = PlayerName;
+	Status = ETfpsConnectionStatus::Connecting;
+	StatusText = FString::Printf(TEXT("Connecting to %s..."), *Address);
+	UE_LOG(LogTfps, Log, TEXT("Connecting to %s as '%s'"), *Address, *PlayerName);
+	return true;
+}
+
+void UTfpsNetSubsystem::Disconnect()
+{
+	if (Core)
+	{
+		Core->Disconnect();
+		Core.reset();
+	}
+	Transport.Close();
+	if (Status != ETfpsConnectionStatus::Failed)
+	{
+		Status = ETfpsConnectionStatus::Offline;
+		StatusText = TEXT("Offline");
+	}
+}
+
+void UTfpsNetSubsystem::SetLocalInput(const tfps::MoveInput& Input)
+{
+	if (Core)
+	{
+		Core->SetInput(Input);
+	}
+}
+
+void UTfpsNetSubsystem::Pump()
+{
+	if (!Core || LastPumpFrame == GFrameCounter)
+	{
+		return;
+	}
+	LastPumpFrame = GFrameCounter;
+	Core->Update(FPlatformTime::Seconds());
+	HandleEvents();
+}
+
+void UTfpsNetSubsystem::Tick(float DeltaTime)
+{
+	Pump();
+}
+
+void UTfpsNetSubsystem::PushEvent(const FString& Text)
+{
+	UE_LOG(LogTfps, Log, TEXT("%s"), *Text);
+	RecentEvents.Add(Text);
+	if (RecentEvents.Num() > 8)
+	{
+		RecentEvents.RemoveAt(0);
+	}
+}
+
+void UTfpsNetSubsystem::HandleEvents()
+{
+	tfps::ClientEvent Event;
+	while (Core && Core->PollEvent(Event))
+	{
+		const FString Name = UTF8_TO_TCHAR(Event.Name.c_str());
+		switch (Event.Type)
+		{
+		case tfps::ClientEvent::EType::Connected:
+			Status = ETfpsConnectionStatus::Connected;
+			StatusText = FString::Printf(TEXT("Connected to %s"), *ServerAddress);
+			PushEvent(FString::Printf(TEXT("Connected as player %d"), static_cast<int32>(Event.PlayerId)));
+			break;
+		case tfps::ClientEvent::EType::PlayerJoined:
+			if (Event.PlayerId != Core->PlayerId())
+			{
+				PushEvent(FString::Printf(TEXT("%s joined (team %d)"), *Name, static_cast<int32>(Event.Team)));
+			}
+			break;
+		case tfps::ClientEvent::EType::PlayerLeft:
+			PushEvent(FString::Printf(TEXT("Player %d left (%s)"), static_cast<int32>(Event.PlayerId), UTF8_TO_TCHAR(tfps::DisconnectReasonName(Event.LeftReason))));
+			break;
+		case tfps::ClientEvent::EType::PlayerConnState:
+			PushEvent(FString::Printf(TEXT("Player %d connection: %s"), static_cast<int32>(Event.PlayerId),
+				Event.ConnState == tfps::EConnState::Connected ? TEXT("restored") : TEXT("interrupted")));
+			break;
+		case tfps::ClientEvent::EType::Disconnected:
+		{
+			FString Reason;
+			switch (Event.Cause)
+			{
+			case tfps::EDisconnectCause::Rejected: Reason = FString::Printf(TEXT("rejected: %s"), UTF8_TO_TCHAR(tfps::RejectReasonName(Event.RejectReason))); break;
+			case tfps::EDisconnectCause::HandshakeTimeout: Reason = TEXT("server did not answer"); break;
+			case tfps::EDisconnectCause::Timeout: Reason = TEXT("connection lost"); break;
+			case tfps::EDisconnectCause::MapMismatch: Reason = TEXT("map data differs from the server's"); break;
+			case tfps::EDisconnectCause::ServerDisconnect: Reason = TEXT("disconnected by server"); break;
+			default: Reason = TEXT("disconnected"); break;
+			}
+			Status = Event.Cause == tfps::EDisconnectCause::Local ? ETfpsConnectionStatus::Offline : ETfpsConnectionStatus::Failed;
+			StatusText = Reason;
+			PushEvent(Reason);
+			break;
+		}
+		}
+	}
+}

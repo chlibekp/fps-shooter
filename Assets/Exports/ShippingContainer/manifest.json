@@ -1,0 +1,23 @@
+{
+  "asset": "ShippingContainer",
+  "unreal_mesh": "SM_ShippingContainer",
+  "dimensions_m": [
+    6.061,
+    2.532,
+    2.6
+  ],
+  "triangles_lod0": 4420,
+  "triangles_lod1": 1326,
+  "collision_primitives": 5,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/ShippingContainer/T_ShippingContainer_BC.png",
+    "N": "Assets/Exports/ShippingContainer/T_ShippingContainer_N.png",
+    "ORM": "Assets/Exports/ShippingContainer/T_ShippingContainer_ORM.png",
+    "fbx_lod0": "Assets/Exports/ShippingContainer/SM_ShippingContainer.fbx",
+    "fbx_lod1": "Assets/Exports/ShippingContainer/SM_ShippingContainer_LOD1.fbx",
+    "preview": "Assets/Exports/ShippingContainer/preview.png",
+    "blend": "Assets/Blender/ShippingContainer.blend"
+  },
+  "notes": "Open end at -X. Matches 'container' solids in test_arena. Material: metal."
+}

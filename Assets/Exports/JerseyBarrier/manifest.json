@@ -1,0 +1,23 @@
+{
+  "asset": "JerseyBarrier",
+  "unreal_mesh": "SM_JerseyBarrier",
+  "dimensions_m": [
+    0.6,
+    3.0,
+    0.93
+  ],
+  "triangles_lod0": 436,
+  "triangles_lod1": 218,
+  "collision_primitives": 1,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/JerseyBarrier/T_JerseyBarrier_BC.png",
+    "N": "Assets/Exports/JerseyBarrier/T_JerseyBarrier_N.png",
+    "ORM": "Assets/Exports/JerseyBarrier/T_JerseyBarrier_ORM.png",
+    "fbx_lod0": "Assets/Exports/JerseyBarrier/SM_JerseyBarrier.fbx",
+    "fbx_lod1": "Assets/Exports/JerseyBarrier/SM_JerseyBarrier_LOD1.fbx",
+    "preview": "Assets/Exports/JerseyBarrier/preview.png",
+    "blend": "Assets/Blender/JerseyBarrier.blend"
+  },
+  "notes": "Matches 'barrier' solids (3.0 x 0.6 x 0.9 m). Material: concrete (non-penetrable)."
+}

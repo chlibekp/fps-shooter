@@ -1,0 +1,23 @@
+{
+  "asset": "WoodCrate",
+  "unreal_mesh": "SM_WoodCrate",
+  "dimensions_m": [
+    1.248,
+    1.248,
+    1.202
+  ],
+  "triangles_lod0": 6696,
+  "triangles_lod1": 2342,
+  "collision_primitives": 1,
+  "texture_size": 1024,
+  "files": {
+    "BC": "Assets/Exports/WoodCrate/T_WoodCrate_BC.png",
+    "N": "Assets/Exports/WoodCrate/T_WoodCrate_N.png",
+    "ORM": "Assets/Exports/WoodCrate/T_WoodCrate_ORM.png",
+    "fbx_lod0": "Assets/Exports/WoodCrate/SM_WoodCrate.fbx",
+    "fbx_lod1": "Assets/Exports/WoodCrate/SM_WoodCrate_LOD1.fbx",
+    "preview": "Assets/Exports/WoodCrate/preview.png",
+    "blend": "Assets/Blender/WoodCrate.blend"
+  },
+  "notes": "Matches 'crate' solids (1.2 m) in test_arena. Material: wood (penetrable)."
+}

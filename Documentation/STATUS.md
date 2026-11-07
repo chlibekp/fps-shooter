@@ -4,7 +4,7 @@ Legend: ✅ implemented and tested · 🟡 partially implemented / implemented b
 not verified end-to-end · ❌ not started · 🔒 placeholder (explicitly marked
 temporary).
 
-Last updated: Phase 2 (Gunplay) — server-side and NetCore complete, Unreal presentation mock-checked only.
+Last updated: Phase 3 (Destruction) — server-side and NetCore complete, Unreal presentation mock-checked only.
 
 ## Verification environment caveat
 
@@ -96,7 +96,7 @@ result:
 | Health, death, respawn (configurable delay), kills/deaths | ✅ | |
 | Friendly fire rule | ✅ | Off by default |
 | Hit confirm, damage direction, kill feed messages | ✅ | |
-| Bullet penetration, material resistance | ❌ | Phase 3 (needs destructible materials) |
+| Bullet penetration, material resistance | ✅ | Phase 3: thickness × resistance against a per-weapon budget, damage loss per layer |
 | Armor | ❌ | Needs operator/loadout system |
 | Suppression effects | ❌ | |
 | Attachments (affect recoil/spread) | ❌ | The data model has room for multipliers |
@@ -108,13 +108,31 @@ result:
 
 | Area | Status |
 |------|--------|
-| Destruction | ❌ Phase 3. Map solids already carry materials. |
+| Destruction | ✅ See the Phase 3 table |
 | Gadgets / drones | ❌ Phase 4 |
 | Three production maps | ❌ Phase 5. `test_arena` is a graybox. |
 | Blender asset pipeline | ✅ Procedural, headless. 3 props (crate, jersey barrier, container) with LOD1, UCX collision and baked PBR maps. |
 | Props placed in the Unreal level | ❌ Needs editor import (documented in ASSET_PIPELINE.md) |
 | Weapon models | ❌ The viewmodel is a 🔒 placeholder box |
 | Audio | ❌ |
+
+## Destruction (spec §5) — Phase 3
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Material-based destructible solids (wood, drywall, glass, brick) | ✅ | Per-solid opt-out in the map |
+| Deterministic cell subdivision shared by server and client | ✅ | Bit-exact in Rust and C++; part of the map hash |
+| Cells damaged by bullets (per-material multiplier) | ✅ | Shoot holes through drywall and wood. Glass panes shatter. Brick barely chips (explosives only). |
+| Bullet penetration through walls (damage reduced per layer) | ✅ | Concrete and metal stop bullets |
+| Explosions break walls (falloff) and hurt players (through destructible walls, blocked by indestructible ones) | ✅ | `GameWorld::explode`. No gadget uses it yet (Phase 4). |
+| Destroy windows, doors, barricades, floors | ✅ | Test arena: glass panes, two wooden doors, a plank barricade, a wooden floor hatch |
+| Movement through new holes, client prediction collides with holes | ✅ | Conformance vectors include 1,876 destroyed cells |
+| Replication of destruction events, full state for joiners | ✅ | CellsDestroyed messages; e2e-tested |
+| Local debris, dust, destruction sounds | 🟡 🔒 | Physics debris from engine cubes (pooled); no dust or sound yet |
+| Chaos Destruction (fracture meshes) | ❌ | Cosmetic layer for Phase 5 assets; gameplay stays cell-based |
+| Shot-time rewind of destruction for lag compensation | ❌ | Shots use the current destruction state (documented in ARCHITECTURE.md) |
+| Doors that open/close (USE) | ❌ | Doors can only be destroyed for now |
+| Reinforced surfaces | ❌ | Phase 4 gadget (material exists) |
 
 ## Frontend / UI (spec §11)
 
@@ -133,6 +151,7 @@ result:
 | Engine cylinder/sphere/cube "mannequin" for remote players, with pose approximations | `ATfpsRemotePlayer` | Rigged character + animation (Phase 7) |
 | Box viewmodel weapon | `ATfpsPlayerPawn::ViewWeapon` | Blender weapon models + first-person animations |
 | Tracers, impacts and muzzle flash from engine shapes and a point light | `ATfpsShotFx` | Niagara effects, decals, audio (Phase 7) |
+| Debris cubes and the sphere-and-light explosion | `ATfpsArenaBuilder`, `ATfpsShotFx` | Chaos fracture, Niagara dust and fireballs |
 | Engine `Entry` map as the boot map, with the level built at runtime | `DefaultEngine.ini` | Authored maps (Phase 5) |
 | Canvas debug HUD | `ATfpsHUD` | UMG tactical HUD (Phase 7) |
 

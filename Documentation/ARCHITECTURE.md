@@ -164,3 +164,28 @@ clients from claiming arbitrary past states. World geometry is not rewound;
 it is static until destruction in Phase 3. Destruction events will need to
 be checked at the rewound time: a wall destroyed after the render time must
 still block the shot.
+
+## Decision 11 — Gameplay destruction is a deterministic cell grid; visuals are local
+
+Destructible solids are split into roughly 0.3 m cells by a rule that is part
+of the shared simulation. Rust and C++ produce bit-identical cells and ids,
+covered by the conformance vectors. The server owns cell health, penetration
+and explosions, and replicates only the ids of destroyed cells. Each client
+removes those cells from its collision world, so movement prediction
+collides with exactly the server's holes, and spawns its own cosmetic debris.
+Debris is never replicated.
+
+Chaos Destruction is reserved for the visual layer (fracturing art meshes
+over the gameplay cells in Phase 5). It is not used for gameplay: Chaos
+fracture results are not deterministic across machines, so competitive
+outcomes cannot depend on them.
+
+Collision queries visit candidate boxes in the same order as a full scan of
+all intact boxes, using index ranges per solid. Results are therefore
+identical to the brute-force definition while touching only nearby cells.
+
+Shots use the current destruction state instead of the state at the
+shooter's render time. A hole made less than the rewind window ago can let
+a shot through a moment before the shooter saw it. This is accepted for
+now; rewinding destruction would require cell-destruction timestamps in the
+lag-compensation history.

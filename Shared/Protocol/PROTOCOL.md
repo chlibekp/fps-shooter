@@ -1,7 +1,7 @@
-# TacticalFPS wire protocol — version 2
+# TacticalFPS wire protocol — version 3
 
 Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
-stance/lean/ADS, shot events).
+stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions).
 
 Implementations:
 
@@ -24,7 +24,7 @@ both sides.
 | Field | Type | Value |
 |-------|------|-------|
 | magic | u16 | `0x4654` (bytes `54 46`, "TF") |
-| version | u16 | `2` |
+| version | u16 | `3` |
 | type | u8 | packet type |
 
 Packet types: 1 ConnectRequest, 2 Challenge, 3 ChallengeResponse,
@@ -104,7 +104,13 @@ Message types (S→C):
 | 3 | PlayerConnState | `u16 player_id, u8 state` (0 connected, 1 interrupted, 2 reconnecting) |
 | 4 | HitConfirm | `u16 victim, u8 damage, u8 flags` (bit0 headshot, bit1 killed) — to the shooter |
 | 5 | Damaged | `u16 attacker, u8 amount, u8 health, i32 from_mm[3]` (attacker position) — to the victim |
-| 6 | Kill | `u16 killer, u16 victim, u8 weapon_id, u8 headshot` — to everyone |
+| 6 | Kill | `u16 killer, u16 victim, u8 weapon_id, u8 headshot` — to everyone (weapon 0 = explosion) |
+| 7 | CellsDestroyed | `u8 count (≤ 90), count × u32 cell_id` — to everyone; the complete set is also sent to a client right after it connects |
+| 8 | Explosion | `i32 pos_mm[3], u16 radius_cm` — to everyone (effects only) |
+
+Cell ids index the destruction cells of the map (see "Destruction" below).
+The reliable sender always lets at least one message into a packet, so a
+message larger than the per-packet reliable budget cannot stall the channel.
 
 ### Input body (kind 1, C→S)
 
@@ -212,3 +218,17 @@ predict.
 * v1 is **not encrypted**. Planned: X25519 key exchange during the handshake,
   then ChaCha20-Poly1305 per packet with the packet sequence as nonce; the
   `session_key` field will become the key id.
+
+## Destruction
+
+Destructible solids (wood, drywall, glass and brick by default; a map can
+disable it per solid with `"destructible": false`) are split into cells.
+Along each axis `n = 1` if the size is < 0.6 m, else
+`clamp(floor(size / 0.3 + 0.5), 1, 64)`. Cell `(ix, iy, iz)` of a solid spans
+`min + (max - min) * (i / n)` to `min + (max - min) * ((i + 1) / n)` on each
+axis (f32, exactly this operation order). Cell ids are assigned
+consecutively over the map's solids in file order, x fastest. The rule is
+part of the shared simulation (Rust `map.rs`, C++ `TfpsMap.cpp`) and of the
+map hash. A destroyed cell no longer collides, for the server and for the
+client's movement prediction alike. Only the destroyed cell ids are
+replicated; debris is cosmetic and client-local.

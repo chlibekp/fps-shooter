@@ -23,7 +23,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
       - run: cargo clippy --workspace --all-targets -- -D warnings
         if: matrix.os == 'ubuntu-latest'
-      - run: cargo test --workspace --release
+      - run: cargo build --workspace --release --all-targets
+      - name: Tests (stacks are sampled if they hang)
+        shell: bash
+        run: Scripts/ci/test_with_hang_probe.sh 300 cargo test --workspace --release
 
   netcore:
     name: C++ NetCore (${{ matrix.os }}, hostile float=${{ matrix.hostile }})

@@ -167,6 +167,8 @@ pub struct RemotePlayer {
 pub struct NetStats {
     pub packets_sent: u64,
     pub packets_received: u64,
+    /// Datagrams from other addresses (or without a usable address), ignored.
+    pub packets_foreign: u64,
     pub bytes_sent: u64,
     pub bytes_received: u64,
     pub snapshots_received: u64,
@@ -571,13 +573,18 @@ impl Client {
     }
 
     fn receive(&mut self, now: Instant) {
-        loop {
+        // Bounded so a flood of datagrams can never stall the caller.
+        for _ in 0..MAX_DATAGRAMS_PER_UPDATE {
             let (n, from) = match recv_from_raw(&self.socket, &mut self.recv_buf) {
                 Ok(v) => v,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(_) => break, // e.g. ICMP unreachable on Windows; keep going next frame
             };
-            if from != Some(self.cfg.server) || self.lose() {
+            if from != Some(self.cfg.server) {
+                self.stats.packets_foreign += 1;
+                continue;
+            }
+            if self.lose() {
                 continue;
             }
             self.stats.packets_received += 1;
@@ -1011,6 +1018,9 @@ pub fn pump_until(
     }
     false
 }
+
+/// Most datagrams handled per `update` call.
+const MAX_DATAGRAMS_PER_UPDATE: usize = 1024;
 
 /// Receives one datagram without std's source-address parsing (macOS can
 /// report a zero-length source address, on which std's `recv_from` panics).

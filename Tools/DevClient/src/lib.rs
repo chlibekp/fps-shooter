@@ -252,10 +252,6 @@ impl Client {
             "[::]:0".parse().unwrap()
         };
         let socket = UdpSocket::bind(bind)?;
-        // A connected UDP socket: the OS filters other senders, and recv()
-        // never parses a source address (macOS can report zero-length source
-        // addresses, which makes std's recv_from panic).
-        socket.connect(cfg.server)?;
         socket.set_nonblocking(true)?;
         let mut rng = rand::rngs::StdRng::from_os_rng();
         let now = Instant::now();
@@ -379,7 +375,7 @@ impl Client {
             }
             .encode(&mut self.send_buf);
             for _ in 0..3 {
-                let _ = self.socket.send(&self.send_buf);
+                let _ = self.socket.send_to(&self.send_buf, self.cfg.server);
             }
         }
         self.set_disconnected(DisconnectCause::Local);
@@ -400,7 +396,7 @@ impl Client {
         if self.lose() {
             return;
         }
-        if let Ok(n) = self.socket.send(&self.send_buf) {
+        if let Ok(n) = self.socket.send_to(&self.send_buf, self.cfg.server) {
             self.stats.packets_sent += 1;
             self.stats.bytes_sent += n as u64;
         }
@@ -576,12 +572,12 @@ impl Client {
 
     fn receive(&mut self, now: Instant) {
         loop {
-            let n = match self.socket.recv(&mut self.recv_buf) {
+            let (n, from) = match recv_from_raw(&self.socket, &mut self.recv_buf) {
                 Ok(v) => v,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(_) => break, // e.g. ICMP unreachable on Windows; keep going next frame
             };
-            if self.lose() {
+            if from != Some(self.cfg.server) || self.lose() {
                 continue;
             }
             self.stats.packets_received += 1;
@@ -622,7 +618,7 @@ impl Client {
                         reason: DisconnectReason::ProtocolError,
                     }
                     .encode(&mut self.send_buf);
-                    let _ = self.socket.send(&self.send_buf);
+                    let _ = self.socket.send_to(&self.send_buf, self.cfg.server);
                     self.set_disconnected(if weapons_ok {
                         DisconnectCause::MapMismatch {
                             server: a.map_hash,
@@ -1014,4 +1010,18 @@ pub fn pump_until(
         std::thread::sleep(Duration::from_millis(1));
     }
     false
+}
+
+/// Receives one datagram without std's source-address parsing (macOS can
+/// report a zero-length source address, on which std's `recv_from` panics).
+fn recv_from_raw(
+    socket: &UdpSocket,
+    buf: &mut [u8],
+) -> std::io::Result<(usize, Option<SocketAddr>)> {
+    let sock = socket2::SockRef::from(socket);
+    // SAFETY: `u8` and `MaybeUninit<u8>` have the same layout, the buffer is
+    // initialized, and `recv_from` only writes initialized bytes into it.
+    let uninit = unsafe { &mut *(buf as *mut [u8] as *mut [std::mem::MaybeUninit<u8>]) };
+    let (n, addr) = sock.recv_from(uninit)?;
+    Ok((n, addr.as_socket()))
 }

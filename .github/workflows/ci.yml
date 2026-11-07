@@ -8,7 +8,7 @@ jobs:
   rust:
     name: Rust server & shared crates (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -28,7 +28,7 @@ jobs:
   netcore:
     name: C++ NetCore (${{ matrix.os }}, hostile float=${{ matrix.hostile }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -63,7 +63,7 @@ jobs:
   ue-mock-check:
     name: Unreal glue code compile check (mock API)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - run: Tools/UeMockCheck/check.sh

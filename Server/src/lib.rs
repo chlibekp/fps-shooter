@@ -163,6 +163,22 @@ pub fn start_with_data(
     })
 }
 
+/// Receives one datagram without std's source-address parsing: on macOS the
+/// kernel can report a zero-length source address, on which std's
+/// `recv_from` panics. Returns `None` as the address if it is not a usable
+/// IP address (the datagram is then dropped by the caller).
+fn recv_from_raw(
+    socket: &tokio::net::UdpSocket,
+    buf: &mut [u8],
+) -> std::io::Result<(usize, Option<SocketAddr>)> {
+    let sock = socket2::SockRef::from(socket);
+    // SAFETY: `u8` and `MaybeUninit<u8>` have the same layout, the buffer is
+    // initialized, and `recv_from` only writes initialized bytes into it.
+    let uninit = unsafe { &mut *(buf as *mut [u8] as *mut [std::mem::MaybeUninit<u8>]) };
+    let (n, addr) = sock.recv_from(uninit)?;
+    Ok((n, addr.as_socket().filter(|a| a.port() != 0)))
+}
+
 async fn recv_loop(
     socket: tokio::net::UdpSocket,
     inbox: SyncSender<Datagram>,
@@ -172,39 +188,21 @@ async fn recv_loop(
 ) {
     let mut buf = vec![0u8; RECV_BUF];
     while !shutdown.load(Ordering::Relaxed) {
-        // Wait for readability (with a timeout to re-check the shutdown flag),
-        // then receive without blocking. The datagram is read through socket2
-        // rather than std: on macOS the kernel can report a zero-length source
-        // address, on which std's recv_from panics. socket2 hands back the raw
-        // address and we drop the datagram if it is not a valid IP address.
-        match tokio::time::timeout(Duration::from_millis(100), socket.readable()).await {
-            Err(_) => continue,
-            Ok(Err(e)) => {
-                tracing::debug!("readable error: {e}");
+        let res = tokio::time::timeout(
+            Duration::from_millis(100),
+            socket.async_io(tokio::io::Interest::READABLE, || {
+                recv_from_raw(&socket, &mut buf)
+            }),
+        )
+        .await;
+        let (n, addr) = match res {
+            Err(_) => continue, // timeout: re-check shutdown flag
+            Ok(Ok((n, Some(addr)))) => (n, addr),
+            Ok(Ok((_, None))) => {
+                stats.packets_invalid.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
-            Ok(Ok(())) => {}
-        }
-        let res = socket.try_io(tokio::io::Interest::READABLE, || {
-            let sock = socket2::SockRef::from(&socket);
-            // SAFETY: `recv_from` only writes initialized bytes into the
-            // buffer and returns how many; `u8` and `MaybeUninit<u8>` share
-            // a layout, and the buffer is already fully initialized.
-            let uninit = unsafe {
-                &mut *(buf.as_mut_slice() as *mut [u8] as *mut [std::mem::MaybeUninit<u8>])
-            };
-            sock.recv_from(uninit)
-        });
-        let (n, addr) = match res {
-            Ok((n, addr)) => match addr.as_socket() {
-                Some(a) if a.port() != 0 => (n, a),
-                _ => {
-                    stats.packets_invalid.fetch_add(1, Ordering::Relaxed);
-                    continue;
-                }
-            },
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
-            Err(e) => {
+            Ok(Err(e)) => {
                 // ICMP port unreachable etc. surface as errors on some OSes.
                 tracing::debug!("recv error: {e}");
                 continue;

@@ -586,6 +586,7 @@ dependencies = [
  "anyhow",
  "clap",
  "rand",
+ "socket2",
  "tfps-protocol",
  "tfps-sim",
 ]

@@ -4,7 +4,7 @@
 
 use crate::config::ServerConfig;
 use crate::connection::Connection;
-use crate::game::GameWorld;
+use crate::game::{GameEvent, GameWorld};
 use crate::stats::Stats;
 use rand::RngCore;
 use std::collections::HashMap;
@@ -19,8 +19,11 @@ use tfps_protocol::packet::{
     self, BodyKind, Challenge, ChallengeResponse, ConnectAccepted, ConnectRejected, ConnectRequest,
     DataHeader, Disconnect, DisconnectReason, PacketType, RejectReason,
 };
-use tfps_protocol::snapshot::{self, EntityState, SnapshotHeader};
+use tfps_protocol::snapshot::{
+    self, quantize_mm, EntityState, ShotEvent, SnapshotHeader, MAX_SHOT_EVENTS,
+};
 use tfps_protocol::{Writer, MAX_PACKET_SIZE, PROTOCOL_VERSION};
+use tfps_sim::weapon::{WeaponSet, WeaponState};
 use tfps_sim::{MapDef, MoveState};
 use tracing::{debug, info, warn};
 
@@ -37,8 +40,13 @@ struct SavedPlayer {
     team: u8,
     name: String,
     state: MoveState,
+    weapon: WeaponState,
+    health: u8,
     expires: Instant,
 }
+
+/// Shot events kept for one second so each client gets every event once.
+const SHOT_EVENT_HISTORY: usize = 512;
 
 pub struct ServerCore {
     cfg: ServerConfig,
@@ -55,16 +63,29 @@ pub struct ServerCore {
     send_buf: Vec<u8>,
     entities: Vec<EntityState>,
     scratch: Vec<EntityState>,
+    recent_shots: std::collections::VecDeque<(u32, ShotEvent)>,
+    shot_scratch: Vec<ShotEvent>,
+    weapons_hash: u64,
     last_stats_log: Instant,
     last_stats: crate::stats::StatsSnapshot,
 }
 
 impl ServerCore {
-    pub fn new(cfg: ServerConfig, map: MapDef, socket: UdpSocket, stats: Arc<Stats>) -> Self {
+    pub fn new(
+        cfg: ServerConfig,
+        map: MapDef,
+        weapons: WeaponSet,
+        socket: UdpSocket,
+        stats: Arc<Stats>,
+    ) -> Self {
         let map_hash = map.geometry_hash();
+        let weapons_hash = weapons.hash();
         let now = Instant::now();
         Self {
-            game: GameWorld::new(map, cfg.tick_rate),
+            game: GameWorld::new(map, weapons, cfg.rules.clone(), cfg.tick_rate),
+            recent_shots: std::collections::VecDeque::with_capacity(SHOT_EVENT_HISTORY),
+            shot_scratch: Vec::with_capacity(32),
+            weapons_hash,
             cfg,
             socket,
             stats,
@@ -294,7 +315,7 @@ impl ServerCore {
             (team, name)
         };
         if !rejoin_existing {
-            let state = restored.as_ref().map(|s| s.state);
+            let state = restored.as_ref().map(|s| (s.state, s.weapon, s.health));
             self.game.add_player(player_id, team, pname.clone(), state);
         } else if let Some(p) = self.game.player_mut(player_id) {
             // New client process: its command sequence restarts.
@@ -319,6 +340,12 @@ impl ServerCore {
             reconnect_token,
             map_hash: self.map_hash,
             map_name: self.game.map.name.clone(),
+            weapons_hash: self.weapons_hash,
+            loadout: self
+                .game
+                .player(player_id)
+                .map(|p| p.loadout)
+                .unwrap_or(self.game.default_loadout()),
         }
         .encode(&mut conn.accepted_packet);
         self.send(addr, &conn.accepted_packet);
@@ -420,8 +447,8 @@ impl ServerCore {
                     conn.client_ack_snapshot = bundle.ack_snapshot_tick;
                 }
                 if let Some(p) = self.game.player_mut(player_id) {
-                    for (seq, cmd) in bundle.iter_oldest_first() {
-                        p.cmds.push(seq, cmd);
+                    for (seq, cmd, render_time) in bundle.iter_oldest_first() {
+                        p.cmds.push(seq, cmd, render_time);
                     }
                 }
             }
@@ -449,6 +476,7 @@ impl ServerCore {
     pub fn tick(&mut self, now: Instant) {
         self.handshakes_this_tick = 0;
         self.game.tick();
+        self.announce_game_events();
         self.check_timeouts(now);
         self.drop_doomed(now);
         if self
@@ -516,6 +544,8 @@ impl ServerCore {
                             team: p.team,
                             name: p.name,
                             state: p.state,
+                            weapon: p.weapon,
+                            health: p.health,
                             expires: now + self.cfg.reconnect_window,
                         },
                     );
@@ -531,6 +561,85 @@ impl ServerCore {
             );
         }
         self.update_counts();
+    }
+
+    /// Queues a reliable message to one player's connection.
+    fn send_to_player(&mut self, player_id: u16, msg: &Message) {
+        if let Some(c) = self.conns.values_mut().find(|c| c.player_id == player_id) {
+            if c.rel_tx
+                .queue(msg.msg_type(), msg.encode_payload())
+                .is_err()
+            {
+                c.doomed = Some(DisconnectReason::ProtocolError);
+            }
+        }
+    }
+
+    /// Turns this tick's combat results into reliable messages and keeps shot
+    /// events for the next snapshots.
+    fn announce_game_events(&mut self) {
+        for (tick, ev) in self.game.shot_events.iter() {
+            if self.recent_shots.len() >= SHOT_EVENT_HISTORY {
+                self.recent_shots.pop_front();
+            }
+            self.recent_shots.push_back((*tick, *ev));
+        }
+        let events = std::mem::take(&mut self.game.events);
+        for ev in &events {
+            match *ev {
+                GameEvent::Hit {
+                    shooter,
+                    victim,
+                    damage,
+                    headshot,
+                    killed,
+                    shooter_pos,
+                } => {
+                    self.send_to_player(
+                        shooter,
+                        &Message::HitConfirm {
+                            victim,
+                            damage,
+                            headshot,
+                            killed,
+                        },
+                    );
+                    let health = self.game.player(victim).map(|p| p.health).unwrap_or(0);
+                    let from_mm = [
+                        quantize_mm(shooter_pos.x),
+                        quantize_mm(shooter_pos.y),
+                        quantize_mm(shooter_pos.z),
+                    ];
+                    self.send_to_player(
+                        victim,
+                        &Message::Damaged {
+                            attacker: shooter,
+                            amount: damage,
+                            health,
+                            from_mm,
+                        },
+                    );
+                }
+                GameEvent::Kill {
+                    killer,
+                    victim,
+                    weapon,
+                    headshot,
+                } => {
+                    info!(killer, victim, weapon, headshot, "kill");
+                    self.broadcast_except(
+                        u16::MAX,
+                        &Message::Kill {
+                            killer,
+                            victim,
+                            weapon,
+                            headshot,
+                        },
+                    );
+                }
+            }
+        }
+        self.game.events = events;
     }
 
     fn broadcast_except(&mut self, except_player: u16, msg: &Message) {
@@ -578,8 +687,26 @@ impl ServerCore {
                 last_cmd_seq: player.cmds.last_processed_seq,
                 input_buffer_depth: player.reported_depth(),
                 local: player.state,
+                weapon: player.weapon,
                 local_health: player.health,
+                alive: player.alive,
+                respawn_in: if player.alive {
+                    0.0
+                } else {
+                    player.respawn_timer.max(0.0)
+                },
             };
+            // Shots by other players since the last snapshot sent to this client.
+            self.shot_scratch.clear();
+            for (t, ev) in self.recent_shots.iter() {
+                if *t > c.last_shot_tick
+                    && ev.shooter != c.player_id
+                    && self.shot_scratch.len() < MAX_SHOT_EVENTS
+                {
+                    self.shot_scratch.push(*ev);
+                }
+            }
+            c.last_shot_tick = tick;
             buf.clear();
             let mut w = Writer::new(&mut buf);
             let Connection {
@@ -600,7 +727,7 @@ impl ServerCore {
             .encode(&mut w);
             rel_tx.write(&mut w, seq, now, RELIABLE_RESEND, RELIABLE_BUDGET);
             w.u8(BodyKind::Snapshot as u8);
-            snapshot::encode(&mut w, &header, &self.scratch, baseline);
+            snapshot::encode(&mut w, &header, &self.scratch, baseline, &self.shot_scratch);
             debug_assert!(buf.len() <= MAX_PACKET_SIZE);
             c.remember(tick, &self.scratch);
             Self::send_raw(&self.socket, &self.stats, c.addr, &buf);

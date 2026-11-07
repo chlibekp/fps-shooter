@@ -6,7 +6,7 @@
 use clap::{Parser, ValueEnum};
 use std::time::{Duration, Instant};
 use tfps_devclient::{Client, ClientConfig, ClientEvent};
-use tfps_sim::{buttons, math, MapDef, MoveInput};
+use tfps_sim::{buttons, math, MapDef, MoveInput, WeaponSet};
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Pattern {
@@ -32,6 +32,8 @@ struct Args {
     pattern: Pattern,
     #[arg(long, default_value = "Shared/Definitions/maps/test_arena.json")]
     map: std::path::PathBuf,
+    #[arg(long, default_value = "Shared/Definitions/weapons.json")]
+    weapons: std::path::PathBuf,
     /// Simulated packet loss in each direction (0..1).
     #[arg(long, default_value_t = 0.0)]
     loss: f32,
@@ -97,13 +99,14 @@ fn input_for(pattern: Pattern, t: f32, idx: usize, rng: &mut u64) -> MoveInput {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let map = MapDef::load(&args.map)?;
+    let weapons = WeaponSet::load(&args.weapons)?;
     let join_token = u64::from_str_radix(args.join_token.trim_start_matches("0x"), 16)?;
     let mut bots = Vec::new();
     for i in 0..args.count {
         let mut cfg = ClientConfig::new(args.server, &format!("Bot{}", i + 1));
         cfg.simulated_loss = args.loss;
         cfg.join_token = join_token;
-        bots.push(Client::connect(cfg, &map)?);
+        bots.push(Client::connect(cfg, &map, &weapons)?);
     }
     let start = Instant::now();
     let end = start + Duration::from_secs(args.seconds);

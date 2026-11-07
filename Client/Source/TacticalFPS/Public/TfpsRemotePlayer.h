@@ -22,11 +22,14 @@ public:
 	ATfpsRemotePlayer();
 
 	/** Applies the interpolated state (meters / degrees). */
-	void ApplyState(const FVector& FeetMeters, float YawDeg, bool bCrouched, const FString& Name, uint8 Team, bool bInterrupted);
+	void ApplyState(const FVector& FeetMeters, float YawDeg, float PitchDeg, uint8 Flags, float Lean, uint8 WeaponId, const FString& Name, uint8 Team,
+		bool bInterrupted);
 
+	UPROPERTY(VisibleAnywhere, Category = "Visual") TObjectPtr<USceneComponent> BodyPivot;
 	UPROPERTY(VisibleAnywhere, Category = "Visual") TObjectPtr<UStaticMeshComponent> Body;
 	UPROPERTY(VisibleAnywhere, Category = "Visual") TObjectPtr<UStaticMeshComponent> Head;
 	UPROPERTY(VisibleAnywhere, Category = "Visual") TObjectPtr<UStaticMeshComponent> Visor;
+	UPROPERTY(VisibleAnywhere, Category = "Visual") TObjectPtr<UStaticMeshComponent> HeldWeapon;
 	UPROPERTY(VisibleAnywhere, Category = "Visual") TObjectPtr<UTextRenderComponent> NameTag;
 
 protected:
@@ -36,5 +39,11 @@ protected:
 private:
 	float VisualHeight = 180.0f;
 	float TargetHeight = 180.0f;
+	float VisualLean = 0.0f;
+	float TargetLean = 0.0f;
+	float VisualProne = 0.0f;
+	float TargetProne = 0.0f;
+	float AimPitch = 0.0f;
+	bool bDead = false;
 	int32 AppliedTeam = -1;
 };

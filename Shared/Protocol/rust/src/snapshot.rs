@@ -1,27 +1,9 @@
 //! World snapshots (unreliable body kind 2), delta-compressed against a
-//! baseline snapshot the client has acknowledged.
-//!
-//! ```text
-//! u32 server_tick
-//! u32 baseline_tick        0 = not delta-compressed
-//! u32 last_cmd_seq         last input command the server simulated for this client
-//! i8  input_buffer_depth   commands queued at the server after this tick (-1 = starved)
-//! -- local player (exact, for prediction reconciliation) --
-//! f32 pos.x pos.y pos.z vel.x vel.y vel.z
-//! u8  move_flags           bit0 on_ground, bit1 crouched
-//! f32 jump_timer
-//! u8  health
-//! -- other entities, ascending id, every entity present this tick is listed --
-//! u8  entity_count
-//! repeated: u16 id, u8 mask, then fields present in mask:
-//!   bit0 i32 pos_x_mm  bit1 i32 pos_y_mm  bit2 i32 pos_z_mm
-//!   bit3 u16 yaw_q     bit4 i16 pitch_q   bit5 u8 flags   bit6 u8 health
-//!   bit7 FULL: entity not in baseline, all fields present
-//! ```
-//! Entities in the baseline but not listed have been removed.
+//! baseline snapshot the client has acknowledged. Layout: PROTOCOL.md.
 
 use crate::bytes::{Reader, Writer};
 use crate::DecodeError;
+use tfps_sim::weapon::{SlotAmmo, WeaponState, SLOTS};
 use tfps_sim::{MoveState, Vec3};
 
 pub mod entity_flags {
@@ -29,19 +11,25 @@ pub mod entity_flags {
     pub const CROUCHED: u8 = 1 << 1;
     pub const SPRINTING: u8 = 1 << 2;
     pub const ALIVE: u8 = 1 << 3;
+    pub const PRONE: u8 = 1 << 4;
+    pub const RELOADING: u8 = 1 << 5;
 }
 
 pub const MAX_ENTITIES_PER_SNAPSHOT: usize = 64;
+pub const MAX_SHOT_EVENTS: usize = 32;
 
-const M_PX: u8 = 1 << 0;
-const M_PY: u8 = 1 << 1;
-const M_PZ: u8 = 1 << 2;
-const M_YAW: u8 = 1 << 3;
-const M_PITCH: u8 = 1 << 4;
-const M_FLAGS: u8 = 1 << 5;
-const M_HEALTH: u8 = 1 << 6;
-const M_FULL: u8 = 1 << 7;
-const M_ALL: u8 = 0x7F;
+const M_PX: u16 = 1 << 0;
+const M_PY: u16 = 1 << 1;
+const M_PZ: u16 = 1 << 2;
+const M_YAW: u16 = 1 << 3;
+const M_PITCH: u16 = 1 << 4;
+const M_FLAGS: u16 = 1 << 5;
+const M_HEALTH: u16 = 1 << 6;
+const M_LEAN: u16 = 1 << 7;
+const M_WEAPON: u16 = 1 << 8;
+const M_AIM: u16 = 1 << 9;
+const M_FULL: u16 = 1 << 15;
+const M_ALL: u16 = 0x03FF;
 
 /// Quantized replicated state of a remote entity (players for now).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -52,6 +40,12 @@ pub struct EntityState {
     pub pitch_q: i16,
     pub flags: u8,
     pub health: u8,
+    /// Lean -1..1 as -127..127.
+    pub lean_q: i8,
+    /// Active weapon id (0 = none).
+    pub weapon: u8,
+    /// ADS amount 0..1 as 0..255.
+    pub aim_q: u8,
 }
 
 #[inline]
@@ -64,6 +58,16 @@ pub fn dequantize_mm(v: i32) -> f32 {
     v as f32 * 0.001
 }
 
+#[inline]
+pub fn quantize_lean(v: f32) -> i8 {
+    (v.clamp(-1.0, 1.0) * 127.0).round() as i8
+}
+
+#[inline]
+pub fn quantize_unit(v: f32) -> u8 {
+    (v.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
 impl EntityState {
     pub fn position(&self) -> Vec3 {
         Vec3::new(
@@ -72,6 +76,27 @@ impl EntityState {
             dequantize_mm(self.pos_mm[2]),
         )
     }
+    pub fn lean(&self) -> f32 {
+        self.lean_q as f32 / 127.0
+    }
+    pub fn aim(&self) -> f32 {
+        self.aim_q as f32 / 255.0
+    }
+}
+
+/// Surface hit by a shot (for impact effects). 0..=7 = map material.
+pub mod surface {
+    pub const PLAYER: u8 = 0xFE;
+    pub const NONE: u8 = 0xFF;
+}
+
+/// A shot fired by another player, for tracers and impact effects.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ShotEvent {
+    pub shooter: u16,
+    pub weapon: u8,
+    pub end_mm: [i32; 3],
+    pub surface: u8,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -80,11 +105,17 @@ pub struct SnapshotHeader {
     pub baseline_tick: u32,
     pub last_cmd_seq: u32,
     pub input_buffer_depth: i8,
+    /// Exact authoritative state of the receiving player (for reconciliation).
     pub local: MoveState,
+    pub weapon: WeaponState,
     pub local_health: u8,
+    /// 0 = dead (spectating its own body until respawn).
+    pub alive: bool,
+    /// Seconds until respawn while dead.
+    pub respawn_in: f32,
 }
 
-fn change_mask(cur: &EntityState, base: &EntityState) -> u8 {
+fn change_mask(cur: &EntityState, base: &EntityState) -> u16 {
     let mut m = 0;
     if cur.pos_mm[0] != base.pos_mm[0] {
         m |= M_PX;
@@ -107,15 +138,96 @@ fn change_mask(cur: &EntityState, base: &EntityState) -> u8 {
     if cur.health != base.health {
         m |= M_HEALTH;
     }
+    if cur.lean_q != base.lean_q {
+        m |= M_LEAN;
+    }
+    if cur.weapon != base.weapon {
+        m |= M_WEAPON;
+    }
+    if cur.aim_q != base.aim_q {
+        m |= M_AIM;
+    }
     m
 }
 
-/// Finds an entity in an id-sorted slice.
 #[inline]
 fn find(list: &[EntityState], id: u16) -> Option<&EntityState> {
     list.binary_search_by_key(&id, |e| e.id)
         .ok()
         .map(|i| &list[i])
+}
+
+fn encode_local(w: &mut Writer, h: &SnapshotHeader) {
+    let l = &h.local;
+    for v in [l.pos.x, l.pos.y, l.pos.z, l.vel.x, l.vel.y, l.vel.z] {
+        w.f32(v);
+    }
+    w.u8((l.on_ground as u8) | ((l.crouched as u8) << 1) | ((l.prone as u8) << 2));
+    for v in [l.jump_timer, l.stance_timer, l.lean, l.aim] {
+        w.f32(v);
+    }
+    let ws = &h.weapon;
+    w.u8(ws.active);
+    for s in &ws.slots {
+        w.u16(s.ammo);
+        w.u8(s.chambered as u8);
+        w.u16(s.reserve);
+    }
+    w.f32(ws.cooldown);
+    w.f32(ws.reload_timer);
+    w.u8(ws.reload_empty as u8);
+    w.f32(ws.equip_timer);
+    w.u8(ws.burst_left);
+    w.u8(ws.trigger_prev as u8);
+    w.u16(ws.shots_fired);
+    w.f32(ws.recoil_pitch);
+    w.f32(ws.recoil_yaw);
+    w.f32(ws.recover_timer);
+    w.u32(ws.shot_counter);
+    w.u8(h.local_health);
+    w.u8(h.alive as u8);
+    w.f32(h.respawn_in);
+}
+
+fn decode_local(r: &mut Reader, h: &mut SnapshotHeader) -> Result<(), DecodeError> {
+    let l = &mut h.local;
+    l.pos = Vec3::new(r.f32_finite()?, r.f32_finite()?, r.f32_finite()?);
+    l.vel = Vec3::new(r.f32_finite()?, r.f32_finite()?, r.f32_finite()?);
+    let mf = r.u8()?;
+    l.on_ground = mf & 1 != 0;
+    l.crouched = mf & 2 != 0;
+    l.prone = mf & 4 != 0;
+    l.jump_timer = r.f32_finite()?;
+    l.stance_timer = r.f32_finite()?;
+    l.lean = r.f32_finite()?;
+    l.aim = r.f32_finite()?;
+    let ws = &mut h.weapon;
+    ws.active = r.u8()?;
+    if ws.active as usize >= SLOTS {
+        return Err(DecodeError::Invalid("bad weapon slot"));
+    }
+    for s in ws.slots.iter_mut() {
+        *s = SlotAmmo {
+            ammo: r.u16()?,
+            chambered: r.u8()? != 0,
+            reserve: r.u16()?,
+        };
+    }
+    ws.cooldown = r.f32_finite()?;
+    ws.reload_timer = r.f32_finite()?;
+    ws.reload_empty = r.u8()? != 0;
+    ws.equip_timer = r.f32_finite()?;
+    ws.burst_left = r.u8()?;
+    ws.trigger_prev = r.u8()? != 0;
+    ws.shots_fired = r.u16()?;
+    ws.recoil_pitch = r.f32_finite()?;
+    ws.recoil_yaw = r.f32_finite()?;
+    ws.recover_timer = r.f32_finite()?;
+    ws.shot_counter = r.u32()?;
+    h.local_health = r.u8()?;
+    h.alive = r.u8()? != 0;
+    h.respawn_in = r.f32_finite()?;
+    Ok(())
 }
 
 /// Encodes a snapshot. `entities` must be sorted by id. `baseline` (sorted)
@@ -126,6 +238,7 @@ pub fn encode(
     header: &SnapshotHeader,
     entities: &[EntityState],
     baseline: Option<&[EntityState]>,
+    shots: &[ShotEvent],
 ) {
     debug_assert!(entities.windows(2).all(|p| p[0].id < p[1].id));
     debug_assert_eq!(baseline.is_none(), header.baseline_tick == 0);
@@ -133,13 +246,7 @@ pub fn encode(
     w.u32(header.baseline_tick);
     w.u32(header.last_cmd_seq);
     w.i8(header.input_buffer_depth);
-    let l = &header.local;
-    for v in [l.pos.x, l.pos.y, l.pos.z, l.vel.x, l.vel.y, l.vel.z] {
-        w.f32(v);
-    }
-    w.u8((l.on_ground as u8) | ((l.crouched as u8) << 1));
-    w.f32(l.jump_timer);
-    w.u8(header.local_health);
+    encode_local(w, header);
 
     let n = entities.len().min(MAX_ENTITIES_PER_SNAPSHOT);
     w.u8(n as u8);
@@ -149,7 +256,7 @@ pub fn encode(
             None => M_FULL | M_ALL,
         };
         w.u16(e.id);
-        w.u8(mask);
+        w.u16(mask);
         if mask & M_PX != 0 {
             w.i32(e.pos_mm[0]);
         }
@@ -171,23 +278,45 @@ pub fn encode(
         if mask & M_HEALTH != 0 {
             w.u8(e.health);
         }
+        if mask & M_LEAN != 0 {
+            w.i8(e.lean_q);
+        }
+        if mask & M_WEAPON != 0 {
+            w.u8(e.weapon);
+        }
+        if mask & M_AIM != 0 {
+            w.u8(e.aim_q);
+        }
+    }
+
+    let ns = shots.len().min(MAX_SHOT_EVENTS);
+    w.u8(ns as u8);
+    for s in &shots[..ns] {
+        w.u16(s.shooter);
+        w.u8(s.weapon);
+        for v in s.end_mm {
+            w.i32(v);
+        }
+        w.u8(s.surface);
     }
 }
 
-/// Reads only the fixed header (to look up the baseline before decoding).
+/// Reads only the baseline tick (to look up the baseline before decoding).
 pub fn peek_baseline_tick(data: &[u8]) -> Result<u32, DecodeError> {
     let mut r = Reader::new(data);
     r.u32()?;
     r.u32()
 }
 
-/// Decodes a snapshot into `out` (cleared first, sorted by id on return).
+/// Decodes a snapshot into `out` (sorted by id) and `shots`.
 pub fn decode(
     r: &mut Reader,
     baseline: Option<&[EntityState]>,
     out: &mut Vec<EntityState>,
+    shots: &mut Vec<ShotEvent>,
 ) -> Result<SnapshotHeader, DecodeError> {
     out.clear();
+    shots.clear();
     let mut h = SnapshotHeader {
         server_tick: r.u32()?,
         baseline_tick: r.u32()?,
@@ -199,13 +328,7 @@ pub fn decode(
         return Err(DecodeError::MissingBaseline(h.baseline_tick));
     }
     let base = if h.baseline_tick != 0 { baseline } else { None };
-    h.local.pos = Vec3::new(r.f32_finite()?, r.f32_finite()?, r.f32_finite()?);
-    h.local.vel = Vec3::new(r.f32_finite()?, r.f32_finite()?, r.f32_finite()?);
-    let mf = r.u8()?;
-    h.local.on_ground = mf & 1 != 0;
-    h.local.crouched = mf & 2 != 0;
-    h.local.jump_timer = r.f32_finite()?;
-    h.local_health = r.u8()?;
+    decode_local(r, &mut h)?;
 
     let n = r.u8()? as usize;
     if n > MAX_ENTITIES_PER_SNAPSHOT {
@@ -214,25 +337,25 @@ pub fn decode(
     let mut last_id: Option<u16> = None;
     for _ in 0..n {
         let id = r.u16()?;
-        if let Some(l) = last_id {
-            if id <= l {
-                return Err(DecodeError::Invalid("entities not sorted"));
-            }
+        if last_id.is_some_and(|l| id <= l) {
+            return Err(DecodeError::Invalid("entities not sorted"));
         }
         last_id = Some(id);
-        let mask = r.u8()?;
-        let mut e = if mask & M_FULL != 0 {
-            EntityState {
-                id,
-                ..Default::default()
-            }
+        let raw = r.u16()?;
+        let (mut e, mask) = if raw & M_FULL != 0 {
+            (
+                EntityState {
+                    id,
+                    ..Default::default()
+                },
+                M_ALL,
+            )
         } else {
             match base.and_then(|b| find(b, id)) {
-                Some(b) => *b,
+                Some(b) => (*b, raw),
                 None => return Err(DecodeError::Invalid("delta entity missing from baseline")),
             }
         };
-        let mask = if mask & M_FULL != 0 { M_ALL } else { mask };
         if mask & M_PX != 0 {
             e.pos_mm[0] = r.i32()?;
         }
@@ -254,7 +377,29 @@ pub fn decode(
         if mask & M_HEALTH != 0 {
             e.health = r.u8()?;
         }
+        if mask & M_LEAN != 0 {
+            e.lean_q = r.i8()?;
+        }
+        if mask & M_WEAPON != 0 {
+            e.weapon = r.u8()?;
+        }
+        if mask & M_AIM != 0 {
+            e.aim_q = r.u8()?;
+        }
         out.push(e);
+    }
+
+    let ns = r.u8()? as usize;
+    if ns > MAX_SHOT_EVENTS {
+        return Err(DecodeError::Invalid("too many shot events"));
+    }
+    for _ in 0..ns {
+        shots.push(ShotEvent {
+            shooter: r.u16()?,
+            weapon: r.u8()?,
+            end_mm: [r.i32()?, r.i32()?, r.i32()?],
+            surface: r.u8()?,
+        });
     }
     Ok(h)
 }
@@ -271,12 +416,22 @@ mod tests {
             pitch_q: -5,
             flags: entity_flags::ALIVE,
             health: 100,
+            lean_q: -20,
+            weapon: 1,
+            aim_q: 128,
         }
     }
 
-    #[test]
-    fn full_and_delta_roundtrip() {
-        let header = SnapshotHeader {
+    fn header() -> SnapshotHeader {
+        let mut ws = WeaponState::default();
+        ws.slots[0] = SlotAmmo {
+            ammo: 29,
+            chambered: true,
+            reserve: 150,
+        };
+        ws.recoil_pitch = 1.25;
+        ws.shot_counter = 7;
+        SnapshotHeader {
             server_tick: 10,
             baseline_tick: 0,
             last_cmd_seq: 55,
@@ -285,86 +440,93 @@ mod tests {
                 pos: Vec3::new(1.5, 2.5, 0.0),
                 vel: Vec3::new(0.1, 0.2, -0.3),
                 on_ground: true,
-                crouched: false,
+                prone: true,
                 jump_timer: 0.25,
+                lean: -0.5,
+                aim: 1.0,
                 ..Default::default()
             },
+            weapon: ws,
             local_health: 77,
-        };
+            alive: true,
+            respawn_in: 0.0,
+        }
+    }
+
+    #[test]
+    fn full_and_delta_roundtrip_with_shots() {
+        let header = header();
         let base = vec![ent(1, 100), ent(2, 200), ent(5, 500)];
+        let shots = vec![ShotEvent {
+            shooter: 2,
+            weapon: 1,
+            end_mm: [1, -2, 3],
+            surface: surface::PLAYER,
+        }];
         let mut buf = Vec::new();
-        encode(&mut Writer::new(&mut buf), &header, &base, None);
-        let mut out = Vec::new();
-        let h = decode(&mut Reader::new(&buf), None, &mut out).unwrap();
+        encode(&mut Writer::new(&mut buf), &header, &base, None, &shots);
+        let (mut out, mut sh) = (Vec::new(), Vec::new());
+        let h = decode(&mut Reader::new(&buf), None, &mut out, &mut sh).unwrap();
         assert_eq!(h, header);
         assert_eq!(out, base);
+        assert_eq!(sh, shots);
         let full_len = buf.len();
 
-        // Delta: entity 1 unchanged, 2 moved, 5 removed, 9 added.
         let mut cur = vec![ent(1, 100), ent(2, 260), ent(9, 900)];
         cur[1].yaw_q = 1234;
+        cur[1].lean_q = 90;
         let h2 = SnapshotHeader {
             server_tick: 12,
             baseline_tick: 10,
             ..header
         };
         buf.clear();
-        encode(&mut Writer::new(&mut buf), &h2, &cur, Some(&base));
-        assert!(
-            buf.len() < full_len,
-            "delta {} vs full {}",
-            buf.len(),
-            full_len
-        );
+        encode(&mut Writer::new(&mut buf), &h2, &cur, Some(&base), &[]);
+        assert!(buf.len() < full_len);
         assert_eq!(peek_baseline_tick(&buf).unwrap(), 10);
-        let h2d = decode(&mut Reader::new(&buf), Some(&base), &mut out).unwrap();
-        assert_eq!(h2d.server_tick, 12);
+        decode(&mut Reader::new(&buf), Some(&base), &mut out, &mut sh).unwrap();
         assert_eq!(out, cur);
-
-        // Without the baseline the delta snapshot must be refused.
+        assert!(sh.is_empty());
         assert_eq!(
-            decode(&mut Reader::new(&buf), None, &mut out).err(),
+            decode(&mut Reader::new(&buf), None, &mut out, &mut sh).err(),
             Some(DecodeError::MissingBaseline(10))
         );
     }
 
     #[test]
-    fn unchanged_entity_costs_three_bytes() {
+    fn unchanged_entity_costs_four_bytes() {
         let header = SnapshotHeader {
             server_tick: 2,
             baseline_tick: 1,
-            ..Default::default()
+            ..header()
         };
         let base = vec![ent(1, 1)];
-        let mut buf = Vec::new();
-        encode(&mut Writer::new(&mut buf), &header, &base, Some(&base));
-        let empty_len = {
-            let mut b2 = Vec::new();
-            encode(&mut Writer::new(&mut b2), &header, &[], Some(&base));
-            b2.len()
-        };
-        assert_eq!(buf.len() - empty_len, 3);
+        let mut a = Vec::new();
+        encode(&mut Writer::new(&mut a), &header, &base, Some(&base), &[]);
+        let mut b = Vec::new();
+        encode(&mut Writer::new(&mut b), &header, &[], Some(&base), &[]);
+        assert_eq!(a.len() - b.len(), 4);
     }
 
     #[test]
     fn rejects_nan_local_state() {
-        let header = SnapshotHeader {
-            local: MoveState {
-                pos: Vec3::new(f32::NAN, 0.0, 0.0),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+        let mut header = header();
+        header.local.pos.x = f32::NAN;
         let mut buf = Vec::new();
-        encode(&mut Writer::new(&mut buf), &header, &[], None);
-        let mut out = Vec::new();
-        assert!(decode(&mut Reader::new(&buf), None, &mut out).is_err());
+        encode(&mut Writer::new(&mut buf), &header, &[], None, &[]);
+        assert!(decode(
+            &mut Reader::new(&buf),
+            None,
+            &mut Vec::new(),
+            &mut Vec::new()
+        )
+        .is_err());
     }
 
     #[test]
     fn quantization() {
         assert_eq!(quantize_mm(1.2345), 1235);
-        assert_eq!(quantize_mm(-0.0004), 0);
-        assert!((dequantize_mm(quantize_mm(-12.3456)) + 12.346).abs() < 1e-4);
+        assert_eq!(quantize_lean(-1.0), -127);
+        assert_eq!(quantize_unit(0.5), 128);
     }
 }

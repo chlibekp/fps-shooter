@@ -6,10 +6,14 @@
 
 #include "TfpsHUD.generated.h"
 
+class UTfpsNetSubsystem;
+namespace tfps { class ClientCore; }
+
 /**
- * Phase 1 HUD: crosshair, connection status, player list with connection
- * state, and network diagnostics (F3). The styled tactical HUD (UMG) is
- * Phase 7 work, see Documentation/STATUS.md.
+ * Canvas HUD: crosshair, health, weapon/ammo, reload prompt, hit markers,
+ * damage direction, kill feed, death/respawn screen, player list and network
+ * diagnostics (F3). The styled UMG tactical HUD is Phase 7 work
+ * (Documentation/STATUS.md).
  */
 UCLASS()
 class TACTICALFPS_API ATfpsHUD : public AHUD
@@ -18,4 +22,7 @@ class TACTICALFPS_API ATfpsHUD : public AHUD
 
 public:
 	virtual void DrawHUD() override;
+
+private:
+	void DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCore& Core, float Scale);
 };

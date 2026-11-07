@@ -8,6 +8,7 @@
 #include "Components/TextRenderComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "NetCore/TfpsProtocol.h"
 
 ATfpsRemotePlayer::ATfpsRemotePlayer()
 {
@@ -16,10 +17,16 @@ ATfpsRemotePlayer::ATfpsRemotePlayer()
 
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
+	// Body parts hang off a pivot at the feet so lean/prone/death rotate the whole body.
+	BodyPivot = CreateDefaultSubobject<USceneComponent>(TEXT("BodyPivot"));
+	BodyPivot->SetupAttachment(Root);
 	Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
-	Body->SetupAttachment(Root);
+	Body->SetupAttachment(BodyPivot);
 	Head = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Head"));
-	Head->SetupAttachment(Root);
+	Head->SetupAttachment(BodyPivot);
+	HeldWeapon = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeldWeapon"));
+	HeldWeapon->SetupAttachment(BodyPivot);
+	HeldWeapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Visor = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Visor"));
 	Visor->SetupAttachment(Head);
 	for (UStaticMeshComponent* C : {Body.Get(), Head.Get(), Visor.Get()})
@@ -40,6 +47,11 @@ void ATfpsRemotePlayer::BeginPlay()
 	Body->SetStaticMesh(FTfpsPlaceholderAssets::Cylinder());
 	Head->SetStaticMesh(FTfpsPlaceholderAssets::Sphere());
 	Visor->SetStaticMesh(FTfpsPlaceholderAssets::Cube());
+	HeldWeapon->SetStaticMesh(FTfpsPlaceholderAssets::Cube());
+	if (UMaterialInstanceDynamic* Gun = FTfpsPlaceholderAssets::MakeTinted(this, FLinearColor(0.03f, 0.03f, 0.035f)))
+	{
+		HeldWeapon->SetMaterial(0, Gun);
+	}
 	// Visor shows which way the player is facing (+X).
 	Visor->SetRelativeLocation(FVector(42.0, 0.0, 8.0));
 	Visor->SetRelativeScale3D(FVector(0.35, 0.9, 0.35));
@@ -49,10 +61,18 @@ void ATfpsRemotePlayer::BeginPlay()
 	}
 }
 
-void ATfpsRemotePlayer::ApplyState(const FVector& FeetMeters, float YawDeg, bool bCrouched, const FString& Name, uint8 Team, bool bInterrupted)
+void ATfpsRemotePlayer::ApplyState(const FVector& FeetMeters, float YawDeg, float PitchDeg, uint8 Flags, float Lean, uint8 WeaponId,
+	const FString& Name, uint8 Team, bool bInterrupted)
 {
 	SetActorLocationAndRotation(FeetMeters * TfpsMetersToUnreal, FRotator(0.0, YawDeg, 0.0));
+	const bool bCrouched = (Flags & tfps::EntityFlags::Crouched) != 0;
+	const bool bProne = (Flags & tfps::EntityFlags::Prone) != 0;
+	bDead = (Flags & tfps::EntityFlags::Alive) == 0;
 	TargetHeight = (bCrouched ? 1.2f : 1.8f) * TfpsMetersToUnreal;
+	TargetLean = Lean;
+	TargetProne = (bProne || bDead) ? 1.0f : 0.0f;
+	AimPitch = PitchDeg;
+	HeldWeapon->SetVisibility(!bDead && WeaponId != 0);
 	if (AppliedTeam != Team)
 	{
 		AppliedTeam = Team;
@@ -66,14 +86,23 @@ void ATfpsRemotePlayer::ApplyState(const FVector& FeetMeters, float YawDeg, bool
 			Head->SetMaterial(0, Skin);
 		}
 	}
-	NameTag->SetText(FText::FromString(bInterrupted ? Name + TEXT(" (connection interrupted)") : Name));
-	NameTag->SetTextRenderColor(bInterrupted ? FColor(255, 170, 60) : FColor(235, 235, 235));
+	FString Label = Name;
+	if (bDead) { Label += TEXT(" (down)"); }
+	else if (bInterrupted) { Label += TEXT(" (connection interrupted)"); }
+	NameTag->SetText(FText::FromString(Label));
+	NameTag->SetTextRenderColor(bDead ? FColor(150, 150, 150) : (bInterrupted ? FColor(255, 170, 60) : FColor(235, 235, 235)));
 }
 
 void ATfpsRemotePlayer::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	VisualHeight = FMath::FInterpTo(VisualHeight, TargetHeight, DeltaSeconds, 12.0f);
+	VisualLean = FMath::FInterpTo(VisualLean, TargetLean, DeltaSeconds, 14.0f);
+	VisualProne = FMath::FInterpTo(VisualProne, TargetProne, DeltaSeconds, 6.0f);
+	// Lean: roll the upper body around the feet (sideways, +lean = right).
+	// Prone/dead: pitch the whole body forward to lie on the ground.
+	BodyPivot->SetRelativeRotation(FRotator(-90.0f * VisualProne, 0.0f, VisualLean * 11.0f * (1.0f - VisualProne)));
+	BodyPivot->SetRelativeLocation(FVector(0.0, 0.0, 15.0f * VisualProne));
 	// Body: 0.6 m wide cylinder up to shoulders, head sphere on top.
 	const float HeadSize = 24.0f;
 	const float BodyHeight = VisualHeight - HeadSize - 4.0f;
@@ -81,7 +110,11 @@ void ATfpsRemotePlayer::Tick(float DeltaSeconds)
 	Body->SetRelativeLocation(FVector(0.0, 0.0, BodyHeight * 0.5f));
 	Head->SetRelativeScale3D(FVector(HeadSize / 100.0f));
 	Head->SetRelativeLocation(FVector(0.0, 0.0, BodyHeight + 4.0f + HeadSize * 0.5f));
-	NameTag->SetRelativeLocation(FVector(0.0, 0.0, VisualHeight + 22.0f));
+	NameTag->SetRelativeLocation(FVector(0.0, 0.0, FMath::Lerp(VisualHeight + 22.0f, 60.0f, VisualProne)));
+	// Weapon held at chest height, pitched with the aim.
+	HeldWeapon->SetRelativeLocation(FVector(35.0, 14.0, BodyHeight * 0.82f));
+	HeldWeapon->SetRelativeRotation(FRotator(AimPitch, 0.0f, 0.0f));
+	HeldWeapon->SetRelativeScale3D(FVector(0.6, 0.05, 0.08));
 
 	// Billboard the name tag toward the local camera.
 	if (APlayerCameraManager* Cam = UGameplayStatics::GetPlayerCameraManager(this, 0))

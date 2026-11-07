@@ -58,14 +58,14 @@ uint16 ATfpsPlayerController::SampleButtons() const
 	if (KeyDown(Keys.Left)) { B |= tfps::Buttons::Left; }
 	if (KeyDown(Keys.Right)) { B |= tfps::Buttons::Right; }
 	if (KeyDown(Keys.Jump)) { B |= tfps::Buttons::Jump; }
-	if (KeyDown(Keys.Crouch) || KeyDown(Keys.CrouchAlt)) { B |= tfps::Buttons::Crouch; }
+	if (KeyDown(Keys.Crouch) || (bToggleCrouch ? bCrouchToggled : KeyDown(Keys.CrouchAlt))) { B |= tfps::Buttons::Crouch; }
 	if (KeyDown(Keys.Sprint)) { B |= tfps::Buttons::Sprint; }
 	if (KeyDown(Keys.Walk)) { B |= tfps::Buttons::Walk; }
 	if (KeyDown(Keys.LeanLeft)) { B |= tfps::Buttons::LeanLeft; }
 	if (KeyDown(Keys.LeanRight)) { B |= tfps::Buttons::LeanRight; }
 	if (KeyDown(Keys.Aim)) { B |= tfps::Buttons::Aim; }
 	if (KeyDown(Keys.Fire)) { B |= tfps::Buttons::Fire; }
-	if (KeyDown(Keys.Prone)) { B |= tfps::Buttons::Prone; }
+	if (bProneToggled) { B |= tfps::Buttons::Prone; }
 	if (KeyDown(Keys.Reload)) { B |= tfps::Buttons::Reload; }
 	if (KeyDown(Keys.Use)) { B |= tfps::Buttons::Use; }
 	return B;
@@ -80,9 +80,17 @@ void ATfpsPlayerController::UpdateLook()
 	float DX = 0.0f;
 	float DY = 0.0f;
 	GetInputMouseDelta(DX, DY);
+	float Sensitivity = MouseSensitivity;
+	if (const UTfpsNetSubsystem* Net = GetGameInstance()->GetSubsystem<UTfpsNetSubsystem>())
+	{
+		if (const tfps::ClientCore* Core = Net->GetCore())
+		{
+			Sensitivity *= FMath::Lerp(1.0f, AdsSensitivityMultiplier, Core->Predicted().Aim);
+		}
+	}
 	FRotator Rot = GetControlRotation();
-	Rot.Yaw = FRotator::ClampAxis(Rot.Yaw + DX * MouseSensitivity);
-	const float PitchDelta = DY * MouseSensitivity * (bInvertY ? -1.0f : 1.0f);
+	Rot.Yaw = FRotator::ClampAxis(Rot.Yaw + DX * Sensitivity);
+	const float PitchDelta = DY * Sensitivity * (bInvertY ? -1.0f : 1.0f);
 	Rot.Pitch = FMath::ClampAngle(static_cast<float>(FRotator::NormalizeAxis(Rot.Pitch)) + PitchDelta, -89.0f, 89.0f);
 	Rot.Roll = 0.0f;
 	SetControlRotation(Rot);
@@ -107,6 +115,17 @@ void ATfpsPlayerController::PlayerTick(float DeltaTime)
 		else { SetInputMode(FInputModeGameOnly()); }
 	}
 
+	// Stance toggles and weapon selection (edge-triggered).
+	if (!bMouseReleased)
+	{
+		if (WasInputKeyJustPressed(Keys.CrouchAlt)) { bCrouchToggled = !bCrouchToggled; bProneToggled = false; }
+		if (WasInputKeyJustPressed(Keys.Prone)) { bProneToggled = !bProneToggled; bCrouchToggled = false; }
+		if (WasInputKeyJustPressed(Keys.Jump) && bProneToggled) { bProneToggled = false; }
+		if (WasInputKeyJustPressed(Keys.PrimaryWeapon)) { SelectedSlot = 0; }
+		if (WasInputKeyJustPressed(Keys.SecondaryWeapon)) { SelectedSlot = 1; }
+		if (WasInputKeyJustPressed(Keys.NextWeapon) || WasInputKeyJustPressed(Keys.PrevWeapon)) { SelectedSlot = SelectedSlot == 0 ? 1 : 0; }
+	}
+
 	UpdateLook();
 
 	UTfpsNetSubsystem* Net = GetGameInstance()->GetSubsystem<UTfpsNetSubsystem>();
@@ -119,6 +138,7 @@ void ATfpsPlayerController::PlayerTick(float DeltaTime)
 	Input.Buttons = SampleButtons();
 	Input.YawQ = tfps::QuantizeYawDeg(static_cast<float>(Rot.Yaw));
 	Input.PitchQ = tfps::QuantizePitchDeg(static_cast<float>(FRotator::NormalizeAxis(Rot.Pitch)));
+	Input.Slot = SelectedSlot;
 	Net->SetLocalInput(Input);
 	Net->Pump();
 

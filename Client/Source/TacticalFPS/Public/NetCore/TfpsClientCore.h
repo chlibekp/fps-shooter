@@ -12,6 +12,7 @@
 #include "NetCore/TfpsMap.h"
 #include "NetCore/TfpsMovement.h"
 #include "NetCore/TfpsProtocol.h"
+#include "NetCore/TfpsWeapon.h"
 
 #include <cstdint>
 #include <deque>
@@ -44,11 +45,11 @@ namespace tfps
 
 	enum class EClientPhase : uint8_t { Requesting, Responding, Connected, Disconnected };
 
-	enum class EDisconnectCause : uint8_t { None, Rejected, HandshakeTimeout, Timeout, MapMismatch, ServerDisconnect, Local };
+	enum class EDisconnectCause : uint8_t { None, Rejected, HandshakeTimeout, Timeout, MapMismatch, WeaponsMismatch, ServerDisconnect, Local };
 
 	struct ClientEvent
 	{
-		enum class EType : uint8_t { Connected, PlayerJoined, PlayerLeft, PlayerConnState, Disconnected } Type = EType::Connected;
+		enum class EType : uint8_t { Connected, PlayerJoined, PlayerLeft, PlayerConnState, Disconnected, HitConfirm, Damaged, Kill } Type = EType::Connected;
 		uint16_t PlayerId = 0;
 		uint8_t Team = 0;
 		std::string Name;
@@ -56,6 +57,29 @@ namespace tfps
 		EDisconnectReason LeftReason = EDisconnectReason::Unknown;
 		EDisconnectCause Cause = EDisconnectCause::None;
 		ERejectReason RejectReason = ERejectReason::Unknown;
+		// HitConfirm: PlayerId = victim. Damaged: PlayerId = attacker. Kill: PlayerId = victim, OtherId = killer.
+		uint16_t OtherId = 0;
+		uint8_t Amount = 0;
+		uint8_t Health = 0;
+		uint8_t WeaponId = 0;
+		bool bHeadshot = false;
+		bool bKilled = false;
+		Vec3 From;
+	};
+
+	/** A shot to visualise (muzzle flash, tracer, impact). */
+	struct FxShot
+	{
+		uint16_t Shooter = 0;
+		uint8_t WeaponId = 0;
+		bool bLocal = false;
+		/** Local shots: origin and aim angles (the impact is decided by the server). */
+		Vec3 Origin;
+		float YawDeg = 0.0f;
+		float PitchDeg = 0.0f;
+		/** Remote shots: server-computed end point and surface. */
+		Vec3 End;
+		uint8_t SurfaceKind = Surface::None;
 	};
 
 	struct RemotePlayer
@@ -94,7 +118,7 @@ namespace tfps
 	{
 	public:
 		/** Starts connecting immediately. Map must match the server's (verified by hash). */
-		ClientCore(const ClientConfig& InConfig, const MapDef& Map, ITransport& InTransport, double Now);
+		ClientCore(const ClientConfig& InConfig, const MapDef& Map, const WeaponSet& InWeapons, ITransport& InTransport, double Now);
 
 		/** Pumps network I/O and advances fixed simulation ticks. Call every frame. */
 		void Update(double Now);
@@ -103,6 +127,8 @@ namespace tfps
 		void Disconnect();
 
 		bool PollEvent(ClientEvent& Out);
+		/** Shots to visualise since the last call (local predicted and remote). */
+		bool PollShot(FxShot& Out);
 
 		EClientPhase Phase() const { return CurPhase; }
 		bool IsConnected() const { return CurPhase == EClientPhase::Connected; }
@@ -123,13 +149,22 @@ namespace tfps
 		/** Predicted state before the most recent tick (interpolate with Predicted()). */
 		const MoveState& PreviousPredicted() const { return PrevPredictedState; }
 		const MoveState& ServerState() const { return AuthState; }
+		/** Predicted weapon state (ammo, reload, recoil kick for the camera). */
+		const WeaponState& Weapon() const { return PredictedWeapon; }
+		/** Authoritative weapon state from the newest snapshot. */
+		const WeaponState& ServerWeapon() const { return AuthWeapon; }
+		/** Weapon definition in a loadout slot (nullptr before connecting). */
+		const WeaponDef* LoadoutWeapon(int Slot) const { return (Slot >= 0 && Slot < kWeaponSlots) ? Loadout[Slot] : nullptr; }
+		const WeaponSet& Weapons() const { return WeaponDefs; }
+		bool IsAlive() const { return bAlive; }
+		float RespawnIn() const { return RespawnSeconds; }
 		uint8_t Health() const { return LocalHealth; }
 		const std::map<uint16_t, RemotePlayer>& Players() const { return RemotePlayers; }
 		const ClientNetStats& Stats() const { return NetStats; }
 		const CollisionWorld& World() const { return Collision; }
 
 	private:
-		struct FCmdRecord { uint32_t Seq = 0; MoveInput Input; MoveState After; };
+		struct FCmdRecord { uint32_t Seq = 0; MoveInput Input; uint32_t RenderTime = 0; MoveState After; WeaponState WeaponAfter; };
 
 		void SendCurrent();
 		void SendHandshake(double Now);
@@ -141,7 +176,8 @@ namespace tfps
 		void ProcessData(ByteReader& R, double Now);
 		void OnMessage(const ServerMessage& M);
 		void OnSnapshot(ByteReader& R);
-		void Reconcile(uint32_t AckedSeq, const MoveState& Server);
+		void Reconcile(uint32_t AckedSeq, const MoveState& Server, const WeaponState& ServerWeapon);
+		void StepPredicted(MoveState& Ms, WeaponState& Ws, const MoveInput& Input, ShotBuffer* EmitShots);
 		void AdjustTimeScale(int8_t Depth);
 		void UpdateInterpolation();
 		void SetDisconnected(EDisconnectCause InCause);
@@ -151,6 +187,15 @@ namespace tfps
 		ITransport& Transport;
 		CollisionWorld Collision;
 		uint64_t LocalMapHash = 0;
+		WeaponSet WeaponDefs;
+		const WeaponDef* Loadout[kWeaponSlots] = {nullptr, nullptr};
+		bool bAlive = true;
+		float RespawnSeconds = 0.0f;
+		WeaponState PredictedWeapon;
+		WeaponState AuthWeapon;
+		ShotBuffer ShotScratch;
+		std::deque<FxShot> Shots;
+		std::vector<ShotEvent> ShotEventBuf;
 
 		EClientPhase CurPhase = EClientPhase::Requesting;
 		EDisconnectCause Cause = EDisconnectCause::None;

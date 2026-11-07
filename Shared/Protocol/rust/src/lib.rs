@@ -16,7 +16,7 @@ pub use bytes::{Reader, Writer};
 
 /// 'T','F' little-endian.
 pub const MAGIC: u16 = 0x4654;
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u16 = 2;
 /// Conservative MTU-safe payload size (IPv6 minimum MTU 1280 minus headers).
 pub const MAX_PACKET_SIZE: usize = 1200;
 /// Handshake requests are padded to this size so the server never answers

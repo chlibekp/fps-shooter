@@ -21,9 +21,10 @@ use tfps_protocol::packet::{
     DataHeader, Disconnect, DisconnectReason, PacketType, RejectReason,
 };
 use tfps_protocol::reliable::{ReliableReceiver, ReliableSender};
-use tfps_protocol::snapshot::{self, EntityState};
+use tfps_protocol::snapshot::{self, EntityState, ShotEvent};
 use tfps_protocol::{Reader, Writer, MAX_PACKET_SIZE};
-use tfps_sim::{simulate, CollisionWorld, MapDef, MoveInput, MoveState, Vec3};
+use tfps_sim::weapon::{ShotBuffer, WeaponDef, WeaponSet, WeaponState};
+use tfps_sim::{simulate_player, CollisionWorld, MapDef, MoveInput, MoveState, Vec3};
 
 const HANDSHAKE_RESEND: Duration = Duration::from_millis(250);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -67,6 +68,7 @@ pub enum DisconnectCause {
     HandshakeTimeout,
     Timeout,
     MapMismatch { server: u64, local: u64 },
+    WeaponsMismatch,
     Server(DisconnectReason),
     Local,
 }
@@ -90,6 +92,25 @@ pub enum ClientEvent {
         state: ConnState,
     },
     Disconnected(DisconnectCause),
+    /// One of our shots hit someone (hit marker).
+    HitConfirm {
+        victim: u16,
+        damage: u8,
+        headshot: bool,
+        killed: bool,
+    },
+    /// We were hit.
+    Damaged {
+        attacker: u16,
+        amount: u8,
+        health: u8,
+    },
+    Kill {
+        killer: u16,
+        victim: u16,
+        weapon: u8,
+        headshot: bool,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -113,8 +134,10 @@ enum Phase {
 struct CmdRecord {
     seq: u32,
     input: MoveInput,
+    render_time: u32,
     /// Predicted state after simulating this command.
     after: MoveState,
+    weapon_after: WeaponState,
 }
 
 /// Interpolated view of a remote player.
@@ -178,9 +201,20 @@ pub struct Client {
     cmd_seq: u32,
     history: Vec<CmdRecord>,
     pub predicted: MoveState,
+    pub predicted_weapon: WeaponState,
     /// Authoritative local state from the newest snapshot.
     pub server_state: MoveState,
+    pub server_weapon: WeaponState,
     pub health: u8,
+    pub alive: bool,
+    pub respawn_in: f32,
+    weapons: WeaponSet,
+    pub loadout: [u8; 2],
+    shot_buf: ShotBuffer,
+    /// Shots this client fired (predicted), and shot events of others.
+    pub local_shots: u64,
+    pub remote_shot_events: Vec<ShotEvent>,
+    shot_decode: Vec<ShotEvent>,
     have_authoritative: bool,
     last_frame: Option<Instant>,
     tick_accum: f64,
@@ -204,7 +238,7 @@ pub struct Client {
 impl Client {
     /// Creates the client and starts connecting. `map` must be the same map
     /// definition the server runs (verified by hash).
-    pub fn connect(cfg: ClientConfig, map: &MapDef) -> std::io::Result<Self> {
+    pub fn connect(cfg: ClientConfig, map: &MapDef, weapons: &WeaponSet) -> std::io::Result<Self> {
         let bind: SocketAddr = if cfg.server.is_ipv4() {
             "0.0.0.0:0".parse().unwrap()
         } else {
@@ -242,13 +276,25 @@ impl Client {
                 CmdRecord {
                     seq: 0,
                     input: MoveInput::default(),
-                    after: MoveState::default()
+                    render_time: 0,
+                    after: MoveState::default(),
+                    weapon_after: WeaponState::default(),
                 };
                 CMD_HISTORY
             ],
             predicted: MoveState::default(),
+            predicted_weapon: WeaponState::default(),
             server_state: MoveState::default(),
+            server_weapon: WeaponState::default(),
             health: 100,
+            alive: true,
+            respawn_in: 0.0,
+            weapons: weapons.clone(),
+            loadout: weapons.default_loadout,
+            shot_buf: ShotBuffer::default(),
+            local_shots: 0,
+            remote_shot_events: Vec::new(),
+            shot_decode: Vec::new(),
             have_authoritative: false,
             last_frame: None,
             tick_accum: 0.0,
@@ -291,6 +337,11 @@ impl Client {
     /// Sets the input that will be sampled at the next simulation ticks.
     pub fn set_input(&mut self, input: MoveInput) {
         self.current_input = input;
+    }
+
+    /// The input currently being sampled.
+    pub fn current_input(&self) -> MoveInput {
+        self.current_input
     }
 
     pub fn command_seq(&self) -> u32 {
@@ -423,14 +474,53 @@ impl Client {
     }
 
     /// One client simulation tick: sample input, predict, send.
+    /// Loadout weapon definitions (valid once connected).
+    fn loadout_defs(&self) -> Option<[&WeaponDef; 2]> {
+        Some([
+            self.weapons.get(self.loadout[0])?,
+            self.weapons.get(self.loadout[1])?,
+        ])
+    }
+
+    /// One predicted step (no-op while dead). Returns the number of bullets fired.
+    fn step(&mut self, ms: &mut MoveState, ws: &mut WeaponState, input: &MoveInput) -> usize {
+        if !self.alive {
+            return 0;
+        }
+        // Field-level borrows: weapon definitions (shared) and shot buffer (mutable).
+        let (Some(p), Some(s)) = (
+            self.weapons.get(self.loadout[0]),
+            self.weapons.get(self.loadout[1]),
+        ) else {
+            return 0;
+        };
+        self.shot_buf.clear();
+        simulate_player(
+            ms,
+            ws,
+            input,
+            self.dt,
+            &self.world,
+            &[p, s],
+            &mut self.shot_buf,
+        );
+        self.shot_buf.len
+    }
+
     fn run_tick(&mut self, now: Instant) {
         self.cmd_seq += 1;
         let input = self.current_input;
-        simulate(&mut self.predicted, &input, self.dt, &self.world);
+        let (mut ms, mut ws) = (self.predicted, self.predicted_weapon);
+        self.local_shots += self.step(&mut ms, &mut ws, &input) as u64;
+        self.predicted = ms;
+        self.predicted_weapon = ws;
+        let rt = self.render_tick();
         self.history[self.cmd_seq as usize % CMD_HISTORY] = CmdRecord {
             seq: self.cmd_seq,
             input,
+            render_time: if rt > 0.0 { (rt * 256.0) as u32 } else { 0 },
             after: self.predicted,
+            weapon_after: self.predicted_weapon,
         };
         self.send_input(now);
     }
@@ -446,7 +536,9 @@ impl Client {
             ..Default::default()
         };
         for i in 0..count {
-            bundle.cmds[i as usize] = self.history[(self.cmd_seq - i) as usize % CMD_HISTORY].input;
+            let rec = &self.history[(self.cmd_seq - i) as usize % CMD_HISTORY];
+            bundle.cmds[i as usize] = rec.input;
+            bundle.render_times[i as usize] = rec.render_time;
         }
         self.send_buf.clear();
         let mut w = Writer::new(&mut self.send_buf);
@@ -503,7 +595,10 @@ impl Client {
                 if a.client_nonce != nonce {
                     return Ok(());
                 }
-                if a.map_hash != self.local_map_hash {
+                let weapons_ok = a.weapons_hash == self.weapons.hash()
+                    && self.weapons.get(a.loadout[0]).is_some()
+                    && self.weapons.get(a.loadout[1]).is_some();
+                if a.map_hash != self.local_map_hash || !weapons_ok {
                     self.send_buf.clear();
                     Disconnect {
                         session_key: a.session_key,
@@ -511,11 +606,19 @@ impl Client {
                     }
                     .encode(&mut self.send_buf);
                     let _ = self.socket.send_to(&self.send_buf, self.cfg.server);
-                    self.set_disconnected(DisconnectCause::MapMismatch {
-                        server: a.map_hash,
-                        local: self.local_map_hash,
+                    self.set_disconnected(if weapons_ok {
+                        DisconnectCause::MapMismatch {
+                            server: a.map_hash,
+                            local: self.local_map_hash,
+                        }
+                    } else {
+                        DisconnectCause::WeaponsMismatch
                     });
                     return Ok(());
+                }
+                self.loadout = a.loadout;
+                if let Some(defs) = self.loadout_defs() {
+                    self.predicted_weapon = WeaponState::new(&defs);
                 }
                 self.session_key = a.session_key;
                 self.player_id = a.player_id;
@@ -628,6 +731,44 @@ impl Client {
                 self.events
                     .push_back(ClientEvent::PlayerConnState { player_id, state });
             }
+            Message::HitConfirm {
+                victim,
+                damage,
+                headshot,
+                killed,
+            } => {
+                self.events.push_back(ClientEvent::HitConfirm {
+                    victim,
+                    damage,
+                    headshot,
+                    killed,
+                });
+            }
+            Message::Damaged {
+                attacker,
+                amount,
+                health,
+                ..
+            } => {
+                self.events.push_back(ClientEvent::Damaged {
+                    attacker,
+                    amount,
+                    health,
+                });
+            }
+            Message::Kill {
+                killer,
+                victim,
+                weapon,
+                headshot,
+            } => {
+                self.events.push_back(ClientEvent::Kill {
+                    killer,
+                    victim,
+                    weapon,
+                    headshot,
+                });
+            }
         }
     }
 
@@ -645,7 +786,21 @@ impl Client {
             return Ok(());
         }
         let mut out = std::mem::take(&mut self.decode_buf);
-        let h = snapshot::decode(r, base_idx.map(|i| self.ring[i].1.as_slice()), &mut out)?;
+        let mut shots = std::mem::take(&mut self.shot_decode);
+        let h = snapshot::decode(
+            r,
+            base_idx.map(|i| self.ring[i].1.as_slice()),
+            &mut out,
+            &mut shots,
+        )?;
+        let own = self.player_id;
+        self.remote_shot_events
+            .extend(shots.iter().filter(|e| e.shooter != own));
+        if self.remote_shot_events.len() > 1024 {
+            let excess = self.remote_shot_events.len() - 1024;
+            self.remote_shot_events.drain(..excess);
+        }
+        self.shot_decode = shots;
         self.stats.snapshots_received += 1;
         if h.baseline_tick != 0 {
             self.stats.delta_snapshots += 1;
@@ -685,31 +840,37 @@ impl Client {
 
         // Local player reconciliation.
         self.server_state = h.local;
+        self.server_weapon = h.weapon;
         self.health = h.local_health;
+        self.alive = h.alive;
+        self.respawn_in = h.respawn_in;
         self.stats.server_input_depth = h.input_buffer_depth;
-        self.reconcile(h.last_cmd_seq, h.local);
+        self.reconcile(h.last_cmd_seq, h.local, h.weapon);
         self.adjust_time_scale(h.input_buffer_depth);
         Ok(())
     }
 
-    fn reconcile(&mut self, acked_seq: u32, server: MoveState) {
+    fn reconcile(&mut self, acked_seq: u32, server: MoveState, server_weapon: WeaponState) {
         if acked_seq > self.cmd_seq {
             return;
         }
-        if acked_seq == 0 {
-            // Server has not simulated any of our commands yet: `server` is the
-            // spawn state. Re-predict every pending command from it so their
-            // stored predictions are not based on the pre-spawn origin.
-            let mut state = server;
-            for seq in 1..=self.cmd_seq {
-                let rec = &mut self.history[seq as usize % CMD_HISTORY];
+        if acked_seq == 0 || !self.alive {
+            // No command of ours simulated yet (`server` is the spawn state),
+            // or dead: adopt the server state and re-predict pending commands
+            // so stored predictions are not based on stale state.
+            let (mut ms, mut ws) = (server, server_weapon);
+            for seq in acked_seq + 1..=self.cmd_seq {
+                let rec = self.history[seq as usize % CMD_HISTORY];
                 if rec.seq != seq {
                     continue;
                 }
-                simulate(&mut state, &rec.input, self.dt, &self.world);
-                rec.after = state;
+                self.step(&mut ms, &mut ws, &rec.input);
+                let r = &mut self.history[seq as usize % CMD_HISTORY];
+                r.after = ms;
+                r.weapon_after = ws;
             }
-            self.predicted = state;
+            self.predicted = ms;
+            self.predicted_weapon = ws;
             self.have_authoritative = true;
             return;
         }
@@ -718,26 +879,29 @@ impl Client {
         // spawn, so that first difference is not a misprediction.
         let had_prediction = rec.seq == acked_seq && self.have_authoritative;
         self.have_authoritative = true;
-        let mut state = server;
+        let (mut ms, mut ws) = (server, server_weapon);
         let mut seq = acked_seq + 1;
         while seq <= self.cmd_seq {
-            let rec = &mut self.history[seq as usize % CMD_HISTORY];
-            if rec.seq != seq {
+            let r = self.history[seq as usize % CMD_HISTORY];
+            if r.seq != seq {
                 break;
             }
-            simulate(&mut state, &rec.input, self.dt, &self.world);
-            rec.after = state;
+            self.step(&mut ms, &mut ws, &r.input);
+            let r = &mut self.history[seq as usize % CMD_HISTORY];
+            r.after = ms;
+            r.weapon_after = ws;
             seq += 1;
         }
         if had_prediction {
             let err = rec.after.pos.distance(&server.pos);
             self.stats.last_correction_m = err;
-            if err > 1e-4 || rec.after.vel != server.vel {
+            if err > 1e-4 || rec.after.vel != server.vel || rec.weapon_after != server_weapon {
                 self.stats.corrections += 1;
                 self.stats.max_correction_m = self.stats.max_correction_m.max(err);
             }
         }
-        self.predicted = state;
+        self.predicted = ms;
+        self.predicted_weapon = ws;
     }
 
     /// Client time dilation: keep 1-3 commands buffered at the server.

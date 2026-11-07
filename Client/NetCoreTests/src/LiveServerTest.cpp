@@ -24,6 +24,17 @@ namespace
 		return Map;
 	}
 
+	tfps::WeaponSet LoadWeaponSet()
+	{
+		std::ifstream F(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/weapons.json");
+		std::stringstream SS;
+		SS << F.rdbuf();
+		tfps::WeaponSet W;
+		std::string Err;
+		tfps::ParseWeaponsJson(SS.str(), W, Err);
+		return W;
+	}
+
 	void Pump(std::vector<tfps::ClientCore*> Clients, double Seconds)
 	{
 		const double End = NowSeconds() + Seconds;
@@ -51,12 +62,13 @@ namespace
 TFPS_SERVER_TEST(LiveTwoCppClientsSeeEachOtherMove)
 {
 	const tfps::MapDef Map = LoadArena();
+	const tfps::WeaponSet Weapons = LoadWeaponSet();
 	FUdpTransport TA, TB;
 	TFPS_REQUIRE(TA.Open(GServer) && TB.Open(GServer));
 	tfps::ClientConfig CA; CA.Name = "CppAlpha";
 	tfps::ClientConfig CB; CB.Name = "CppBravo";
-	tfps::ClientCore A(CA, Map, TA, NowSeconds());
-	tfps::ClientCore B(CB, Map, TB, NowSeconds());
+	tfps::ClientCore A(CA, Map, Weapons, TA, NowSeconds());
+	tfps::ClientCore B(CB, Map, Weapons, TB, NowSeconds());
 	TFPS_REQUIRE(WaitConnected({&A, &B}));
 	Pump({&A, &B}, 0.4);
 	TFPS_REQUIRE(B.Players().count(A.PlayerId()) == 1);
@@ -94,14 +106,15 @@ TFPS_SERVER_TEST(LiveTwoCppClientsSeeEachOtherMove)
 TFPS_SERVER_TEST(LiveCppClientUnderPacketLoss)
 {
 	const tfps::MapDef Map = LoadArena();
+	const tfps::WeaponSet Weapons = LoadWeaponSet();
 	FUdpTransport TA, TB;
 	TFPS_REQUIRE(TA.Open(GServer) && TB.Open(GServer));
 	TA.SimulatedLoss = 0.2f;
 	TB.SimulatedLoss = 0.2f;
 	tfps::ClientConfig CA; CA.Name = "LossyA";
 	tfps::ClientConfig CB; CB.Name = "LossyB";
-	tfps::ClientCore A(CA, Map, TA, NowSeconds());
-	tfps::ClientCore B(CB, Map, TB, NowSeconds());
+	tfps::ClientCore A(CA, Map, Weapons, TA, NowSeconds());
+	tfps::ClientCore B(CB, Map, Weapons, TB, NowSeconds());
 	TFPS_REQUIRE(WaitConnected({&A, &B}));
 	Pump({&A, &B}, 0.4);
 	tfps::MoveInput Run;
@@ -120,4 +133,46 @@ TFPS_SERVER_TEST(LiveCppClientUnderPacketLoss)
 	std::printf("  corrections under 20%% loss: %llu (max %.3f m)\n", static_cast<unsigned long long>(A.Stats().Corrections), A.Stats().MaxCorrectionM);
 	A.Disconnect();
 	B.Disconnect();
+}
+
+TFPS_SERVER_TEST(LiveCppWeaponPredictionMatchesServer)
+{
+	const tfps::MapDef Map = LoadArena();
+	const tfps::WeaponSet Weapons = LoadWeaponSet();
+	FUdpTransport T;
+	TFPS_REQUIRE(T.Open(GServer));
+	tfps::ClientConfig C;
+	C.Name = "CppGunner";
+	tfps::ClientCore A(C, Map, Weapons, T, NowSeconds());
+	TFPS_REQUIRE(WaitConnected({&A}));
+	Pump({&A}, 0.3);
+	TFPS_REQUIRE(A.LoadoutWeapon(0) != nullptr && A.LoadoutWeapon(0)->Id == 1);
+	// Hold fire for a second (auto rifle), then reload, then switch to the pistol.
+	tfps::MoveInput In;
+	In.Buttons = tfps::Buttons::Fire | tfps::Buttons::Aim;
+	A.SetInput(In);
+	Pump({&A}, 1.0);
+	int LocalShots = 0;
+	tfps::FxShot Fx;
+	while (A.PollShot(Fx)) { if (Fx.bLocal) { ++LocalShots; } }
+	In.Buttons = tfps::Buttons::Reload;
+	A.SetInput(In);
+	Pump({&A}, 0.1);
+	In.Buttons = 0;
+	A.SetInput(In);
+	Pump({&A}, 3.2);
+	const tfps::WeaponState& P = A.Weapon();
+	std::printf("  shots %d, mag %u+%d, reserve %u, corrections %llu\n", LocalShots, P.Slots[0].Ammo, P.Slots[0].bChambered ? 1 : 0, P.Slots[0].Reserve,
+		static_cast<unsigned long long>(A.Stats().Corrections));
+	TFPS_EXPECT(LocalShots >= 10);
+	TFPS_EXPECT(P.Slots[0].Ammo == 30 && P.Slots[0].bChambered); // tactical reload: 30 + 1
+	In.Slot = 1;
+	A.SetInput(In);
+	Pump({&A}, 0.6);
+	TFPS_EXPECT(A.Weapon().Active == 1);
+	// Predicted weapon state equals the server's once everything settled.
+	Pump({&A}, 0.3);
+	TFPS_EXPECT(A.Weapon() == A.ServerWeapon());
+	TFPS_EXPECT(A.Stats().Corrections <= 10);
+	A.Disconnect();
 }

@@ -23,6 +23,8 @@ pub struct Connection {
     pub interrupted: bool,
     /// Newest snapshot tick the client reported as decoded.
     pub client_ack_snapshot: u32,
+    /// Server tick up to which shot events were sent to this client.
+    pub last_shot_tick: u32,
     /// Ring of (tick, entities) snapshots sent to this client.
     pub history: Vec<(u32, Vec<EntityState>)>,
     pub history_cursor: usize,
@@ -55,6 +57,7 @@ impl Connection {
             connected_at: now,
             interrupted: false,
             client_ack_snapshot: 0,
+            last_shot_tick: 0,
             history: (0..SNAPSHOT_HISTORY)
                 .map(|_| (0u32, Vec::with_capacity(16)))
                 .collect(),

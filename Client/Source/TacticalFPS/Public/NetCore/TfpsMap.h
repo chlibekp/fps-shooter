@@ -73,6 +73,15 @@ namespace tfps
 	 */
 	bool ParseMapJson(const std::string& Text, MapDef& OutMap, std::string& OutError);
 
+	/**
+	 * Nearest solid hit by a ray (unit direction) within MaxT. Visual use only
+	 * (tracer end points); the server decides real hits.
+	 */
+	bool RaycastSolids(const MapDef& Map, const Vec3& Origin, const Vec3& Dir, float MaxT, float& OutT, EMaterial& OutMaterial);
+
+	/** Unit direction from yaw (0 = +X, toward +Y) and pitch (+ = up) in degrees. */
+	Vec3 DirectionFromAngles(float YawDeg, float PitchDeg);
+
 	struct CollisionWorld
 	{
 		std::vector<Aabb> Boxes;

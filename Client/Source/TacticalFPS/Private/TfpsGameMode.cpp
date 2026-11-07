@@ -8,6 +8,7 @@
 #include "TfpsPlayerController.h"
 #include "TfpsPlayerPawn.h"
 #include "TfpsRemotePlayer.h"
+#include "TfpsShotFx.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -28,6 +29,7 @@ void ATfpsGameMode::BeginPlay()
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	GetWorld()->SpawnActor<ATfpsEnvironment>(ATfpsEnvironment::StaticClass(), FTransform::Identity, Params);
 	GetWorld()->SpawnActor<ATfpsArenaBuilder>(ATfpsArenaBuilder::StaticClass(), FTransform::Identity, Params);
+	GetWorld()->SpawnActor<ATfpsShotFx>(ATfpsShotFx::StaticClass(), FTransform::Identity, Params);
 }
 
 void ATfpsGameMode::RestartPlayer(AController* NewPlayer)
@@ -76,9 +78,9 @@ void ATfpsGameMode::SyncRemotePlayers()
 			}
 			if (Actor != nullptr)
 			{
-				Actor->ApplyState(FVector(P.RenderPos.X, P.RenderPos.Y, P.RenderPos.Z), P.RenderYawDeg,
-					(P.Flags & tfps::EntityFlags::Crouched) != 0, UTF8_TO_TCHAR(P.Name.c_str()), P.Team,
-					P.ConnState != tfps::EConnState::Connected);
+				const tfps::EntityState& Latest = P.Samples.back().second;
+				Actor->ApplyState(FVector(P.RenderPos.X, P.RenderPos.Y, P.RenderPos.Z), P.RenderYawDeg, P.RenderPitchDeg, P.Flags,
+					Latest.Lean(), Latest.Weapon, UTF8_TO_TCHAR(P.Name.c_str()), P.Team, P.ConnState != tfps::EConnState::Connected);
 			}
 		}
 	}

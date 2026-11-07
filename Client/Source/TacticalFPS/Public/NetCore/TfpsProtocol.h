@@ -7,6 +7,7 @@
 
 #include "NetCore/TfpsBytes.h"
 #include "NetCore/TfpsMovement.h"
+#include "NetCore/TfpsWeapon.h"
 
 #include <cstdint>
 #include <deque>
@@ -17,7 +18,7 @@
 namespace tfps
 {
 	constexpr uint16_t kMagic = 0x4654;
-	constexpr uint16_t kProtocolVersion = 1;
+	constexpr uint16_t kProtocolVersion = 2;
 	constexpr size_t kMaxPacketSize = 1200;
 	constexpr size_t kHandshakePacketSize = 256;
 	constexpr size_t kMaxNameLen = 24;
@@ -25,6 +26,7 @@ namespace tfps
 	constexpr size_t kMaxInputRedundancy = 16;
 	constexpr size_t kMaxEntitiesPerSnapshot = 64;
 	constexpr size_t kMaxReliablePayload = 512;
+	constexpr size_t kMaxShotEvents = 32;
 
 	enum class EPacketType : uint8_t
 	{
@@ -70,6 +72,9 @@ namespace tfps
 		constexpr uint8_t PlayerJoined = 1;
 		constexpr uint8_t PlayerLeft = 2;
 		constexpr uint8_t PlayerConnState = 3;
+		constexpr uint8_t HitConfirm = 4;
+		constexpr uint8_t Damaged = 5;
+		constexpr uint8_t Kill = 6;
 	}
 
 	namespace EntityFlags
@@ -78,6 +83,14 @@ namespace tfps
 		constexpr uint8_t Crouched = 1u << 1;
 		constexpr uint8_t Sprinting = 1u << 2;
 		constexpr uint8_t Alive = 1u << 3;
+		constexpr uint8_t Prone = 1u << 4;
+		constexpr uint8_t Reloading = 1u << 5;
+	}
+
+	namespace Surface
+	{
+		constexpr uint8_t Player = 0xFE;
+		constexpr uint8_t None = 0xFF;
 	}
 
 	// ---- Envelope ---------------------------------------------------------
@@ -127,6 +140,8 @@ namespace tfps
 		uint64_t ReconnectToken = 0;
 		uint64_t MapHash = 0;
 		std::string MapName;
+		uint64_t WeaponsHash = 0;
+		uint8_t Loadout[2] = {0, 0};
 		void Encode(std::vector<uint8_t>& Out) const;
 		bool Decode(ByteReader& R);
 	};
@@ -213,6 +228,14 @@ namespace tfps
 		std::string Name;
 		uint8_t Reason = 0;
 		EConnState State = EConnState::Connected;
+		// HitConfirm / Damaged / Kill
+		uint16_t OtherId = 0;     // HitConfirm: victim; Damaged: attacker; Kill: killer (PlayerId = victim)
+		uint8_t Amount = 0;       // damage
+		uint8_t Health = 0;       // Damaged: remaining health
+		uint8_t WeaponId = 0;     // Kill
+		bool bHeadshot = false;
+		bool bKilled = false;     // HitConfirm
+		int32_t FromMm[3] = {0, 0, 0};
 
 		bool Decode(uint8_t InType, const std::vector<uint8_t>& Payload);
 		std::vector<uint8_t> EncodePayload() const;
@@ -226,6 +249,8 @@ namespace tfps
 		uint32_t NewestSeq = 0;
 		uint8_t Count = 0;
 		MoveInput Cmds[kMaxInputRedundancy];
+		/** Remote-entity render time per command (24.8 fixed-point server ticks). */
+		uint32_t RenderTimes[kMaxInputRedundancy] = {};
 
 		void Encode(ByteWriter& W) const;
 		bool Decode(ByteReader& R);
@@ -241,12 +266,30 @@ namespace tfps
 		int16_t PitchQ = 0;
 		uint8_t Flags = 0;
 		uint8_t Health = 0;
+		int8_t LeanQ = 0;
+		uint8_t Weapon = 0;
+		uint8_t AimQ = 0;
 
 		Vec3 Position() const;
+		float Lean() const { return static_cast<float>(LeanQ) / 127.0f; }
+		float Aim() const { return static_cast<float>(AimQ) / 255.0f; }
 		bool operator==(const EntityState& O) const
 		{
 			return Id == O.Id && PosMm[0] == O.PosMm[0] && PosMm[1] == O.PosMm[1] && PosMm[2] == O.PosMm[2]
-				&& YawQ == O.YawQ && PitchQ == O.PitchQ && Flags == O.Flags && Health == O.Health;
+				&& YawQ == O.YawQ && PitchQ == O.PitchQ && Flags == O.Flags && Health == O.Health
+				&& LeanQ == O.LeanQ && Weapon == O.Weapon && AimQ == O.AimQ;
+		}
+	};
+
+	struct ShotEvent
+	{
+		uint16_t Shooter = 0;
+		uint8_t Weapon = 0;
+		int32_t EndMm[3] = {0, 0, 0};
+		uint8_t SurfaceKind = Surface::None;
+		bool operator==(const ShotEvent& O) const
+		{
+			return Shooter == O.Shooter && Weapon == O.Weapon && EndMm[0] == O.EndMm[0] && EndMm[1] == O.EndMm[1] && EndMm[2] == O.EndMm[2] && SurfaceKind == O.SurfaceKind;
 		}
 	};
 
@@ -260,12 +303,17 @@ namespace tfps
 		uint32_t LastCmdSeq = 0;
 		int8_t InputBufferDepth = 0;
 		MoveState Local;
+		WeaponState Weapon;
 		uint8_t LocalHealth = 0;
+		bool bAlive = true;
+		float RespawnIn = 0.0f;
 	};
 
 	/** Entities must be sorted by id. Baseline may be null (then Header.BaselineTick must be 0). */
-	void EncodeSnapshot(ByteWriter& W, const SnapshotHeader& Header, const std::vector<EntityState>& Entities, const std::vector<EntityState>* Baseline);
+	void EncodeSnapshot(ByteWriter& W, const SnapshotHeader& Header, const std::vector<EntityState>& Entities, const std::vector<EntityState>* Baseline,
+		const std::vector<ShotEvent>& Shots);
 	/** Returns false on malformed data or missing baseline. */
 	bool PeekSnapshotBaselineTick(const uint8_t* Data, size_t Len, uint32_t& OutBaseline);
-	bool DecodeSnapshot(ByteReader& R, const std::vector<EntityState>* Baseline, SnapshotHeader& OutHeader, std::vector<EntityState>& OutEntities);
+	bool DecodeSnapshot(ByteReader& R, const std::vector<EntityState>* Baseline, SnapshotHeader& OutHeader, std::vector<EntityState>& OutEntities,
+		std::vector<ShotEvent>& OutShots);
 }

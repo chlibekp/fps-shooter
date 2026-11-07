@@ -11,6 +11,8 @@ pub struct ServerConfig {
     pub snapshot_interval: u8,
     pub max_players: u16,
     pub map_path: PathBuf,
+    pub weapons_path: PathBuf,
+    pub rules: crate::game::MatchRules,
     /// If set, clients must present this join token (lobby system).
     pub join_token: Option<u64>,
     /// No packets for this long -> player marked as interrupted.
@@ -31,6 +33,8 @@ impl Default for ServerConfig {
             snapshot_interval: 1,
             max_players: 10,
             map_path: PathBuf::from("Shared/Definitions/maps/test_arena.json"),
+            weapons_path: PathBuf::from("Shared/Definitions/weapons.json"),
+            rules: Default::default(),
             join_token: None,
             interrupt_after: Duration::from_secs(2),
             timeout_after: Duration::from_secs(10),

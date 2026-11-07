@@ -40,7 +40,16 @@ bool UTfpsNetSubsystem::Connect(const FString& Address, const FString& PlayerNam
 		UE_LOG(LogTfps, Error, TEXT("%s"), *Error);
 		return false;
 	}
+	tfps::WeaponSet NewWeapons;
+	if (!FTfpsMapLoader::LoadWeapons(NewWeapons, Error))
+	{
+		Status = ETfpsConnectionStatus::Failed;
+		StatusText = Error;
+		UE_LOG(LogTfps, Error, TEXT("%s"), *Error);
+		return false;
+	}
 	Map = std::move(NewMap);
+	Weapons = std::move(NewWeapons);
 	bHasMap = true;
 	++MapRevision;
 
@@ -53,7 +62,7 @@ bool UTfpsNetSubsystem::Connect(const FString& Address, const FString& PlayerNam
 	}
 	tfps::ClientConfig Config;
 	Config.Name = TCHAR_TO_UTF8(*PlayerName.Left(24));
-	Core = std::make_unique<tfps::ClientCore>(Config, Map, Transport, FPlatformTime::Seconds());
+	Core = std::make_unique<tfps::ClientCore>(Config, Map, Weapons, Transport, FPlatformTime::Seconds());
 	ServerAddress = Address;
 	LocalName = PlayerName;
 	Status = ETfpsConnectionStatus::Connecting;
@@ -94,6 +103,33 @@ void UTfpsNetSubsystem::Pump()
 	LastPumpFrame = GFrameCounter;
 	Core->Update(FPlatformTime::Seconds());
 	HandleEvents();
+	tfps::FxShot Shot;
+	while (Core && Core->PollShot(Shot))
+	{
+		if (PendingShots.Num() < 256)
+		{
+			PendingShots.Add(Shot);
+		}
+	}
+	const double Now = FPlatformTime::Seconds();
+	KillFeed.RemoveAll([Now](const FKillFeedEntry& E) { return Now - E.Time > 6.0; });
+}
+
+FString UTfpsNetSubsystem::PlayerName(uint16 PlayerId) const
+{
+	if (Core)
+	{
+		if (PlayerId == Core->PlayerId())
+		{
+			return LocalName;
+		}
+		const auto It = Core->Players().find(PlayerId);
+		if (It != Core->Players().end())
+		{
+			return UTF8_TO_TCHAR(It->second.Name.c_str());
+		}
+	}
+	return FString::Printf(TEXT("Player %d"), static_cast<int32>(PlayerId));
 }
 
 void UTfpsNetSubsystem::Tick(float DeltaTime)
@@ -137,6 +173,31 @@ void UTfpsNetSubsystem::HandleEvents()
 			PushEvent(FString::Printf(TEXT("Player %d connection: %s"), static_cast<int32>(Event.PlayerId),
 				Event.ConnState == tfps::EConnState::Connected ? TEXT("restored") : TEXT("interrupted")));
 			break;
+		case tfps::ClientEvent::EType::HitConfirm:
+			HitMarker.Time = FPlatformTime::Seconds();
+			HitMarker.bHeadshot = Event.bHeadshot;
+			HitMarker.bKill = Event.bKilled;
+			break;
+		case tfps::ClientEvent::EType::Damaged:
+			DamageIndicator.Time = FPlatformTime::Seconds();
+			DamageIndicator.FromMeters = FVector(Event.From.X, Event.From.Y, Event.From.Z);
+			DamageIndicator.Amount = Event.Amount;
+			break;
+		case tfps::ClientEvent::EType::Kill:
+		{
+			const tfps::WeaponDef* W = Weapons.Get(Event.WeaponId);
+			FKillFeedEntry Entry;
+			Entry.Text = FString::Printf(TEXT("%s  [%s%s]  %s"), *PlayerName(Event.OtherId), W ? UTF8_TO_TCHAR(W->Name.c_str()) : TEXT("?"),
+				Event.bHeadshot ? TEXT(", headshot") : TEXT(""), *PlayerName(Event.PlayerId));
+			Entry.Time = FPlatformTime::Seconds();
+			Entry.bInvolvesMe = Event.OtherId == Core->PlayerId() || Event.PlayerId == Core->PlayerId();
+			KillFeed.Add(Entry);
+			if (KillFeed.Num() > 6)
+			{
+				KillFeed.RemoveAt(0);
+			}
+			break;
+		}
 		case tfps::ClientEvent::EType::Disconnected:
 		{
 			FString Reason;
@@ -146,6 +207,7 @@ void UTfpsNetSubsystem::HandleEvents()
 			case tfps::EDisconnectCause::HandshakeTimeout: Reason = TEXT("server did not answer"); break;
 			case tfps::EDisconnectCause::Timeout: Reason = TEXT("connection lost"); break;
 			case tfps::EDisconnectCause::MapMismatch: Reason = TEXT("map data differs from the server's"); break;
+			case tfps::EDisconnectCause::WeaponsMismatch: Reason = TEXT("weapon data differs from the server's"); break;
 			case tfps::EDisconnectCause::ServerDisconnect: Reason = TEXT("disconnected by server"); break;
 			default: Reason = TEXT("disconnected"); break;
 			}

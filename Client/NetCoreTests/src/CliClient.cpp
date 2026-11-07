@@ -35,11 +35,16 @@ int main(int Argc, char** Argv)
 	tfps::MapDef Map;
 	std::string Err;
 	if (!tfps::ParseMapJson(SS.str(), Map, Err)) { std::fprintf(stderr, "map: %s\n", Err.c_str()); return 1; }
+	std::ifstream WF(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/weapons.json");
+	std::stringstream WS;
+	WS << WF.rdbuf();
+	tfps::WeaponSet Weapons;
+	if (!tfps::ParseWeaponsJson(WS.str(), Weapons, Err)) { std::fprintf(stderr, "weapons: %s\n", Err.c_str()); return 1; }
 	FUdpTransport Transport;
 	if (!Transport.Open(Server)) { std::fprintf(stderr, "cannot open %s\n", Server.c_str()); return 1; }
 	tfps::ClientConfig Cfg;
 	Cfg.Name = Name;
-	tfps::ClientCore Client(Cfg, Map, Transport, NowSeconds());
+	tfps::ClientCore Client(Cfg, Map, Weapons, Transport, NowSeconds());
 	const double Start = NowSeconds();
 	double NextReport = Start + 1.0;
 	while (NowSeconds() - Start < Seconds)

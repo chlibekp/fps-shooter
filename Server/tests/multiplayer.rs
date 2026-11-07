@@ -10,7 +10,15 @@ use tfps_protocol::packet::{
 };
 use tfps_protocol::{input::InputBundle, Writer};
 use tfps_server::config::ServerConfig;
-use tfps_sim::{buttons, MapDef, MoveInput};
+use tfps_sim::{buttons, MapDef, MoveInput, WeaponSet};
+
+fn weapons() -> WeaponSet {
+    WeaponSet::load(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../Shared/Definitions/weapons.json"
+    ))
+    .unwrap()
+}
 
 fn map() -> MapDef {
     MapDef::load(concat!(
@@ -39,11 +47,11 @@ fn test_cfg() -> ServerConfig {
 }
 
 fn server_cfg(cfg: ServerConfig) -> tfps_server::ServerHandle {
-    tfps_server::start_with_map(cfg, map()).expect("server start")
+    tfps_server::start_with_data(cfg, map(), weapons()).expect("server start")
 }
 
 fn client(srv: &tfps_server::ServerHandle, name: &str) -> Client {
-    Client::connect(ClientConfig::new(srv.local_addr, name), &map()).unwrap()
+    Client::connect(ClientConfig::new(srv.local_addr, name), &map(), &weapons()).unwrap()
 }
 
 /// Updates all clients for `dur`.
@@ -224,7 +232,7 @@ fn reconnect_restores_player_slot_and_position() {
     // New process, same token.
     let mut cfg = ClientConfig::new(srv.local_addr, "Crashy");
     cfg.reconnect_token = token;
-    let mut a2 = Client::connect(cfg, &map()).unwrap();
+    let mut a2 = Client::connect(cfg, &map(), &weapons()).unwrap();
     connect_all(&mut [&mut a2, &mut b]);
     run(&mut [&mut a2, &mut b], Duration::from_millis(300));
     assert_eq!(
@@ -249,7 +257,7 @@ fn session_takeover_before_timeout() {
     drop(a);
     let mut cfg = ClientConfig::new(srv.local_addr, "Flaky");
     cfg.reconnect_token = token;
-    let mut a2 = Client::connect(cfg, &map()).unwrap();
+    let mut a2 = Client::connect(cfg, &map(), &weapons()).unwrap();
     connect_all(&mut [&mut a2]);
     assert_eq!(a2.player_id, id);
     assert_eq!(srv.stats.snapshot().players, 1);
@@ -423,11 +431,11 @@ fn join_token_and_capacity_are_enforced() {
 
     let mut cfg = ClientConfig::new(srv.local_addr, "Ok");
     cfg.join_token = 0xABCD;
-    let mut ok = Client::connect(cfg.clone(), &map()).unwrap();
+    let mut ok = Client::connect(cfg.clone(), &map(), &weapons()).unwrap();
     connect_all(&mut [&mut ok]);
 
     cfg.name = "Second".into();
-    let mut full = Client::connect(cfg, &map()).unwrap();
+    let mut full = Client::connect(cfg, &map(), &weapons()).unwrap();
     assert!(pump_until(&mut full, Duration::from_secs(3), |c| c
         .disconnect_cause()
         .is_some()));
@@ -442,7 +450,12 @@ fn map_mismatch_is_detected() {
     let srv = server(64);
     let mut other = map();
     other.solids[0].bounds.max.z += 0.01;
-    let mut c = Client::connect(ClientConfig::new(srv.local_addr, "Modder"), &other).unwrap();
+    let mut c = Client::connect(
+        ClientConfig::new(srv.local_addr, "Modder"),
+        &other,
+        &weapons(),
+    )
+    .unwrap();
     assert!(pump_until(&mut c, Duration::from_secs(3), |c| c
         .disconnect_cause()
         .is_some()));
@@ -484,5 +497,121 @@ fn runs_at_128_ticks_per_second() {
         a.stats.corrections <= 10 && a.stats.max_correction_m < 0.25,
         "{:?}",
         a.stats
+    );
+}
+
+/// Aim angles (quantized) from an eye position to a target point.
+fn aim(from: tfps_sim::Vec3, to: tfps_sim::Vec3) -> (u16, i16) {
+    let (dx, dy, dz) = (to.x - from.x, to.y - from.y, to.z - from.z);
+    let yaw = dy.atan2(dx).to_degrees();
+    let pitch = dz.atan2((dx * dx + dy * dy).sqrt()).to_degrees();
+    (
+        tfps_sim::math::quantize_yaw_deg(yaw),
+        tfps_sim::math::quantize_pitch_deg(pitch),
+    )
+}
+
+/// Open field, spawns 15 m apart with a clear line of sight.
+fn open_map() -> MapDef {
+    MapDef::from_json(
+        r#"{"name":"open","solids":[{"min":[-30,-30,-1],"max":[30,30,0],"material":"dirt"}],
+            "spawns":[{"pos":[-7.5,0,0],"team":0},{"pos":[7.5,0,0],"yaw":180,"team":1}]}"#,
+    )
+    .unwrap()
+}
+
+#[test]
+fn combat_over_the_network_hits_kills_and_respawns() {
+    let cfg = ServerConfig {
+        rules: tfps_server::game::MatchRules {
+            respawn_delay: 1.0,
+            ..Default::default()
+        },
+        ..test_cfg()
+    };
+    let srv = tfps_server::start_with_data(cfg, open_map(), weapons()).unwrap();
+    let mut a = Client::connect(
+        ClientConfig::new(srv.local_addr, "Shooter"),
+        &open_map(),
+        &weapons(),
+    )
+    .unwrap();
+    let mut b = Client::connect(
+        ClientConfig::new(srv.local_addr, "Target"),
+        &open_map(),
+        &weapons(),
+    )
+    .unwrap();
+    connect_all(&mut [&mut a, &mut b]);
+    run(&mut [&mut a, &mut b], Duration::from_millis(400));
+    assert_ne!(
+        a.server_state.pos.x.signum(),
+        b.server_state.pos.x.signum(),
+        "players on opposite teams/spawns"
+    );
+
+    let b_id = b.player_id;
+    let a_id = a.player_id;
+    // Aim at B's (interpolated) chest, ADS, then hold fire until B dies.
+    let mut killed = false;
+    let mut events_a = Vec::new();
+    let mut events_b = Vec::new();
+    let end = Instant::now() + Duration::from_secs(8);
+    while Instant::now() < end && !killed {
+        let target = b
+            .players
+            .get(&a_id)
+            .map(|_| ())
+            .and(a.players.get(&b_id))
+            .map(|p| p.render_pos);
+        if let Some(t) = target {
+            let eye = a.predicted.eye_position(a.current_input().yaw_q);
+            let (yaw_q, pitch_q) = aim(eye, tfps_sim::Vec3::new(t.x, t.y, t.z + 1.25));
+            let fire = if a.predicted.aim >= 1.0 {
+                buttons::FIRE
+            } else {
+                0
+            };
+            a.set_input(MoveInput {
+                buttons: buttons::AIM | fire,
+                yaw_q,
+                pitch_q,
+                slot: 0,
+            });
+        }
+        run(&mut [&mut a, &mut b], Duration::from_millis(20));
+        events_a.extend(drain(&mut a));
+        events_b.extend(drain(&mut b));
+        killed = events_a
+            .iter()
+            .any(|e| matches!(e, ClientEvent::Kill { victim, .. } if *victim == b_id));
+    }
+    assert!(killed, "shooter never got a kill: {events_a:?}");
+    assert!(events_a
+        .iter()
+        .any(|e| matches!(e, ClientEvent::HitConfirm { victim, .. } if *victim == b_id)));
+    assert!(events_b
+        .iter()
+        .any(|e| matches!(e, ClientEvent::Damaged { attacker, .. } if *attacker == a_id)));
+    assert!(events_b.iter().any(|e| matches!(e, ClientEvent::Kill { killer, victim, .. } if *killer == a_id && *victim == b_id)));
+    assert!(a.local_shots > 0);
+    assert!(
+        a.predicted_weapon.slots[0].ammo < 29,
+        "ammo must be consumed"
+    );
+    // Prediction of the shooter's weapon state matches the server's.
+    a.set_input(MoveInput::default());
+    run(&mut [&mut a, &mut b], Duration::from_millis(300));
+    assert_eq!(a.predicted_weapon.slots, a.server_weapon.slots);
+    // The victim sees shot events from the shooter.
+    assert!(b.remote_shot_events.iter().any(|e| e.shooter == a_id));
+    // Dead, then respawned with full health.
+    assert!(!b.alive || b.health == 100);
+    run(&mut [&mut a, &mut b], Duration::from_millis(1400));
+    assert!(
+        b.alive && b.health == 100,
+        "victim must respawn: alive={} hp={}",
+        b.alive,
+        b.health
     );
 }

@@ -29,4 +29,5 @@ sync_definitions() {
   # Packaged builds read map definitions from Content/Definitions (staged as non-UFS).
   mkdir -p "$REPO_ROOT/Client/Content/Definitions/Maps"
   cp "$REPO_ROOT"/Shared/Definitions/maps/*.json "$REPO_ROOT/Client/Content/Definitions/Maps/"
+  cp "$REPO_ROOT"/Shared/Definitions/weapons.json "$REPO_ROOT/Client/Content/Definitions/"
 }

@@ -6,6 +6,7 @@
 //!   ([`server::ServerCore`]). Received datagrams reach it through a bounded
 //!   channel; it sends with a non-blocking socket, so it never blocks on I/O.
 
+pub mod combat;
 pub mod config;
 pub mod connection;
 pub mod game;
@@ -21,7 +22,7 @@ use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender, TryS
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use tfps_sim::MapDef;
+use tfps_sim::{MapDef, WeaponSet};
 use tracing::{info, warn};
 
 /// Capacity of the network -> simulation inbox. When full, packets are
@@ -89,10 +90,17 @@ pub fn start(cfg: ServerConfig) -> anyhow::Result<ServerHandle> {
     cfg.validate().map_err(anyhow::Error::msg)?;
     let map = MapDef::load(&cfg.map_path)
         .with_context(|| format!("loading map {}", cfg.map_path.display()))?;
-    start_with_map(cfg, map)
+    let weapons = WeaponSet::load(&cfg.weapons_path)
+        .with_context(|| format!("loading weapons {}", cfg.weapons_path.display()))?;
+    start_with_data(cfg, map, weapons)
 }
 
-pub fn start_with_map(cfg: ServerConfig, map: MapDef) -> anyhow::Result<ServerHandle> {
+/// Starts a server with already-loaded map and weapon definitions.
+pub fn start_with_data(
+    cfg: ServerConfig,
+    map: MapDef,
+    weapons: WeaponSet,
+) -> anyhow::Result<ServerHandle> {
     cfg.validate().map_err(anyhow::Error::msg)?;
     let std_socket =
         std::net::UdpSocket::bind(cfg.bind).with_context(|| format!("binding {}", cfg.bind))?;
@@ -129,6 +137,8 @@ pub fn start_with_map(cfg: ServerConfig, map: MapDef) -> anyhow::Result<ServerHa
         map = %map.name,
         solids = map.solids.len(),
         map_hash = format!("{:016x}", map.geometry_hash()),
+        weapons = weapons.weapons.len(),
+        weapons_hash = format!("{:016x}", weapons.hash()),
         "server started"
     );
 
@@ -138,7 +148,7 @@ pub fn start_with_map(cfg: ServerConfig, map: MapDef) -> anyhow::Result<ServerHa
         std::thread::Builder::new()
             .name("tfps-sim".into())
             .spawn(move || {
-                let core = server::ServerCore::new(cfg, map, send_socket, stats.clone());
+                let core = server::ServerCore::new(cfg, map, weapons, send_socket, stats.clone());
                 sim_loop(core, inbox_rx, pool_tx, stats, shutdown);
             })?
     };

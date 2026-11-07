@@ -7,6 +7,9 @@ pub mod msg_type {
     pub const PLAYER_JOINED: u8 = 1;
     pub const PLAYER_LEFT: u8 = 2;
     pub const PLAYER_CONN_STATE: u8 = 3;
+    pub const HIT_CONFIRM: u8 = 4;
+    pub const DAMAGED: u8 = 5;
+    pub const KILL: u8 = 6;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,6 +46,28 @@ pub enum Message {
     PlayerLeft { player_id: u16, reason: u8 },
     /// S -> C. Network status of a player (for the scoreboard / lobby).
     PlayerConnState { player_id: u16, state: ConnState },
+    /// S -> shooter. One of your shots hit `victim` (hit marker).
+    HitConfirm {
+        victim: u16,
+        damage: u8,
+        headshot: bool,
+        killed: bool,
+    },
+    /// S -> victim. You were damaged; `from_mm` is the attacker's position
+    /// (for the direction indicator).
+    Damaged {
+        attacker: u16,
+        amount: u8,
+        health: u8,
+        from_mm: [i32; 3],
+    },
+    /// S -> all. Kill feed.
+    Kill {
+        killer: u16,
+        victim: u16,
+        weapon: u8,
+        headshot: bool,
+    },
 }
 
 impl Message {
@@ -51,6 +76,9 @@ impl Message {
             Message::PlayerJoined { .. } => msg_type::PLAYER_JOINED,
             Message::PlayerLeft { .. } => msg_type::PLAYER_LEFT,
             Message::PlayerConnState { .. } => msg_type::PLAYER_CONN_STATE,
+            Message::HitConfirm { .. } => msg_type::HIT_CONFIRM,
+            Message::Damaged { .. } => msg_type::DAMAGED,
+            Message::Kill { .. } => msg_type::KILL,
         }
     }
 
@@ -75,6 +103,40 @@ impl Message {
                 w.u16(*player_id);
                 w.u8(*state as u8);
             }
+            Message::HitConfirm {
+                victim,
+                damage,
+                headshot,
+                killed,
+            } => {
+                w.u16(*victim);
+                w.u8(*damage);
+                w.u8((*headshot as u8) | ((*killed as u8) << 1));
+            }
+            Message::Damaged {
+                attacker,
+                amount,
+                health,
+                from_mm,
+            } => {
+                w.u16(*attacker);
+                w.u8(*amount);
+                w.u8(*health);
+                for v in from_mm {
+                    w.i32(*v);
+                }
+            }
+            Message::Kill {
+                killer,
+                victim,
+                weapon,
+                headshot,
+            } => {
+                w.u16(*killer);
+                w.u16(*victim);
+                w.u8(*weapon);
+                w.u8(*headshot as u8);
+            }
         }
         v
     }
@@ -94,6 +156,29 @@ impl Message {
             msg_type::PLAYER_CONN_STATE => Message::PlayerConnState {
                 player_id: r.u16()?,
                 state: ConnState::from_u8(r.u8()?)?,
+            },
+            msg_type::HIT_CONFIRM => {
+                let victim = r.u16()?;
+                let damage = r.u8()?;
+                let f = r.u8()?;
+                Message::HitConfirm {
+                    victim,
+                    damage,
+                    headshot: f & 1 != 0,
+                    killed: f & 2 != 0,
+                }
+            }
+            msg_type::DAMAGED => Message::Damaged {
+                attacker: r.u16()?,
+                amount: r.u8()?,
+                health: r.u8()?,
+                from_mm: [r.i32()?, r.i32()?, r.i32()?],
+            },
+            msg_type::KILL => Message::Kill {
+                killer: r.u16()?,
+                victim: r.u16()?,
+                weapon: r.u8()?,
+                headshot: r.u8()? != 0,
             },
             _ => return Err(DecodeError::Invalid("unknown message type")),
         })
@@ -118,6 +203,24 @@ mod tests {
             Message::PlayerConnState {
                 player_id: 3,
                 state: ConnState::Reconnecting,
+            },
+            Message::HitConfirm {
+                victim: 4,
+                damage: 108,
+                headshot: true,
+                killed: true,
+            },
+            Message::Damaged {
+                attacker: 2,
+                amount: 36,
+                health: 64,
+                from_mm: [1, -2, 3],
+            },
+            Message::Kill {
+                killer: 2,
+                victim: 4,
+                weapon: 1,
+                headshot: false,
             },
         ] {
             assert_eq!(

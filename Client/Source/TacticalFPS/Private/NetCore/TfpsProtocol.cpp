@@ -10,15 +10,18 @@ namespace tfps
 		constexpr size_t kAckWindow = 256;
 		constexpr size_t kRecvWindow = 256;
 
-		constexpr uint8_t kMaskPX = 1u << 0;
-		constexpr uint8_t kMaskPY = 1u << 1;
-		constexpr uint8_t kMaskPZ = 1u << 2;
-		constexpr uint8_t kMaskYaw = 1u << 3;
-		constexpr uint8_t kMaskPitch = 1u << 4;
-		constexpr uint8_t kMaskFlags = 1u << 5;
-		constexpr uint8_t kMaskHealth = 1u << 6;
-		constexpr uint8_t kMaskFull = 1u << 7;
-		constexpr uint8_t kMaskAll = 0x7F;
+		constexpr uint16_t kMaskPX = 1u << 0;
+		constexpr uint16_t kMaskPY = 1u << 1;
+		constexpr uint16_t kMaskPZ = 1u << 2;
+		constexpr uint16_t kMaskYaw = 1u << 3;
+		constexpr uint16_t kMaskPitch = 1u << 4;
+		constexpr uint16_t kMaskFlags = 1u << 5;
+		constexpr uint16_t kMaskHealth = 1u << 6;
+		constexpr uint16_t kMaskLean = 1u << 7;
+		constexpr uint16_t kMaskWeapon = 1u << 8;
+		constexpr uint16_t kMaskAim = 1u << 9;
+		constexpr uint16_t kMaskFull = 1u << 15;
+		constexpr uint16_t kMaskAll = 0x03FF;
 
 		const EntityState* FindEntity(const std::vector<EntityState>& List, uint16_t Id)
 		{
@@ -33,9 +36,9 @@ namespace tfps
 			return nullptr;
 		}
 
-		uint8_t ChangeMask(const EntityState& Cur, const EntityState& Base)
+		uint16_t ChangeMask(const EntityState& Cur, const EntityState& Base)
 		{
-			uint8_t M = 0;
+			uint16_t M = 0;
 			if (Cur.PosMm[0] != Base.PosMm[0]) { M |= kMaskPX; }
 			if (Cur.PosMm[1] != Base.PosMm[1]) { M |= kMaskPY; }
 			if (Cur.PosMm[2] != Base.PosMm[2]) { M |= kMaskPZ; }
@@ -43,7 +46,49 @@ namespace tfps
 			if (Cur.PitchQ != Base.PitchQ) { M |= kMaskPitch; }
 			if (Cur.Flags != Base.Flags) { M |= kMaskFlags; }
 			if (Cur.Health != Base.Health) { M |= kMaskHealth; }
+			if (Cur.LeanQ != Base.LeanQ) { M |= kMaskLean; }
+			if (Cur.Weapon != Base.Weapon) { M |= kMaskWeapon; }
+			if (Cur.AimQ != Base.AimQ) { M |= kMaskAim; }
 			return M;
+		}
+
+		void EncodeLocal(ByteWriter& W, const SnapshotHeader& H)
+		{
+			const MoveState& L = H.Local;
+			W.F32(L.Pos.X); W.F32(L.Pos.Y); W.F32(L.Pos.Z);
+			W.F32(L.Vel.X); W.F32(L.Vel.Y); W.F32(L.Vel.Z);
+			W.U8(static_cast<uint8_t>((L.bOnGround ? 1 : 0) | (L.bCrouched ? 2 : 0) | (L.bProne ? 4 : 0)));
+			W.F32(L.JumpTimer); W.F32(L.StanceTimer); W.F32(L.Lean); W.F32(L.Aim);
+			const WeaponState& Ws = H.Weapon;
+			W.U8(Ws.Active);
+			for (const SlotAmmo& Sl : Ws.Slots) { W.U16(Sl.Ammo); W.U8(Sl.bChambered ? 1 : 0); W.U16(Sl.Reserve); }
+			W.F32(Ws.Cooldown); W.F32(Ws.ReloadTimer); W.U8(Ws.bReloadEmpty ? 1 : 0); W.F32(Ws.EquipTimer);
+			W.U8(Ws.BurstLeft); W.U8(Ws.bTriggerPrev ? 1 : 0); W.U16(Ws.ShotsFired);
+			W.F32(Ws.RecoilPitch); W.F32(Ws.RecoilYaw); W.F32(Ws.RecoverTimer); W.U32(Ws.ShotCounter);
+			W.U8(H.LocalHealth);
+			W.U8(H.bAlive ? 1 : 0);
+			W.F32(H.RespawnIn);
+		}
+
+		bool DecodeLocal(ByteReader& R, SnapshotHeader& H)
+		{
+			MoveState& L = H.Local;
+			L.Pos.X = R.F32Finite(); L.Pos.Y = R.F32Finite(); L.Pos.Z = R.F32Finite();
+			L.Vel.X = R.F32Finite(); L.Vel.Y = R.F32Finite(); L.Vel.Z = R.F32Finite();
+			const uint8_t MF = R.U8();
+			L.bOnGround = (MF & 1) != 0; L.bCrouched = (MF & 2) != 0; L.bProne = (MF & 4) != 0;
+			L.JumpTimer = R.F32Finite(); L.StanceTimer = R.F32Finite(); L.Lean = R.F32Finite(); L.Aim = R.F32Finite();
+			WeaponState& Ws = H.Weapon;
+			Ws.Active = R.U8();
+			if (Ws.Active >= kWeaponSlots) { R.Fail(); return false; }
+			for (SlotAmmo& Sl : Ws.Slots) { Sl.Ammo = R.U16(); Sl.bChambered = R.U8() != 0; Sl.Reserve = R.U16(); }
+			Ws.Cooldown = R.F32Finite(); Ws.ReloadTimer = R.F32Finite(); Ws.bReloadEmpty = R.U8() != 0; Ws.EquipTimer = R.F32Finite();
+			Ws.BurstLeft = R.U8(); Ws.bTriggerPrev = R.U8() != 0; Ws.ShotsFired = R.U16();
+			Ws.RecoilPitch = R.F32Finite(); Ws.RecoilYaw = R.F32Finite(); Ws.RecoverTimer = R.F32Finite(); Ws.ShotCounter = R.U32();
+			H.LocalHealth = R.U8();
+			H.bAlive = R.U8() != 0;
+			H.RespawnIn = R.F32Finite();
+			return R.Ok();
 		}
 	}
 
@@ -166,6 +211,9 @@ namespace tfps
 		W.U64(ReconnectToken);
 		W.U64(MapHash);
 		W.Str8(MapName, kMaxMapNameLen);
+		W.U64(WeaponsHash);
+		W.U8(Loadout[0]);
+		W.U8(Loadout[1]);
 	}
 
 	bool ConnectAccepted::Decode(ByteReader& R)
@@ -179,6 +227,9 @@ namespace tfps
 		ReconnectToken = R.U64();
 		MapHash = R.U64();
 		MapName = R.Str8(kMaxMapNameLen);
+		WeaponsHash = R.U64();
+		Loadout[0] = R.U8();
+		Loadout[1] = R.U8();
 		return R.Ok() && TickRate >= 1;
 	}
 
@@ -366,6 +417,27 @@ namespace tfps
 			State = static_cast<EConnState>(S);
 			break;
 		}
+		case MsgType::HitConfirm:
+		{
+			OtherId = R.U16();
+			Amount = R.U8();
+			const uint8_t F = R.U8();
+			bHeadshot = (F & 1) != 0;
+			bKilled = (F & 2) != 0;
+			break;
+		}
+		case MsgType::Damaged:
+			OtherId = R.U16();
+			Amount = R.U8();
+			Health = R.U8();
+			FromMm[0] = R.I32(); FromMm[1] = R.I32(); FromMm[2] = R.I32();
+			break;
+		case MsgType::Kill:
+			OtherId = R.U16();   // killer
+			PlayerId = R.U16();  // victim
+			WeaponId = R.U8();
+			bHeadshot = R.U8() != 0;
+			break;
 		default:
 			return false;
 		}
@@ -376,10 +448,16 @@ namespace tfps
 	{
 		std::vector<uint8_t> V;
 		ByteWriter W(V);
-		W.U16(PlayerId);
-		if (Type == MsgType::PlayerJoined) { W.U8(Team); W.Str8(Name, kMaxNameLen); }
-		else if (Type == MsgType::PlayerLeft) { W.U8(Reason); }
-		else { W.U8(static_cast<uint8_t>(State)); }
+		switch (Type)
+		{
+		case MsgType::PlayerJoined: W.U16(PlayerId); W.U8(Team); W.Str8(Name, kMaxNameLen); break;
+		case MsgType::PlayerLeft: W.U16(PlayerId); W.U8(Reason); break;
+		case MsgType::PlayerConnState: W.U16(PlayerId); W.U8(static_cast<uint8_t>(State)); break;
+		case MsgType::HitConfirm: W.U16(OtherId); W.U8(Amount); W.U8(static_cast<uint8_t>((bHeadshot ? 1 : 0) | (bKilled ? 2 : 0))); break;
+		case MsgType::Damaged: W.U16(OtherId); W.U8(Amount); W.U8(Health); W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); break;
+		case MsgType::Kill: W.U16(OtherId); W.U16(PlayerId); W.U8(WeaponId); W.U8(bHeadshot ? 1 : 0); break;
+		default: break;
+		}
 		return V;
 	}
 
@@ -395,6 +473,8 @@ namespace tfps
 			W.U16(Cmds[I].Buttons);
 			W.U16(Cmds[I].YawQ);
 			W.I16(Cmds[I].PitchQ);
+			W.U8(Cmds[I].Slot);
+			W.U32(RenderTimes[I]);
 		}
 	}
 
@@ -409,6 +489,8 @@ namespace tfps
 			Cmds[I].Buttons = R.U16();
 			Cmds[I].YawQ = R.U16();
 			Cmds[I].PitchQ = R.I16();
+			Cmds[I].Slot = R.U8();
+			RenderTimes[I] = R.U32();
 		}
 		return R.Ok();
 	}
@@ -430,26 +512,23 @@ namespace tfps
 		return Vec3(DequantizeMm(PosMm[0]), DequantizeMm(PosMm[1]), DequantizeMm(PosMm[2]));
 	}
 
-	void EncodeSnapshot(ByteWriter& W, const SnapshotHeader& H, const std::vector<EntityState>& Entities, const std::vector<EntityState>* Baseline)
+	void EncodeSnapshot(ByteWriter& W, const SnapshotHeader& H, const std::vector<EntityState>& Entities, const std::vector<EntityState>* Baseline,
+		const std::vector<ShotEvent>& Shots)
 	{
 		W.U32(H.ServerTick);
 		W.U32(H.BaselineTick);
 		W.U32(H.LastCmdSeq);
 		W.I8(H.InputBufferDepth);
-		W.F32(H.Local.Pos.X); W.F32(H.Local.Pos.Y); W.F32(H.Local.Pos.Z);
-		W.F32(H.Local.Vel.X); W.F32(H.Local.Vel.Y); W.F32(H.Local.Vel.Z);
-		W.U8(static_cast<uint8_t>((H.Local.bOnGround ? 1 : 0) | (H.Local.bCrouched ? 2 : 0)));
-		W.F32(H.Local.JumpTimer);
-		W.U8(H.LocalHealth);
+		EncodeLocal(W, H);
 		const size_t N = Entities.size() < kMaxEntitiesPerSnapshot ? Entities.size() : kMaxEntitiesPerSnapshot;
 		W.U8(static_cast<uint8_t>(N));
 		for (size_t I = 0; I < N; ++I)
 		{
 			const EntityState& E = Entities[I];
 			const EntityState* Base = Baseline != nullptr ? FindEntity(*Baseline, E.Id) : nullptr;
-			const uint8_t Mask = Base != nullptr ? ChangeMask(E, *Base) : static_cast<uint8_t>(kMaskFull | kMaskAll);
+			const uint16_t Mask = Base != nullptr ? ChangeMask(E, *Base) : static_cast<uint16_t>(kMaskFull | kMaskAll);
 			W.U16(E.Id);
-			W.U8(Mask);
+			W.U16(Mask);
 			if (Mask & kMaskPX) { W.I32(E.PosMm[0]); }
 			if (Mask & kMaskPY) { W.I32(E.PosMm[1]); }
 			if (Mask & kMaskPZ) { W.I32(E.PosMm[2]); }
@@ -457,6 +536,19 @@ namespace tfps
 			if (Mask & kMaskPitch) { W.I16(E.PitchQ); }
 			if (Mask & kMaskFlags) { W.U8(E.Flags); }
 			if (Mask & kMaskHealth) { W.U8(E.Health); }
+			if (Mask & kMaskLean) { W.I8(E.LeanQ); }
+			if (Mask & kMaskWeapon) { W.U8(E.Weapon); }
+			if (Mask & kMaskAim) { W.U8(E.AimQ); }
+		}
+		const size_t NS = Shots.size() < kMaxShotEvents ? Shots.size() : kMaxShotEvents;
+		W.U8(static_cast<uint8_t>(NS));
+		for (size_t I = 0; I < NS; ++I)
+		{
+			const ShotEvent& S = Shots[I];
+			W.U16(S.Shooter);
+			W.U8(S.Weapon);
+			W.I32(S.EndMm[0]); W.I32(S.EndMm[1]); W.I32(S.EndMm[2]);
+			W.U8(S.SurfaceKind);
 		}
 	}
 
@@ -468,22 +560,18 @@ namespace tfps
 		return R.Ok();
 	}
 
-	bool DecodeSnapshot(ByteReader& R, const std::vector<EntityState>* Baseline, SnapshotHeader& H, std::vector<EntityState>& Out)
+	bool DecodeSnapshot(ByteReader& R, const std::vector<EntityState>* Baseline, SnapshotHeader& H, std::vector<EntityState>& Out,
+		std::vector<ShotEvent>& OutShots)
 	{
 		Out.clear();
+		OutShots.clear();
 		H.ServerTick = R.U32();
 		H.BaselineTick = R.U32();
 		H.LastCmdSeq = R.U32();
 		H.InputBufferDepth = R.I8();
 		if (H.BaselineTick != 0 && Baseline == nullptr) { return false; }
 		const std::vector<EntityState>* Base = H.BaselineTick != 0 ? Baseline : nullptr;
-		H.Local.Pos.X = R.F32Finite(); H.Local.Pos.Y = R.F32Finite(); H.Local.Pos.Z = R.F32Finite();
-		H.Local.Vel.X = R.F32Finite(); H.Local.Vel.Y = R.F32Finite(); H.Local.Vel.Z = R.F32Finite();
-		const uint8_t MF = R.U8();
-		H.Local.bOnGround = (MF & 1) != 0;
-		H.Local.bCrouched = (MF & 2) != 0;
-		H.Local.JumpTimer = R.F32Finite();
-		H.LocalHealth = R.U8();
+		if (!DecodeLocal(R, H)) { return false; }
 		const uint8_t N = R.U8();
 		if (!R.Ok() || N > kMaxEntitiesPerSnapshot) { return false; }
 		int LastId = -1;
@@ -492,7 +580,7 @@ namespace tfps
 			const uint16_t Id = R.U16();
 			if (!R.Ok() || static_cast<int>(Id) <= LastId) { return false; }
 			LastId = Id;
-			uint8_t Mask = R.U8();
+			uint16_t Mask = R.U16();
 			EntityState E;
 			if (Mask & kMaskFull)
 			{
@@ -512,7 +600,21 @@ namespace tfps
 			if (Mask & kMaskPitch) { E.PitchQ = R.I16(); }
 			if (Mask & kMaskFlags) { E.Flags = R.U8(); }
 			if (Mask & kMaskHealth) { E.Health = R.U8(); }
+			if (Mask & kMaskLean) { E.LeanQ = R.I8(); }
+			if (Mask & kMaskWeapon) { E.Weapon = R.U8(); }
+			if (Mask & kMaskAim) { E.AimQ = R.U8(); }
 			Out.push_back(E);
+		}
+		const uint8_t NS = R.U8();
+		if (!R.Ok() || NS > kMaxShotEvents) { return false; }
+		for (uint8_t I = 0; I < NS; ++I)
+		{
+			ShotEvent S;
+			S.Shooter = R.U16();
+			S.Weapon = R.U8();
+			S.EndMm[0] = R.I32(); S.EndMm[1] = R.I32(); S.EndMm[2] = R.I32();
+			S.SurfaceKind = R.U8();
+			OutShots.push_back(S);
 		}
 		return R.Ok();
 	}

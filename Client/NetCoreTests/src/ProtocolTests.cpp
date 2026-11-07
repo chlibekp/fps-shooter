@@ -5,6 +5,8 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include "NetCore/TfpsMap.h"
+#include "NetCore/TfpsWeapon.h"
 
 using namespace tfps;
 
@@ -30,14 +32,29 @@ namespace
 		L.Pos = Vec3(-20.0f, 1.5f, 0.1f);
 		L.Vel = Vec3(3.4f, -0.25f, 0.0f);
 		L.bOnGround = true;
+		L.bCrouched = true;
 		L.JumpTimer = 0.4375f;
+		L.StanceTimer = 0.125f;
+		L.Lean = 0.5f;
+		L.Aim = 0.75f;
 		return L;
+	}
+
+	WeaponState GoldenWeapon()
+	{
+		WeaponState W;
+		W.Active = 1; W.Cooldown = 0.0625f; W.ShotsFired = 3; W.RecoilPitch = 1.5f; W.RecoilYaw = -0.25f; W.ShotCounter = 42;
+		W.Slots[0].Ammo = 29; W.Slots[0].bChambered = true; W.Slots[0].Reserve = 150;
+		W.Slots[1].Ammo = 0; W.Slots[1].bChambered = false; W.Slots[1].Reserve = 60;
+		return W;
 	}
 
 	std::vector<EntityState> GoldenBase()
 	{
 		EntityState A; A.Id = 2; A.PosMm[0] = 20000; A.PosMm[1] = -6000; A.PosMm[2] = 0; A.YawQ = 32768; A.PitchQ = 0; A.Flags = 9; A.Health = 100;
-		EntityState B; B.Id = 5; B.PosMm[0] = -1; B.PosMm[1] = 2; B.PosMm[2] = 3300; B.YawQ = 1; B.PitchQ = -32767; B.Flags = 11; B.Health = 42;
+		A.LeanQ = -127; A.Weapon = 1; A.AimQ = 255;
+		EntityState B; B.Id = 5; B.PosMm[0] = -1; B.PosMm[1] = 2; B.PosMm[2] = 3300; B.YawQ = 1; B.PitchQ = -32767; B.Flags = 27; B.Health = 42;
+		B.LeanQ = 0; B.Weapon = 4; B.AimQ = 0;
 		return {A, B};
 	}
 }
@@ -45,7 +62,7 @@ namespace
 TFPS_TEST(GoldenHandshakeBytesMatchRust)
 {
 	auto V = LoadVectors();
-	TFPS_REQUIRE(V.size() == 9);
+	TFPS_REQUIRE(V.size() == 11);
 	std::vector<uint8_t> B;
 	ConnectRequest CR; CR.ClientNonce = 0x0102030405060708ull; CR.Encode(B);
 	TFPS_EXPECT(B == V["connect_request"]);
@@ -70,6 +87,7 @@ TFPS_TEST(GoldenHandshakeBytesMatchRust)
 		TFPS_REQUIRE(A.Decode(R));
 		TFPS_EXPECT(A.SessionKey == 0xDEADBEEFCAFEF00Dull && A.PlayerId == 3 && A.TickRate == 128 && A.SnapshotInterval == 2);
 		TFPS_EXPECT(A.ServerTick == 123456 && A.ReconnectToken == 0x777788889999AAAAull && A.MapHash == 0x5567bc867d6907e6ull && A.MapName == "test_arena");
+		TFPS_EXPECT(A.WeaponsHash == 0x0123456789ABCDEFull && A.Loadout[0] == 1 && A.Loadout[1] == 4);
 		std::vector<uint8_t> Re;
 		A.Encode(Re);
 		TFPS_EXPECT(Re == P);
@@ -97,9 +115,12 @@ TFPS_TEST(GoldenDataPacketsMatchRust)
 		WriteEmptyReliable(W);
 		W.U8(static_cast<uint8_t>(EBodyKind::Input));
 		InputBundle IB; IB.AckSnapshotTick = 1000; IB.NewestSeq = 50; IB.Count = 3;
-		IB.Cmds[0] = {0x0041, 16384, -1200};
-		IB.Cmds[1] = {0x0001, 16000, -1100};
-		IB.Cmds[2] = {0x0000, 15000, 32767};
+		IB.Cmds[0] = {0x0041, 16384, -1200, 1};
+		IB.Cmds[1] = {0x0001, 16000, -1100, 0};
+		IB.Cmds[2] = {0x0000, 15000, 32767, 0};
+		IB.RenderTimes[0] = 0x00012345u;
+		IB.RenderTimes[1] = 0x00012300u;
+		IB.RenderTimes[2] = 0x00012200u;
 		IB.Encode(W);
 	}
 	TFPS_EXPECT(B == V["data_input"]);
@@ -123,20 +144,34 @@ TFPS_TEST(GoldenDataPacketsMatchRust)
 	TFPS_EXPECT(M.Type == MsgType::PlayerConnState && M.PlayerId == 5 && M.State == EConnState::Interrupted);
 	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
 	TFPS_EXPECT(M.Type == MsgType::PlayerLeft && M.PlayerId == 9 && M.Reason == 2);
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::HitConfirm && M.OtherId == 5 && M.Amount == 108 && M.bHeadshot && M.bKilled);
+	TFPS_EXPECT(M.EncodePayload() == Payload);
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::Damaged && M.OtherId == 2 && M.Amount == 36 && M.Health == 64 && M.FromMm[0] == 20000 && M.FromMm[2] == 1650);
+	TFPS_EXPECT(M.EncodePayload() == Payload);
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::Kill && M.OtherId == 2 && M.PlayerId == 5 && M.WeaponId == 1 && M.bHeadshot);
+	TFPS_EXPECT(M.EncodePayload() == Payload);
 	TFPS_EXPECT(!Rx.Pop(Type, Payload));
 	TFPS_REQUIRE(R.U8() == static_cast<uint8_t>(EBodyKind::Snapshot));
 	SnapshotHeader SH;
 	std::vector<EntityState> Ents;
-	TFPS_REQUIRE(DecodeSnapshot(R, nullptr, SH, Ents));
+	std::vector<ShotEvent> ShotsIn;
+	TFPS_REQUIRE(DecodeSnapshot(R, nullptr, SH, Ents, ShotsIn));
 	TFPS_EXPECT(R.Remaining() == 0);
 	TFPS_EXPECT(SH.ServerTick == 1000 && SH.BaselineTick == 0 && SH.LastCmdSeq == 48 && SH.InputBufferDepth == 2 && SH.LocalHealth == 100);
 	TFPS_EXPECT(SH.Local == GoldenLocal());
+	TFPS_EXPECT(SH.Weapon == GoldenWeapon());
+	TFPS_EXPECT(SH.bAlive && SH.RespawnIn == 0.0f);
 	TFPS_EXPECT(Ents == GoldenBase());
+	TFPS_REQUIRE(ShotsIn.size() == 1);
+	TFPS_EXPECT(ShotsIn[0].Shooter == 2 && ShotsIn[0].Weapon == 1 && ShotsIn[0].EndMm[0] == -20000 && ShotsIn[0].SurfaceKind == Surface::Player);
 
 	// Re-encode the snapshot body and compare with the Rust bytes.
 	std::vector<uint8_t> Body;
 	ByteWriter BW(Body);
-	EncodeSnapshot(BW, SH, Ents, nullptr);
+	EncodeSnapshot(BW, SH, Ents, nullptr, ShotsIn);
 	const std::vector<uint8_t> RustBody(P.end() - static_cast<long>(Body.size()), P.end());
 	TFPS_EXPECT(Body == RustBody);
 }
@@ -151,21 +186,50 @@ TFPS_TEST(GoldenDeltaSnapshotMatchesRust)
 	ByteReader R(P.data(), P.size());
 	SnapshotHeader SH;
 	std::vector<EntityState> Ents;
-	TFPS_REQUIRE(DecodeSnapshot(R, &Base, SH, Ents));
-	TFPS_EXPECT(SH.ServerTick == 1002 && SH.InputBufferDepth == -1 && SH.LocalHealth == 99);
+	std::vector<ShotEvent> ShotsIn;
+	TFPS_REQUIRE(DecodeSnapshot(R, &Base, SH, Ents, ShotsIn));
+	TFPS_EXPECT(SH.ServerTick == 1002 && SH.InputBufferDepth == -1 && SH.LocalHealth == 0 && !SH.bAlive && SH.RespawnIn == 4.5f);
 	TFPS_REQUIRE(Ents.size() == 2);
-	TFPS_EXPECT(Ents[0].Id == 2 && Ents[0].PosMm[0] == 19950 && Ents[0].YawQ == 32000 && Ents[0].Health == 100);
-	TFPS_EXPECT(Ents[1].Id == 8 && Ents[1].PosMm[2] == 1 && Ents[1].PitchQ == 3);
+	TFPS_EXPECT(Ents[0].Id == 2 && Ents[0].PosMm[0] == 19950 && Ents[0].YawQ == 32000 && Ents[0].Health == 100 && Ents[0].LeanQ == 64 && Ents[0].Weapon == 1);
+	TFPS_EXPECT(Ents[1].Id == 8 && Ents[1].PosMm[2] == 1 && Ents[1].PitchQ == 3 && Ents[1].Weapon == 2 && Ents[1].AimQ == 7);
+	TFPS_EXPECT(ShotsIn.empty());
 	// Without the baseline it must be refused.
 	ByteReader R2(P.data(), P.size());
 	SnapshotHeader SH2;
 	std::vector<EntityState> Ents2;
-	TFPS_EXPECT(!DecodeSnapshot(R2, nullptr, SH2, Ents2));
+	std::vector<ShotEvent> Shots2;
+	TFPS_EXPECT(!DecodeSnapshot(R2, nullptr, SH2, Ents2, Shots2));
 	// Re-encode identically.
 	std::vector<uint8_t> Out;
 	ByteWriter W(Out);
-	EncodeSnapshot(W, SH, Ents, &Base);
+	EncodeSnapshot(W, SH, Ents, &Base, ShotsIn);
 	TFPS_EXPECT(Out == P);
+}
+
+TFPS_TEST(DefinitionHashesMatchRust)
+{
+	auto V = LoadVectors();
+	auto ReadText = [](const std::string& Path)
+	{
+		std::ifstream F(Path, std::ios::binary);
+		std::stringstream SS;
+		SS << F.rdbuf();
+		return SS.str();
+	};
+	auto HexU64 = [](const std::vector<uint8_t>& B)
+	{
+		// Vector loader parsed the hex as bytes; rebuild the big-endian value.
+		uint64_t X = 0;
+		for (uint8_t C : B) { X = (X << 8) | C; }
+		return X;
+	};
+	MapDef Map;
+	WeaponSet Weapons;
+	std::string Err;
+	TFPS_REQUIRE(ParseMapJson(ReadText(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/maps/test_arena.json"), Map, Err));
+	TFPS_REQUIRE(ParseWeaponsJson(ReadText(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/weapons.json"), Weapons, Err));
+	TFPS_EXPECT(Map.GeometryHash() == HexU64(V["map_hash_test_arena"]));
+	TFPS_EXPECT(Weapons.Hash() == HexU64(V["weapons_hash"]));
 }
 
 TFPS_TEST(AckStateHandlesLossAndNoFalseAck)
@@ -204,7 +268,8 @@ TFPS_TEST(MalformedInputIsRejectedWithoutCrash)
 		ByteReader RR(Buf.data(), Buf.size());
 		SnapshotHeader SH;
 		std::vector<EntityState> E;
-		DecodeSnapshot(RR, nullptr, SH, E);
+		std::vector<ShotEvent> Sv;
+		DecodeSnapshot(RR, nullptr, SH, E, Sv);
 		ByteReader RR2(Buf.data(), Buf.size());
 		ReliableReceiver Rx;
 		Rx.Read(RR2);
@@ -214,8 +279,9 @@ TFPS_TEST(MalformedInputIsRejectedWithoutCrash)
 	ByteWriter W(Bad);
 	SnapshotHeader SH;
 	SH.Local.Pos.X = BitsToFloat(0x7FC00000u);
-	EncodeSnapshot(W, SH, {}, nullptr);
+	EncodeSnapshot(W, SH, {}, nullptr, {});
 	ByteReader RB(Bad.data(), Bad.size());
 	std::vector<EntityState> E;
-	TFPS_EXPECT(!DecodeSnapshot(RB, nullptr, SH, E));
+	std::vector<ShotEvent> Sv;
+	TFPS_EXPECT(!DecodeSnapshot(RB, nullptr, SH, E, Sv));
 }

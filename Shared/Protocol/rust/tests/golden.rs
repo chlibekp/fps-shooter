@@ -9,8 +9,9 @@ use tfps_protocol::input::InputBundle;
 use tfps_protocol::messages::{ConnState, Message};
 use tfps_protocol::packet::*;
 use tfps_protocol::reliable::ReliableSender;
-use tfps_protocol::snapshot::{self, EntityState, SnapshotHeader};
+use tfps_protocol::snapshot::{self, surface, EntityState, ShotEvent, SnapshotHeader};
 use tfps_protocol::Writer;
+use tfps_sim::weapon::{SlotAmmo, WeaponState};
 use tfps_sim::{MoveInput, MoveState, Vec3};
 
 fn hex(b: &[u8]) -> String {
@@ -55,6 +56,8 @@ fn vectors() -> String {
         reconnect_token: 0x7777_8888_9999_AAAA,
         map_hash: 0x5567_bc86_7d69_07e6,
         map_name: "test_arena".into(),
+        weapons_hash: 0x0123_4567_89AB_CDEF,
+        loadout: [1, 4],
     }
     .encode(&mut b);
     add("connect_accepted", &b);
@@ -96,8 +99,26 @@ fn vectors() -> String {
             buttons: 0x0041,
             yaw_q: 16384,
             pitch_q: -1200,
-            slot: 0,
+            slot: 1,
         };
+        bundle.render_times = [
+            0x0001_2345,
+            0x0001_2300,
+            0x0001_2200,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ];
         bundle.cmds[1] = MoveInput {
             buttons: 0x0001,
             yaw_q: 16000,
@@ -119,9 +140,31 @@ fn vectors() -> String {
         pos: Vec3::new(-20.0, 1.5, 0.1),
         vel: Vec3::new(3.4, -0.25, 0.0),
         on_ground: true,
-        crouched: false,
+        crouched: true,
         jump_timer: 0.4375,
+        stance_timer: 0.125,
+        lean: 0.5,
+        aim: 0.75,
         ..Default::default()
+    };
+    let mut weapon = WeaponState {
+        active: 1,
+        cooldown: 0.0625,
+        shots_fired: 3,
+        recoil_pitch: 1.5,
+        recoil_yaw: -0.25,
+        shot_counter: 42,
+        ..Default::default()
+    };
+    weapon.slots[0] = SlotAmmo {
+        ammo: 29,
+        chambered: true,
+        reserve: 150,
+    };
+    weapon.slots[1] = SlotAmmo {
+        ammo: 0,
+        chambered: false,
+        reserve: 60,
     };
     let base = vec![
         EntityState {
@@ -131,14 +174,20 @@ fn vectors() -> String {
             pitch_q: 0,
             flags: 9,
             health: 100,
+            lean_q: -127,
+            weapon: 1,
+            aim_q: 255,
         },
         EntityState {
             id: 5,
             pos_mm: [-1, 2, 3_300],
             yaw_q: 1,
             pitch_q: -32767,
-            flags: 11,
+            flags: 27,
             health: 42,
+            lean_q: 0,
+            weapon: 4,
+            aim_q: 0,
         },
     ];
     b.clear();
@@ -166,6 +215,24 @@ fn vectors() -> String {
                 player_id: 9,
                 reason: 2,
             },
+            Message::HitConfirm {
+                victim: 5,
+                damage: 108,
+                headshot: true,
+                killed: true,
+            },
+            Message::Damaged {
+                attacker: 2,
+                amount: 36,
+                health: 64,
+                from_mm: [20_000, -6_000, 1_650],
+            },
+            Message::Kill {
+                killer: 2,
+                victim: 5,
+                weapon: 1,
+                headshot: true,
+            },
         ] {
             tx.queue(m.msg_type(), m.encode_payload()).unwrap();
         }
@@ -183,9 +250,18 @@ fn vectors() -> String {
             last_cmd_seq: 48,
             input_buffer_depth: 2,
             local,
+            weapon,
             local_health: 100,
+            alive: true,
+            respawn_in: 0.0,
         };
-        snapshot::encode(&mut w, &h, &base, None);
+        let shots = [ShotEvent {
+            shooter: 2,
+            weapon: 1,
+            end_mm: [-20_000, 1_500, 1_650],
+            surface: surface::PLAYER,
+        }];
+        snapshot::encode(&mut w, &h, &base, None, &shots);
     }
     add("data_snapshot_full", &b);
 
@@ -200,7 +276,11 @@ fn vectors() -> String {
         pitch_q: 3,
         flags: 9,
         health: 100,
+        lean_q: 5,
+        weapon: 2,
+        aim_q: 7,
     });
+    cur[0].lean_q = 64;
     cur.remove(1); // entity 5 removed
     b.clear();
     {
@@ -211,11 +291,24 @@ fn vectors() -> String {
             last_cmd_seq: 50,
             input_buffer_depth: -1,
             local,
-            local_health: 99,
+            weapon,
+            local_health: 0,
+            alive: false,
+            respawn_in: 4.5,
         };
-        snapshot::encode(&mut w, &h, &cur, Some(&base));
+        snapshot::encode(&mut w, &h, &cur, Some(&base), &[]);
     }
     add("snapshot_delta_body", &b);
+
+    // Hashes of the shared definition files, so C++ can check its parsers.
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../Definitions");
+    let map = tfps_sim::MapDef::load(format!("{root}/maps/test_arena.json")).unwrap();
+    let weapons = tfps_sim::WeaponSet::load(format!("{root}/weapons.json")).unwrap();
+    out.push_str(&format!(
+        "map_hash_test_arena {:016x}\n",
+        map.geometry_hash()
+    ));
+    out.push_str(&format!("weapons_hash {:016x}\n", weapons.hash()));
     out
 }
 

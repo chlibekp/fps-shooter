@@ -26,11 +26,12 @@ namespace tfps
 		}
 	}
 
-	ClientCore::ClientCore(const ClientConfig& InConfig, const MapDef& Map, ITransport& InTransport, double Now)
+	ClientCore::ClientCore(const ClientConfig& InConfig, const MapDef& Map, const WeaponSet& InWeapons, ITransport& InTransport, double Now)
 		: Config(InConfig)
 		, Transport(InTransport)
 		, Collision(CollisionWorld::FromMap(Map))
 		, LocalMapHash(Map.GeometryHash())
+		, WeaponDefs(InWeapons)
 		, Nonce(RandomU64())
 		, HandshakeStarted(Now)
 		, LastRecv(Now)
@@ -40,6 +41,28 @@ namespace tfps
 	{
 		SendBuf.reserve(kMaxPacketSize);
 		SessionReconnectToken = Config.ReconnectToken;
+	}
+
+	bool ClientCore::PollShot(FxShot& Out)
+	{
+		if (Shots.empty()) { return false; }
+		Out = Shots.front();
+		Shots.pop_front();
+		return true;
+	}
+
+	void ClientCore::StepPredicted(MoveState& Ms, WeaponState& Ws, const MoveInput& Input, ShotBuffer* EmitShots)
+	{
+		if (!bAlive || Loadout[0] == nullptr)
+		{
+			return; // dead players do not move; the server ignores their inputs too
+		}
+		ShotScratch.Clear();
+		SimulatePlayer(Ms, Ws, Input, Dt, Collision, Loadout, ShotScratch);
+		if (EmitShots != nullptr)
+		{
+			*EmitShots = ShotScratch;
+		}
 	}
 
 	bool ClientCore::PollEvent(ClientEvent& Out)
@@ -167,11 +190,27 @@ namespace tfps
 		++CmdSeq;
 		const MoveInput Input = CurrentInput;
 		PrevPredictedState = PredictedState;
-		Simulate(PredictedState, Input, Dt, Collision);
+		ShotBuffer Fired;
+		StepPredicted(PredictedState, PredictedWeapon, Input, &Fired);
+		for (int I = 0; I < Fired.Len && bAlive; ++I)
+		{
+			const Shot& S = Fired.Shots[I];
+			FxShot F;
+			F.Shooter = LocalPlayerId;
+			F.WeaponId = S.WeaponId;
+			F.bLocal = true;
+			F.Origin = S.Origin;
+			F.YawDeg = S.YawDeg;
+			F.PitchDeg = S.PitchDeg;
+			Shots.push_back(F);
+		}
 		FCmdRecord& Rec = History[CmdSeq % kCmdHistory];
 		Rec.Seq = CmdSeq;
 		Rec.Input = Input;
+		const double Rt = RenderTick();
+		Rec.RenderTime = Rt > 0.0 ? static_cast<uint32_t>(Rt * 256.0) : 0u;
 		Rec.After = PredictedState;
+		Rec.WeaponAfter = PredictedWeapon;
 		SendInput(Now);
 	}
 
@@ -188,6 +227,7 @@ namespace tfps
 		for (uint32_t I = 0; I < Count; ++I)
 		{
 			Bundle.Cmds[I] = History[(CmdSeq - I) % kCmdHistory].Input;
+			Bundle.RenderTimes[I] = History[(CmdSeq - I) % kCmdHistory].RenderTime;
 		}
 		SendBuf.clear();
 		ByteWriter W(SendBuf);
@@ -234,6 +274,22 @@ namespace tfps
 			ConnectAccepted A;
 			if (!A.Decode(R) || A.ClientNonce != Nonce) { return; }
 			ServerHash = A.MapHash;
+			const WeaponDef* L0 = WeaponDefs.Get(A.Loadout[0]);
+			const WeaponDef* L1 = WeaponDefs.Get(A.Loadout[1]);
+			if (A.WeaponsHash != WeaponDefs.Hash() || L0 == nullptr || L1 == nullptr)
+			{
+				SendBuf.clear();
+				DisconnectPacket P;
+				P.SessionKey = A.SessionKey;
+				P.Reason = EDisconnectReason::ProtocolError;
+				P.Encode(SendBuf);
+				Transport.Send(SendBuf.data(), SendBuf.size());
+				SetDisconnected(EDisconnectCause::WeaponsMismatch);
+				return;
+			}
+			Loadout[0] = L0;
+			Loadout[1] = L1;
+			PredictedWeapon = WeaponState::New(Loadout);
 			if (A.MapHash != LocalMapHash)
 			{
 				SendBuf.clear();
@@ -326,6 +382,27 @@ namespace tfps
 			E.Name = M.Name;
 			break;
 		}
+		case MsgType::HitConfirm:
+			E.Type = ClientEvent::EType::HitConfirm;
+			E.PlayerId = M.OtherId;
+			E.Amount = M.Amount;
+			E.bHeadshot = M.bHeadshot;
+			E.bKilled = M.bKilled;
+			break;
+		case MsgType::Damaged:
+			E.Type = ClientEvent::EType::Damaged;
+			E.PlayerId = M.OtherId;
+			E.Amount = M.Amount;
+			E.Health = M.Health;
+			E.From = Vec3(DequantizeMm(M.FromMm[0]), DequantizeMm(M.FromMm[1]), DequantizeMm(M.FromMm[2]));
+			break;
+		case MsgType::Kill:
+			E.Type = ClientEvent::EType::Kill;
+			E.PlayerId = M.PlayerId;
+			E.OtherId = M.OtherId;
+			E.WeaponId = M.WeaponId;
+			E.bHeadshot = M.bHeadshot;
+			break;
 		case MsgType::PlayerLeft:
 			RemotePlayers.erase(M.PlayerId);
 			E.Type = ClientEvent::EType::PlayerLeft;
@@ -357,7 +434,7 @@ namespace tfps
 			if (Base == nullptr) { ++NetStats.SnapshotsDroppedNoBaseline; return; }
 		}
 		SnapshotHeader H;
-		if (!DecodeSnapshot(R, Base, H, DecodeBuf)) { return; }
+		if (!DecodeSnapshot(R, Base, H, DecodeBuf, ShotEventBuf)) { return; }
 		++NetStats.SnapshotsReceived;
 		if (H.BaselineTick != 0) { ++NetStats.DeltaSnapshots; }
 		if (H.ServerTick <= LatestTick) { return; }
@@ -379,35 +456,58 @@ namespace tfps
 			while (It->second.Samples.size() > kRemoteSampleKeep) { It->second.Samples.pop_front(); }
 		}
 
+		for (const ShotEvent& SE : ShotEventBuf)
+		{
+			if (SE.Shooter == LocalPlayerId) { continue; }
+			FxShot F;
+			F.Shooter = SE.Shooter;
+			F.WeaponId = SE.Weapon;
+			F.End = Vec3(DequantizeMm(SE.EndMm[0]), DequantizeMm(SE.EndMm[1]), DequantizeMm(SE.EndMm[2]));
+			F.SurfaceKind = SE.SurfaceKind;
+			auto It = RemotePlayers.find(SE.Shooter);
+			if (It != RemotePlayers.end())
+			{
+				F.Origin = It->second.RenderPos;
+				F.Origin.Z += It->second.Flags & EntityFlags::Prone ? MoveTuning::ProneEye : ((It->second.Flags & EntityFlags::Crouched) ? MoveTuning::CrouchEye : MoveTuning::StandEye);
+			}
+			Shots.push_back(F);
+		}
+		while (Shots.size() > 256) { Shots.pop_front(); }
+
 		AuthState = H.Local;
+		AuthWeapon = H.Weapon;
 		LocalHealth = H.LocalHealth;
+		bAlive = H.bAlive;
+		RespawnSeconds = H.RespawnIn;
 		NetStats.ServerInputDepth = H.InputBufferDepth;
-		Reconcile(H.LastCmdSeq, H.Local);
+		Reconcile(H.LastCmdSeq, H.Local, H.Weapon);
 		AdjustTimeScale(H.InputBufferDepth);
 	}
 
-	void ClientCore::Reconcile(uint32_t AckedSeq, const MoveState& Server)
+	void ClientCore::Reconcile(uint32_t AckedSeq, const MoveState& Server, const WeaponState& ServerWeapon)
 	{
 		if (AckedSeq > CmdSeq)
 		{
 			return;
 		}
-		if (AckedSeq == 0)
+		if (AckedSeq == 0 || !bAlive)
 		{
-			// Server has not simulated any of our commands yet: Server is the
-			// spawn state. Re-predict every pending command from it so their
-			// stored predictions are not based on the pre-spawn origin.
+			// No command of ours simulated yet (spawn state), or dead: adopt the
+			// server state and re-predict pending commands from it.
 			MoveState State = Server;
+			WeaponState Ws = ServerWeapon;
 			PrevPredictedState = Server;
-			for (uint32_t Seq = 1; Seq <= CmdSeq; ++Seq)
+			for (uint32_t Seq = AckedSeq + 1; Seq <= CmdSeq; ++Seq)
 			{
 				FCmdRecord& Rec = History[Seq % kCmdHistory];
 				if (Rec.Seq != Seq) { continue; }
 				PrevPredictedState = State;
-				Simulate(State, Rec.Input, Dt, Collision);
+				StepPredicted(State, Ws, Rec.Input, nullptr);
 				Rec.After = State;
+				Rec.WeaponAfter = Ws;
 			}
 			PredictedState = State;
+			PredictedWeapon = Ws;
 			bHaveAuthoritative = true;
 			return;
 		}
@@ -416,19 +516,21 @@ namespace tfps
 		const bool bFirst = !bHaveAuthoritative;
 		bHaveAuthoritative = true;
 		MoveState State = Server;
+		WeaponState Ws = ServerWeapon;
 		for (uint32_t Seq = AckedSeq + 1; Seq <= CmdSeq; ++Seq)
 		{
 			FCmdRecord& Rec = History[Seq % kCmdHistory];
 			if (Rec.Seq != Seq) { break; }
 			if (Seq == CmdSeq) { PrevPredictedState = State; }
-			Simulate(State, Rec.Input, Dt, Collision);
+			StepPredicted(State, Ws, Rec.Input, nullptr);
 			Rec.After = State;
+			Rec.WeaponAfter = Ws;
 		}
 		if (bHadPrediction)
 		{
 			const float Err = Distance(Acked.After.Pos, Server.Pos);
 			NetStats.LastCorrectionM = Err;
-			if (Err > 1e-4f || Acked.After.Vel != Server.Vel)
+			if (Err > 1e-4f || Acked.After.Vel != Server.Vel || !(Acked.WeaponAfter == ServerWeapon))
 			{
 				++NetStats.Corrections;
 				if (Err > NetStats.MaxCorrectionM) { NetStats.MaxCorrectionM = Err; }
@@ -436,6 +538,7 @@ namespace tfps
 		}
 		if (bFirst || AckedSeq == CmdSeq) { PrevPredictedState = State; }
 		PredictedState = State;
+		PredictedWeapon = Ws;
 	}
 
 	void ClientCore::AdjustTimeScale(int8_t Depth)

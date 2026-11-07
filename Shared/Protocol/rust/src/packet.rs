@@ -204,6 +204,10 @@ pub struct ConnectAccepted {
     pub reconnect_token: u64,
     pub map_hash: u64,
     pub map_name: String,
+    /// Fingerprint of the weapon definitions (client must match).
+    pub weapons_hash: u64,
+    /// Weapon ids in the player's two slots.
+    pub loadout: [u8; 2],
 }
 
 impl ConnectAccepted {
@@ -219,6 +223,9 @@ impl ConnectAccepted {
         w.u64(self.reconnect_token);
         w.u64(self.map_hash);
         w.str8(&self.map_name, MAX_MAP_NAME_LEN);
+        w.u64(self.weapons_hash);
+        w.u8(self.loadout[0]);
+        w.u8(self.loadout[1]);
     }
     pub fn decode(r: &mut Reader) -> Result<Self, DecodeError> {
         Ok(Self {
@@ -231,6 +238,8 @@ impl ConnectAccepted {
             reconnect_token: r.u64()?,
             map_hash: r.u64()?,
             map_name: r.str8(MAX_MAP_NAME_LEN)?,
+            weapons_hash: r.u64()?,
+            loadout: [r.u8()?, r.u8()?],
         })
     }
 }
@@ -368,6 +377,8 @@ mod tests {
             reconnect_token: 99,
             map_hash: 0x1234,
             map_name: "test_arena".into(),
+            weapons_hash: 0x9999,
+            loadout: [1, 4],
         };
         buf.clear();
         acc.encode(&mut buf);

@@ -15,6 +15,7 @@
 #include <cmath>
 #include <initializer_list>
 #include <functional>
+#include <algorithm>
 
 using uint8 = std::uint8_t; using uint16 = std::uint16_t; using uint32 = std::uint32_t; using uint64 = unsigned long long;
 using int8 = std::int8_t; using int16 = std::int16_t; using int32 = std::int32_t; using int64 = long long;
@@ -43,6 +44,7 @@ template <typename T> struct TArray : std::vector<T>
 	int32 Num() const { return static_cast<int32>(this->size()); }
 	int32 Add(const T& V) { this->push_back(V); return Num() - 1; }
 	void RemoveAt(int32 I) { this->erase(this->begin() + I); }
+	template <typename P> int32 RemoveAll(P Pred) { auto It = std::remove_if(this->begin(), this->end(), Pred); int32 N = static_cast<int32>(this->end() - It); this->erase(It, this->end()); return N; }
 	void Reset() { this->clear(); }
 };
 struct FString
@@ -53,6 +55,7 @@ struct FString
 	const TCHAR* operator*() const { return S.c_str(); }
 	FString operator+(const FString& O) const { FString R; R.S = S + O.S; return R; }
 	FString operator+(const TCHAR* O) const { FString R; R.S = S + O; return R; }
+	FString& operator+=(const TCHAR* O) { S += O; return *this; }
 	FString Left(int32 N) const { FString R; R.S = S.substr(0, static_cast<size_t>(N)); return R; }
 	bool Split(const FString& D, FString* L, FString* R, int SearchCase, int Dir) const { (void)D; (void)L; (void)R; (void)SearchCase; (void)Dir; return true; }
 	template <typename... A> static FString Printf(const TCHAR* Fmt, A... Args) { wchar_t B[512]; std::swprintf(B, 512, Fmt, Args...); return FString(B); }
@@ -99,6 +102,8 @@ struct FVector
 	FVector operator+(const FVector& O) const { return {X + O.X, Y + O.Y, Z + O.Z}; }
 	FVector operator-(const FVector& O) const { return {X - O.X, Y - O.Y, Z - O.Z}; }
 	FVector operator*(double S) const { return {X * S, Y * S, Z * S}; }
+	FVector operator/(double S) const { return {X / S, Y / S, Z / S}; }
+	FVector& operator+=(const FVector& O) { X += O.X; Y += O.Y; Z += O.Z; return *this; }
 	FVector& operator*=(double S) { X *= S; Y *= S; Z *= S; return *this; }
 	FVector& operator-=(const FVector& O) { X -= O.X; Y -= O.Y; Z -= O.Z; return *this; }
 	double Size() const { return std::sqrt(X * X + Y * Y + Z * Z); }
@@ -116,6 +121,7 @@ struct FRotator
 };
 inline const FRotator FRotator::ZeroRotator{};
 inline FRotator FVector::Rotation() const { return FRotator(0, std::atan2(Y, X) * 57.29578, 0); }
+struct FRotationMatrix { static FRotationMatrix MakeFromZ(const FVector&) { return FRotationMatrix(); } FRotator Rotator() const { return FRotator(); } };
 struct FTransform { static const FTransform Identity; FTransform() = default; FTransform(const FRotator&, const FVector&, const FVector&) {} };
 inline const FTransform FTransform::Identity{};
 struct FLinearColor { float R, G, B, A; FLinearColor(float r, float g, float b, float a = 1) : R(r), G(g), B(b), A(a) {} static const FLinearColor Gray; };
@@ -129,6 +135,13 @@ struct FMath
 	static float FInterpTo(float C, float T, float Dt, float S) { return C + (T - C) * std::fmin(1.f, Dt * S); }
 	static float ClampAngle(float A, float Mn, float Mx) { return A < Mn ? Mn : (A > Mx ? Mx : A); }
 	static int32 RandRange(int32 A, int32 B) { return (A + B) / 2; }
+	template <typename T> static T Clamp(T V, T Lo, T Hi) { return V < Lo ? Lo : (V > Hi ? Hi : V); }
+	template <typename T> static T Min(T A, T B) { return A < B ? A : B; }
+	static float RadiansToDegrees(float R) { return R * 57.29578f; }
+	static float DegreesToRadians(float D) { return D * 0.017453292f; }
+	static float Atan2(float Y, float X) { return std::atan2(Y, X); }
+	static float Sin(float V) { return std::sin(V); }
+	static float Cos(float V) { return std::cos(V); }
 };
 struct FChar { static bool IsAlnum(TCHAR C) { return std::iswalnum(static_cast<wint_t>(C)) != 0; } };
 struct FCString { static int32 Atoi(const TCHAR* S) { return static_cast<int32>(std::wcstol(S, nullptr, 10)); } };
@@ -189,6 +202,10 @@ public:
 	void SetRelativeRotation(const FRotator&) {}
 	void SetRelativeScale3D(const FVector&) {}
 	void SetWorldRotation(const FRotator&) {}
+	void SetWorldLocation(const FVector&) {}
+	void SetWorldLocationAndRotation(const FVector&, const FRotator&) {}
+	void SetWorldScale3D(const FVector&) {}
+	void SetVisibility(bool) {}
 	FVector GetComponentLocation() const { return FVector(); }
 	void SetMobility(EComponentMobility::Type) {}
 };
@@ -201,7 +218,8 @@ class UTextRenderComponent : public UPrimitiveComponent
 public:
 	void SetHorizontalAlignment(EHorizTextAligment) {} void SetWorldSize(float) {} void SetText(const FText&) {} void SetTextRenderColor(FColor) {}
 };
-class ULightComponent : public USceneComponent { public: void SetIntensity(float) {} };
+class ULightComponent : public USceneComponent { public: void SetIntensity(float) {} void SetLightColor(const FLinearColor&) {} void SetCastShadows(bool) {} };
+class UPointLightComponent : public ULightComponent { public: void SetAttenuationRadius(float) {} };
 class UDirectionalLightComponent : public ULightComponent { public: void SetAtmosphereSunLight(bool) {} void SetDynamicShadowDistanceMovableLight(float) {} };
 class USkyLightComponent : public USceneComponent { public: uint32 bRealTimeCapture : 1; void SetIntensity(float) {} };
 class USkyAtmosphereComponent : public USceneComponent {};
@@ -218,6 +236,7 @@ public:
 	UGameInstance* GetGameInstance() const { return nullptr; }
 	bool Destroy() { return true; }
 	bool SetActorLocation(const FVector&) { return true; }
+	FVector GetActorLocation() const { return FVector(); }
 	bool SetActorLocationAndRotation(const FVector&, const FRotator&) { return true; }
 	STATIC_CLASS_IMPL
 };
@@ -226,7 +245,8 @@ class APawn : public AActor { public: bool bUseControllerRotationYaw = true, bUs
 class AController : public AActor { public: void Possess(APawn*) {} APawn* GetPawn() const { return nullptr; } FRotator GetControlRotation() const { return FRotator(); } void SetControlRotation(const FRotator&) {} bool IsLocalController() const { return true; } };
 struct FInputModeGameOnly {}; struct FInputModeGameAndUI {};
 struct FKey { FKey() = default; FKey(const char*) {} bool IsValid() const { return true; } };
-struct EKeys { static const FKey W, S, A, D, SpaceBar, LeftControl, C, LeftShift, LeftAlt, Q, E, RightMouseButton, LeftMouseButton, Z, R, F, F3, Escape; };
+struct EKeys { static const FKey W, S, A, D, SpaceBar, LeftControl, C, LeftShift, LeftAlt, Q, E, RightMouseButton, LeftMouseButton, Z, R, F, F3, Escape, One, Two, MouseScrollUp, MouseScrollDown; };
+inline const FKey EKeys::One{"1"}, EKeys::Two{"2"}, EKeys::MouseScrollUp{"WU"}, EKeys::MouseScrollDown{"WD"};
 inline const FKey EKeys::W{"W"}, EKeys::S{"S"}, EKeys::A{"A"}, EKeys::D{"D"}, EKeys::SpaceBar{"Sp"}, EKeys::LeftControl{"LC"}, EKeys::C{"C"}, EKeys::LeftShift{"LS"}, EKeys::LeftAlt{"LA"}, EKeys::Q{"Q"}, EKeys::E{"E"}, EKeys::RightMouseButton{"RMB"}, EKeys::LeftMouseButton{"LMB"}, EKeys::Z{"Z"}, EKeys::R{"R"}, EKeys::F{"F"}, EKeys::F3{"F3"}, EKeys::Escape{"Esc"};
 class APlayerController : public AController
 {
@@ -249,10 +269,11 @@ public:
 	virtual void DrawHUD() {}
 	void DrawText(const FString&, FLinearColor, float, float, UFont* = nullptr, float = 1.f, bool = false) {}
 	void DrawLine(float, float, float, float, FLinearColor, float = 0.f) {}
+	void DrawRect(FLinearColor, float, float, float, float) {}
 	APlayerController* GetOwningPlayerController() const { return nullptr; }
 	STATIC_CLASS_IMPL
 };
-class UEngine { public: UFont* GetSmallFont() const { return nullptr; } };
+class UEngine { public: UFont* GetSmallFont() const { return nullptr; } UFont* GetMediumFont() const { return nullptr; } };
 extern UEngine* GEngine;
 inline UEngine* GEngine = nullptr;
 template <typename T> struct TSubclassOf { TSubclassOf() = default; TSubclassOf(UClass*) {} };

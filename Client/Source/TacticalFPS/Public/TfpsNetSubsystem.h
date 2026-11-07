@@ -56,6 +56,18 @@ public:
 
 	const tfps::ClientCore* GetCore() const { return Core.get(); }
 	const tfps::MapDef* GetMap() const { return bHasMap ? &Map : nullptr; }
+	const tfps::WeaponSet& GetWeapons() const { return Weapons; }
+
+	/** Combat feedback for the HUD (consumed as it is drawn). */
+	struct FKillFeedEntry { FString Text; double Time = 0.0; bool bInvolvesMe = false; };
+	struct FHitMarker { double Time = -100.0; bool bHeadshot = false; bool bKill = false; };
+	struct FDamageIndicator { double Time = -100.0; FVector FromMeters = FVector::ZeroVector; int32 Amount = 0; };
+	const TArray<FKillFeedEntry>& GetKillFeed() const { return KillFeed; }
+	const FHitMarker& GetHitMarker() const { return HitMarker; }
+	const FDamageIndicator& GetDamageIndicator() const { return DamageIndicator; }
+	/** Shots to visualise this frame (drained by ATfpsShotFx). */
+	TArray<tfps::FxShot>& GetPendingShots() { return PendingShots; }
+	FString PlayerName(uint16 PlayerId) const;
 	bool DeterminismSelfTestPassed() const { return bDeterminismOk; }
 	const TArray<FString>& GetRecentEvents() const { return RecentEvents; }
 	FString GetServerAddress() const { return ServerAddress; }
@@ -77,7 +89,12 @@ private:
 	FTfpsSocketTransport Transport;
 	std::unique_ptr<tfps::ClientCore> Core;
 	tfps::MapDef Map;
+	tfps::WeaponSet Weapons;
 	bool bHasMap = false;
+	TArray<FKillFeedEntry> KillFeed;
+	FHitMarker HitMarker;
+	FDamageIndicator DamageIndicator;
+	TArray<tfps::FxShot> PendingShots;
 	bool bDeterminismOk = true;
 	int32 MapRevision = 0;
 	uint64 LastPumpFrame = 0;

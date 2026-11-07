@@ -30,6 +30,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Prone = EKeys::Z;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Reload = EKeys::R;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Use = EKeys::F;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey PrimaryWeapon = EKeys::One;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey SecondaryWeapon = EKeys::Two;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey NextWeapon = EKeys::MouseScrollDown;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey PrevWeapon = EKeys::MouseScrollUp;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey ToggleNetStats = EKeys::F3;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey ReleaseMouse = EKeys::Escape;
 };
@@ -62,6 +66,14 @@ public:
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Input")
 	bool bInvertY = false;
 
+	/** Mouse sensitivity multiplier while fully aimed down sights. */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Input")
+	float AdsSensitivityMultiplier = 0.65f;
+
+	/** Crouch key toggles instead of hold (the Ctrl key always holds). */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Input")
+	bool bToggleCrouch = true;
+
 	UFUNCTION(BlueprintPure, Category = "TacticalFPS")
 	bool IsNetStatsVisible() const { return bShowNetStats; }
 
@@ -72,4 +84,7 @@ private:
 
 	bool bShowNetStats = true;
 	bool bMouseReleased = false;
+	bool bCrouchToggled = false;
+	bool bProneToggled = false;
+	uint8 SelectedSlot = 0;
 };

@@ -128,6 +128,53 @@ namespace tfps
 		return true;
 	}
 
+	bool RaycastSolids(const MapDef& Map, const Vec3& Origin, const Vec3& Dir, float MaxT, float& OutT, EMaterial& OutMaterial)
+	{
+		bool bHit = false;
+		float Best = MaxT;
+		for (const Solid& S : Map.Solids)
+		{
+			float TMin = 0.0f;
+			float TMax = Best;
+			bool bMiss = false;
+			for (int Axis = 0; Axis < 3 && !bMiss; ++Axis)
+			{
+				const float O = Origin.Get(Axis);
+				const float D = Dir.Get(Axis);
+				const float Mn = S.Bounds.Min.Get(Axis);
+				const float Mx = S.Bounds.Max.Get(Axis);
+				if (std::fabs(D) < 1e-9f)
+				{
+					bMiss = O < Mn || O > Mx;
+				}
+				else
+				{
+					float T1 = (Mn - O) / D;
+					float T2 = (Mx - O) / D;
+					if (T1 > T2) { const float Tmp = T1; T1 = T2; T2 = Tmp; }
+					if (T1 > TMin) { TMin = T1; }
+					if (T2 < TMax) { TMax = T2; }
+					bMiss = TMin > TMax;
+				}
+			}
+			if (!bMiss && TMin < Best)
+			{
+				Best = TMin;
+				OutMaterial = S.Material;
+				bHit = true;
+			}
+		}
+		OutT = Best;
+		return bHit;
+	}
+
+	Vec3 DirectionFromAngles(float YawDeg, float PitchDeg)
+	{
+		const float Y = YawDeg * 0.017453292f;
+		const float P = PitchDeg * 0.017453292f;
+		return Vec3(std::cos(P) * std::cos(Y), std::cos(P) * std::sin(Y), std::sin(P));
+	}
+
 	CollisionWorld CollisionWorld::FromMap(const MapDef& Map)
 	{
 		CollisionWorld W;

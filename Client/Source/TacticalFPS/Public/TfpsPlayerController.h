@@ -13,6 +13,7 @@ struct FTfpsKeyBindings
 {
 	GENERATED_BODY()
 
+public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Forward = EKeys::W;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Back = EKeys::S;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Left = EKeys::A;

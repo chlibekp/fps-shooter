@@ -252,6 +252,10 @@ impl Client {
             "[::]:0".parse().unwrap()
         };
         let socket = UdpSocket::bind(bind)?;
+        // A connected UDP socket: the OS filters other senders, and recv()
+        // never parses a source address (macOS can report zero-length source
+        // addresses, which makes std's recv_from panic).
+        socket.connect(cfg.server)?;
         socket.set_nonblocking(true)?;
         let mut rng = rand::rngs::StdRng::from_os_rng();
         let now = Instant::now();
@@ -375,7 +379,7 @@ impl Client {
             }
             .encode(&mut self.send_buf);
             for _ in 0..3 {
-                let _ = self.socket.send_to(&self.send_buf, self.cfg.server);
+                let _ = self.socket.send(&self.send_buf);
             }
         }
         self.set_disconnected(DisconnectCause::Local);
@@ -396,7 +400,7 @@ impl Client {
         if self.lose() {
             return;
         }
-        if let Ok(n) = self.socket.send_to(&self.send_buf, self.cfg.server) {
+        if let Ok(n) = self.socket.send(&self.send_buf) {
             self.stats.packets_sent += 1;
             self.stats.bytes_sent += n as u64;
         }
@@ -572,12 +576,12 @@ impl Client {
 
     fn receive(&mut self, now: Instant) {
         loop {
-            let (n, from) = match self.socket.recv_from(&mut self.recv_buf) {
+            let n = match self.socket.recv(&mut self.recv_buf) {
                 Ok(v) => v,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(_) => break, // e.g. ICMP unreachable on Windows; keep going next frame
             };
-            if from != self.cfg.server || self.lose() {
+            if self.lose() {
                 continue;
             }
             self.stats.packets_received += 1;
@@ -618,7 +622,7 @@ impl Client {
                         reason: DisconnectReason::ProtocolError,
                     }
                     .encode(&mut self.send_buf);
-                    let _ = self.socket.send_to(&self.send_buf, self.cfg.server);
+                    let _ = self.socket.send(&self.send_buf);
                     self.set_disconnected(if weapons_ok {
                         DisconnectCause::MapMismatch {
                             server: a.map_hash,

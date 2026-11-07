@@ -172,14 +172,31 @@ async fn recv_loop(
 ) {
     let mut buf = vec![0u8; RECV_BUF];
     while !shutdown.load(Ordering::Relaxed) {
-        let res =
-            tokio::time::timeout(Duration::from_millis(100), socket.recv_from(&mut buf)).await;
+        // Wait for readability (with a timeout to re-check the shutdown flag),
+        // then receive without blocking. On macOS the standard library can
+        // panic on a zero-length source address; a malformed datagram must
+        // never take down the receive task, so that is contained here.
+        match tokio::time::timeout(Duration::from_millis(100), socket.readable()).await {
+            Err(_) => continue,
+            Ok(Err(e)) => {
+                tracing::debug!("readable error: {e}");
+                continue;
+            }
+            Ok(Ok(())) => {}
+        }
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            socket.try_recv_from(&mut buf)
+        }));
         let (n, addr) = match res {
-            Err(_) => continue, // timeout: re-check shutdown flag
             Ok(Ok(v)) => v,
+            Ok(Err(e)) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
             Ok(Err(e)) => {
                 // ICMP port unreachable etc. surface as errors on some OSes.
                 tracing::debug!("recv error: {e}");
+                continue;
+            }
+            Err(_) => {
+                stats.packets_invalid.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
         };

@@ -174,6 +174,13 @@ fn milestone_two_clients_see_each_other_move() {
     assert!(drain(&mut b)
         .iter()
         .any(|e| matches!(e, ClientEvent::PlayerLeft { player_id, .. } if *player_id == a_id)));
+    // Nothing but the server talks to the clients' sockets. (A flood of
+    // datagrams without a usable source address once stalled macOS runs.)
+    assert!(
+        b.stats.packets_foreign == 0,
+        "unexpected foreign datagrams: {}",
+        b.stats.packets_foreign
+    );
 }
 
 #[test]

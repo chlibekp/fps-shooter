@@ -24,7 +24,7 @@ rand.workspace = true
 anyhow.workspace = true
 
 [dev-dependencies]
-# tfps-devclient.workspace = true
+tfps-devclient.workspace = true
 criterion.workspace = true
 
 [[bench]]

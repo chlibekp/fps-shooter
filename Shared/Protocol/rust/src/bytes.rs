@@ -151,6 +151,8 @@ impl<'a> Reader<'a> {
             return Err(DecodeError::Invalid("string too long"));
         }
         let b = self.take(len)?;
-        std::str::from_utf8(b).map(|s| s.to_owned()).map_err(|_| DecodeError::Invalid("invalid utf-8"))
+        std::str::from_utf8(b)
+            .map(|s| s.to_owned())
+            .map_err(|_| DecodeError::Invalid("invalid utf-8"))
     }
 }

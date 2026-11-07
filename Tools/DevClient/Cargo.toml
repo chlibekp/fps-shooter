@@ -1,0 +1,21 @@
+[package]
+name = "tfps-devclient"
+description = "Headless reference client: prediction, reconciliation, interpolation. Used by bots, load tests and server integration tests."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "tfps_devclient"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tfps-bot"
+path = "src/bin/bot.rs"
+
+[dependencies]
+tfps-sim.workspace = true
+tfps-protocol.workspace = true
+rand.workspace = true
+clap.workspace = true
+anyhow.workspace = true

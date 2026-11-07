@@ -13,6 +13,10 @@ pub const MAX_CMD_AHEAD: u32 = 16;
 /// If more commands than this are queued, the oldest are dropped so input
 /// latency stays bounded.
 pub const MAX_CMD_BUFFERED: u32 = 6;
+/// After this many consecutive starved ticks the repeated command loses its
+/// movement buttons (a player whose connection stalls stops instead of
+/// running on).
+pub const STARVATION_HOLD_TICKS: u32 = 8;
 
 #[derive(Clone, Copy, Default)]
 struct CmdSlot {
@@ -37,6 +41,7 @@ pub struct CommandQueue {
     /// `take` (its clock runs ahead): reported so the client slows down.
     pub too_far_ahead: bool,
     ahead_pending: bool,
+    consecutive_starved: u32,
 }
 
 impl Default for CommandQueue {
@@ -51,6 +56,7 @@ impl Default for CommandQueue {
             dropped_cmds: 0,
             too_far_ahead: false,
             ahead_pending: false,
+            consecutive_starved: 0,
         }
     }
 }
@@ -79,7 +85,11 @@ impl CommandQueue {
         if slot.valid && slot.seq == seq {
             return;
         }
-        *slot = CmdSlot { seq, valid: true, cmd };
+        *slot = CmdSlot {
+            seq,
+            valid: true,
+            cmd,
+        };
         if seq > self.newest_seq {
             self.newest_seq = seq;
         }
@@ -116,10 +126,15 @@ impl CommandQueue {
         if !starved {
             self.last_cmd = slot.cmd;
             slot.valid = false;
+            self.consecutive_starved = 0;
         } else {
             // Missing: repeat the previous command and skip this sequence so
             // the client can never bank simulation time.
             self.starved_ticks += 1;
+            self.consecutive_starved += 1;
+            if self.consecutive_starved > STARVATION_HOLD_TICKS {
+                self.last_cmd.buttons = 0;
+            }
         }
         self.last_processed_seq = next;
         self.next_seq = Some(next + 1);
@@ -153,7 +168,11 @@ impl Player {
         }
         EntityState {
             id: self.id,
-            pos_mm: [quantize_mm(self.state.pos.x), quantize_mm(self.state.pos.y), quantize_mm(self.state.pos.z)],
+            pos_mm: [
+                quantize_mm(self.state.pos.x),
+                quantize_mm(self.state.pos.y),
+                quantize_mm(self.state.pos.z),
+            ],
             yaw_q: self.cmds.last_cmd.yaw_q,
             pitch_q: self.cmds.last_cmd.pitch_q,
             flags,
@@ -186,7 +205,14 @@ pub struct GameWorld {
 impl GameWorld {
     pub fn new(map: MapDef, tick_rate: u16) -> Self {
         let collision = CollisionWorld::from_map(&map);
-        Self { map, collision, dt: tfps_sim::tick_dt(tick_rate), tick: 0, players: Vec::new(), spawn_cursor: 0 }
+        Self {
+            map,
+            collision,
+            dt: tfps_sim::tick_dt(tick_rate),
+            tick: 0,
+            players: Vec::new(),
+            spawn_cursor: 0,
+        }
     }
 
     pub fn players(&self) -> &[Player] {
@@ -194,7 +220,10 @@ impl GameWorld {
     }
 
     pub fn player(&self, id: u16) -> Option<&Player> {
-        self.players.binary_search_by_key(&id, |p| p.id).ok().map(|i| &self.players[i])
+        self.players
+            .binary_search_by_key(&id, |p| p.id)
+            .ok()
+            .map(|i| &self.players[i])
     }
 
     pub fn player_mut(&mut self, id: u16) -> Option<&mut Player> {
@@ -207,12 +236,25 @@ impl GameWorld {
     /// Picks a spawn point for `team`, rotating through the team's spawns
     /// and skipping occupied ones.
     pub fn spawn_state(&mut self, team: u8) -> MoveState {
-        let spawns: Vec<_> = self.map.spawns.iter().filter(|s| s.team == team).cloned().collect();
-        let list = if spawns.is_empty() { self.map.spawns.clone() } else { spawns };
+        let spawns: Vec<_> = self
+            .map
+            .spawns
+            .iter()
+            .filter(|s| s.team == team)
+            .cloned()
+            .collect();
+        let list = if spawns.is_empty() {
+            self.map.spawns.clone()
+        } else {
+            spawns
+        };
         for i in 0..list.len() {
             let sp = &list[(self.spawn_cursor + i) % list.len()];
             let candidate = MoveState::at(sp.pos);
-            let blocked = self.players.iter().any(|p| p.state.bounds().overlaps(&candidate.bounds()));
+            let blocked = self
+                .players
+                .iter()
+                .any(|p| p.state.bounds().overlaps(&candidate.bounds()));
             if !blocked {
                 self.spawn_cursor = self.spawn_cursor.wrapping_add(i + 1);
                 return candidate;
@@ -237,7 +279,15 @@ impl GameWorld {
         let yaw_q = self.spawn_yaw_q(&state);
         let mut cmds = CommandQueue::default();
         cmds.last_cmd.yaw_q = yaw_q;
-        let p = Player { id, team, name, state, cmds, health: 100, last_starved: false };
+        let p = Player {
+            id,
+            team,
+            name,
+            state,
+            cmds,
+            health: 100,
+            last_starved: false,
+        };
         match self.players.binary_search_by_key(&id, |p| p.id) {
             Ok(i) => self.players[i] = p,
             Err(i) => self.players.insert(i, p),
@@ -286,7 +336,11 @@ mod tests {
     use super::*;
 
     fn cmd(b: u16) -> MoveInput {
-        MoveInput { buttons: b, yaw_q: 0, pitch_q: 0 }
+        MoveInput {
+            buttons: b,
+            yaw_q: 0,
+            pitch_q: 0,
+        }
     }
 
     #[test]
@@ -305,6 +359,11 @@ mod tests {
         q.push(13, cmd(7)); // arrives late: ignored
         q.push(14, cmd(8));
         assert_eq!(q.take(), (cmd(8), false));
+        // Long stall: movement stops after the hold-over period.
+        for _ in 0..STARVATION_HOLD_TICKS {
+            assert_eq!(q.take(), (cmd(8), true));
+        }
+        assert_eq!(q.take(), (cmd(0), true));
     }
 
     #[test]
@@ -357,11 +416,18 @@ mod tests {
 
         // Walk off the edge -> fall -> respawn
         for s in 65..64 * 12 {
-            w.player_mut(1).unwrap().cmds.push(s, cmd(buttons::FORWARD | buttons::SPRINT));
+            w.player_mut(1)
+                .unwrap()
+                .cmds
+                .push(s, cmd(buttons::FORWARD | buttons::SPRINT));
             w.tick();
         }
         let p = w.player(1).unwrap();
-        assert!(p.state.pos.z > -10.0 && p.state.pos.x < 10.5, "{:?}", p.state);
+        assert!(
+            p.state.pos.z > -10.0 && p.state.pos.x < 10.5,
+            "{:?}",
+            p.state
+        );
         let mut ents = Vec::new();
         w.collect_entities(&mut ents);
         assert_eq!(ents.len(), 2);

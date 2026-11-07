@@ -66,7 +66,11 @@ pub fn dequantize_mm(v: i32) -> f32 {
 
 impl EntityState {
     pub fn position(&self) -> Vec3 {
-        Vec3::new(dequantize_mm(self.pos_mm[0]), dequantize_mm(self.pos_mm[1]), dequantize_mm(self.pos_mm[2]))
+        Vec3::new(
+            dequantize_mm(self.pos_mm[0]),
+            dequantize_mm(self.pos_mm[1]),
+            dequantize_mm(self.pos_mm[2]),
+        )
     }
 }
 
@@ -109,13 +113,20 @@ fn change_mask(cur: &EntityState, base: &EntityState) -> u8 {
 /// Finds an entity in an id-sorted slice.
 #[inline]
 fn find(list: &[EntityState], id: u16) -> Option<&EntityState> {
-    list.binary_search_by_key(&id, |e| e.id).ok().map(|i| &list[i])
+    list.binary_search_by_key(&id, |e| e.id)
+        .ok()
+        .map(|i| &list[i])
 }
 
 /// Encodes a snapshot. `entities` must be sorted by id. `baseline` (sorted)
 /// is the entity list of snapshot `header.baseline_tick`, or `None` for a
 /// full snapshot (then `header.baseline_tick` must be 0).
-pub fn encode(w: &mut Writer, header: &SnapshotHeader, entities: &[EntityState], baseline: Option<&[EntityState]>) {
+pub fn encode(
+    w: &mut Writer,
+    header: &SnapshotHeader,
+    entities: &[EntityState],
+    baseline: Option<&[EntityState]>,
+) {
     debug_assert!(entities.windows(2).all(|p| p[0].id < p[1].id));
     debug_assert_eq!(baseline.is_none(), header.baseline_tick == 0);
     w.u32(header.server_tick);
@@ -171,7 +182,11 @@ pub fn peek_baseline_tick(data: &[u8]) -> Result<u32, DecodeError> {
 }
 
 /// Decodes a snapshot into `out` (cleared first, sorted by id on return).
-pub fn decode(r: &mut Reader, baseline: Option<&[EntityState]>, out: &mut Vec<EntityState>) -> Result<SnapshotHeader, DecodeError> {
+pub fn decode(
+    r: &mut Reader,
+    baseline: Option<&[EntityState]>,
+    out: &mut Vec<EntityState>,
+) -> Result<SnapshotHeader, DecodeError> {
     out.clear();
     let mut h = SnapshotHeader {
         server_tick: r.u32()?,
@@ -207,7 +222,10 @@ pub fn decode(r: &mut Reader, baseline: Option<&[EntityState]>, out: &mut Vec<En
         last_id = Some(id);
         let mask = r.u8()?;
         let mut e = if mask & M_FULL != 0 {
-            EntityState { id, ..Default::default() }
+            EntityState {
+                id,
+                ..Default::default()
+            }
         } else {
             match base.and_then(|b| find(b, id)) {
                 Some(b) => *b,
@@ -246,7 +264,14 @@ mod tests {
     use super::*;
 
     fn ent(id: u16, x: i32) -> EntityState {
-        EntityState { id, pos_mm: [x, 2, 3], yaw_q: 4, pitch_q: -5, flags: entity_flags::ALIVE, health: 100 }
+        EntityState {
+            id,
+            pos_mm: [x, 2, 3],
+            yaw_q: 4,
+            pitch_q: -5,
+            flags: entity_flags::ALIVE,
+            health: 100,
+        }
     }
 
     #[test]
@@ -256,7 +281,13 @@ mod tests {
             baseline_tick: 0,
             last_cmd_seq: 55,
             input_buffer_depth: 2,
-            local: MoveState { pos: Vec3::new(1.5, 2.5, 0.0), vel: Vec3::new(0.1, 0.2, -0.3), on_ground: true, crouched: false, jump_timer: 0.25 },
+            local: MoveState {
+                pos: Vec3::new(1.5, 2.5, 0.0),
+                vel: Vec3::new(0.1, 0.2, -0.3),
+                on_ground: true,
+                crouched: false,
+                jump_timer: 0.25,
+            },
             local_health: 77,
         };
         let base = vec![ent(1, 100), ent(2, 200), ent(5, 500)];
@@ -271,22 +302,38 @@ mod tests {
         // Delta: entity 1 unchanged, 2 moved, 5 removed, 9 added.
         let mut cur = vec![ent(1, 100), ent(2, 260), ent(9, 900)];
         cur[1].yaw_q = 1234;
-        let h2 = SnapshotHeader { server_tick: 12, baseline_tick: 10, ..header };
+        let h2 = SnapshotHeader {
+            server_tick: 12,
+            baseline_tick: 10,
+            ..header
+        };
         buf.clear();
         encode(&mut Writer::new(&mut buf), &h2, &cur, Some(&base));
-        assert!(buf.len() < full_len, "delta {} vs full {}", buf.len(), full_len);
+        assert!(
+            buf.len() < full_len,
+            "delta {} vs full {}",
+            buf.len(),
+            full_len
+        );
         assert_eq!(peek_baseline_tick(&buf).unwrap(), 10);
         let h2d = decode(&mut Reader::new(&buf), Some(&base), &mut out).unwrap();
         assert_eq!(h2d.server_tick, 12);
         assert_eq!(out, cur);
 
         // Without the baseline the delta snapshot must be refused.
-        assert_eq!(decode(&mut Reader::new(&buf), None, &mut out).err(), Some(DecodeError::MissingBaseline(10)));
+        assert_eq!(
+            decode(&mut Reader::new(&buf), None, &mut out).err(),
+            Some(DecodeError::MissingBaseline(10))
+        );
     }
 
     #[test]
     fn unchanged_entity_costs_three_bytes() {
-        let header = SnapshotHeader { server_tick: 2, baseline_tick: 1, ..Default::default() };
+        let header = SnapshotHeader {
+            server_tick: 2,
+            baseline_tick: 1,
+            ..Default::default()
+        };
         let base = vec![ent(1, 1)];
         let mut buf = Vec::new();
         encode(&mut Writer::new(&mut buf), &header, &base, Some(&base));
@@ -300,7 +347,13 @@ mod tests {
 
     #[test]
     fn rejects_nan_local_state() {
-        let header = SnapshotHeader { local: MoveState { pos: Vec3::new(f32::NAN, 0.0, 0.0), ..Default::default() }, ..Default::default() };
+        let header = SnapshotHeader {
+            local: MoveState {
+                pos: Vec3::new(f32::NAN, 0.0, 0.0),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let mut buf = Vec::new();
         encode(&mut Writer::new(&mut buf), &header, &[], None);
         let mut out = Vec::new();

@@ -36,7 +36,9 @@ fn parse_hex_u64(s: &str) -> Result<u64, String> {
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .init();
     let args = Args::parse();
     let cfg = ServerConfig {
@@ -52,11 +54,15 @@ fn main() -> anyhow::Result<()> {
     let handle = tfps_server::start(cfg)?;
     let flag = handle.shutdown_flag();
     // Ctrl-C / SIGTERM -> graceful shutdown (clients get a Disconnect packet).
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
     rt.block_on(async {
         #[cfg(unix)]
         {
-            let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).expect("sigterm");
+            let mut term =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("sigterm");
             tokio::select! {
                 _ = tokio::signal::ctrl_c() => {},
                 _ = term.recv() => {},

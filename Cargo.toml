@@ -4,7 +4,7 @@ members = [
     "Shared/Simulation/rust",
     "Shared/Protocol/rust",
     "Server",
-    # "Tools/DevClient",
+    "Tools/DevClient",
 ]
 
 [workspace.package]

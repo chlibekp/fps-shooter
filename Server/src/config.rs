@@ -43,7 +43,10 @@ impl Default for ServerConfig {
 impl ServerConfig {
     pub fn validate(&self) -> Result<(), String> {
         if !(20..=240).contains(&self.tick_rate) {
-            return Err(format!("tick rate {} out of range 20..=240", self.tick_rate));
+            return Err(format!(
+                "tick rate {} out of range 20..=240",
+                self.tick_rate
+            ));
         }
         if self.snapshot_interval == 0 {
             return Err("snapshot interval must be >= 1".into());

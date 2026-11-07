@@ -135,7 +135,11 @@ impl MapDef {
             spawns: j
                 .spawns
                 .into_iter()
-                .map(|s| SpawnPoint { pos: Vec3::new(s.pos[0], s.pos[1], s.pos[2]), yaw_deg: s.yaw, team: s.team })
+                .map(|s| SpawnPoint {
+                    pos: Vec3::new(s.pos[0], s.pos[1], s.pos[2]),
+                    yaw_deg: s.yaw,
+                    team: s.team,
+                })
                 .collect(),
         };
         map.validate()?;
@@ -154,7 +158,9 @@ impl MapDef {
         }
         for (i, s) in self.solids.iter().enumerate() {
             let b = &s.bounds;
-            let finite = [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z].iter().all(|v| v.is_finite());
+            let finite = [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z]
+                .iter()
+                .all(|v| v.is_finite());
             if !finite || b.min.x >= b.max.x || b.min.y >= b.max.y || b.min.z >= b.max.z {
                 return Err(MapError::Invalid(format!("solid {i} has invalid bounds")));
             }
@@ -169,7 +175,14 @@ impl MapDef {
         let mut h = Fnv1a64::default();
         h.write(&(self.solids.len() as u32).to_le_bytes());
         for s in &self.solids {
-            for v in [s.bounds.min.x, s.bounds.min.y, s.bounds.min.z, s.bounds.max.x, s.bounds.max.y, s.bounds.max.z] {
+            for v in [
+                s.bounds.min.x,
+                s.bounds.min.y,
+                s.bounds.min.z,
+                s.bounds.max.x,
+                s.bounds.max.y,
+                s.bounds.max.z,
+            ] {
                 h.write_f32(v);
             }
             h.write(&[s.material as u8]);
@@ -190,7 +203,9 @@ pub struct CollisionWorld {
 
 impl CollisionWorld {
     pub fn from_map(map: &MapDef) -> Self {
-        Self { boxes: map.solids.iter().map(|s| s.bounds).collect() }
+        Self {
+            boxes: map.solids.iter().map(|s| s.bounds).collect(),
+        }
     }
 
     #[inline]

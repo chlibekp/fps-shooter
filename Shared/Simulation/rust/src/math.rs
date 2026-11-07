@@ -18,7 +18,11 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    pub const ZERO: Vec3 = Vec3 { x: 0.0, y: 0.0, z: 0.0 };
+    pub const ZERO: Vec3 = Vec3 {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
 
     #[inline]
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
@@ -62,7 +66,7 @@ pub const YAW_STEPS: u32 = 65536;
 pub fn yaw_sin_cos(yaw_q: u16) -> (f32, f32) {
     let quadrant = (yaw_q >> 14) & 3;
     let rem = (yaw_q & 0x3FFF) as f32; // 0..16383, exactly representable
-    // (pi / 2) / 16384
+                                       // (pi / 2) / 16384
     let x = rem * 9.587_379_9e-5_f32;
     let x2 = x * x;
     let s = x
@@ -147,7 +151,16 @@ mod tests {
 
     #[test]
     fn yaw_quantization_roundtrip() {
-        for deg in [0.0f32, 45.0, 90.0, 180.0, 270.0, 359.99, -90.0, 720.0 + 10.0] {
+        for deg in [
+            0.0f32,
+            45.0,
+            90.0,
+            180.0,
+            270.0,
+            359.99,
+            -90.0,
+            720.0 + 10.0,
+        ] {
             let q = quantize_yaw_deg(deg);
             let back = dequantize_yaw_deg(q);
             let norm = deg.rem_euclid(360.0);

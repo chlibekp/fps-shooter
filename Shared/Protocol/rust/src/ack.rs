@@ -45,7 +45,14 @@ impl AckState {
             remote_latest: 0,
             remote_bits: 0,
             has_remote: false,
-            sent: Box::new([SentRecord { seq: 0, valid: false, acked: false, sent_at: now }; WINDOW]),
+            sent: Box::new(
+                [SentRecord {
+                    seq: 0,
+                    valid: false,
+                    acked: false,
+                    sent_at: now,
+                }; WINDOW],
+            ),
             rtt: Duration::from_millis(100),
             rtt_initialized: false,
             packets_sent: 0,
@@ -58,7 +65,12 @@ impl AckState {
     pub fn next_outgoing(&mut self, now: Instant) -> (u16, u16, u32) {
         let seq = self.next_seq;
         self.next_seq = self.next_seq.wrapping_add(1);
-        self.sent[seq as usize % WINDOW] = SentRecord { seq, valid: true, acked: false, sent_at: now };
+        self.sent[seq as usize % WINDOW] = SentRecord {
+            seq,
+            valid: true,
+            acked: false,
+            sent_at: now,
+        };
         self.packets_sent += 1;
         (seq, self.remote_latest, self.remote_bits)
     }
@@ -83,7 +95,11 @@ impl AckState {
             self.remote_bits = 0;
         } else if seq_greater(seq, self.remote_latest) {
             let shift = seq.wrapping_sub(self.remote_latest) as u32;
-            self.remote_bits = if shift >= 32 { 0 } else { (self.remote_bits << shift) | (1u32 << (shift - 1)) };
+            self.remote_bits = if shift >= 32 {
+                0
+            } else {
+                (self.remote_bits << shift) | (1u32 << (shift - 1))
+            };
             if shift > 32 {
                 // gap larger than the bitfield: older packets are simply unacked
             } else if shift == 32 {
@@ -176,7 +192,12 @@ mod tests {
         }
         assert!(acked.is_subset(&delivered));
         // Everything except possibly the very last few is acked.
-        assert!(delivered.len() - acked.len() <= 1, "{} vs {}", delivered.len(), acked.len());
+        assert!(
+            delivered.len() - acked.len() <= 1,
+            "{} vs {}",
+            delivered.len(),
+            acked.len()
+        );
     }
 
     #[test]

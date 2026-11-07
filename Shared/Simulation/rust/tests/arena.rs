@@ -1,7 +1,13 @@
-use tfps_sim::{buttons, conformance, simulate, tick_dt, CollisionWorld, MapDef, MoveInput, MoveState, Vec3};
+use tfps_sim::{
+    buttons, conformance, simulate, tick_dt, CollisionWorld, MapDef, MoveInput, MoveState, Vec3,
+};
 
 fn arena() -> MapDef {
-    MapDef::load(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Definitions/maps/test_arena.json")).expect("load map")
+    MapDef::load(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../Definitions/maps/test_arena.json"
+    ))
+    .expect("load map")
 }
 
 #[test]
@@ -11,7 +17,11 @@ fn arena_loads_and_spawns_are_free() {
     assert!(map.solids.len() > 50);
     for sp in &map.spawns {
         let s = MoveState::at(sp.pos);
-        assert!(!world.overlaps_any(&s.bounds()), "spawn {:?} is inside geometry", sp.pos);
+        assert!(
+            !world.overlaps_any(&s.bounds()),
+            "spawn {:?} is inside geometry",
+            sp.pos
+        );
     }
 }
 
@@ -33,7 +43,10 @@ fn random_walk_never_penetrates_geometry() {
                 input.yaw_q = (seed >> 20) as u16;
             }
             simulate(&mut s, &input, dt, &world);
-            assert!(!world.overlaps_any(&s.bounds()), "penetration at tick {t}: {s:?}");
+            assert!(
+                !world.overlaps_any(&s.bounds()),
+                "penetration at tick {t}: {s:?}"
+            );
             assert!(s.pos.z > map.kill_z);
             assert!(s.pos.x.abs() < 24.0 && s.pos.y.abs() < 24.0);
         }
@@ -45,7 +58,11 @@ fn can_climb_the_stairs_to_the_upper_floor() {
     let world = CollisionWorld::from_map(&arena());
     let dt = tick_dt(64);
     let mut s = MoveState::at(Vec3::new(0.4, 3.6, 0.1));
-    let fwd = MoveInput { buttons: buttons::FORWARD, yaw_q: 0, pitch_q: 0 };
+    let fwd = MoveInput {
+        buttons: buttons::FORWARD,
+        yaw_q: 0,
+        pitch_q: 0,
+    };
     for _ in 0..128 * 2 {
         simulate(&mut s, &fwd, dt, &world);
     }
@@ -58,7 +75,10 @@ fn conformance_vectors_are_up_to_date() {
     let world = CollisionWorld::from_map(&map);
     let starts: Vec<_> = map.spawns.iter().map(|s| s.pos).collect();
     let expected = conformance::generate(&world, &starts, 900);
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../Definitions/conformance/movement_vectors.txt");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../Definitions/conformance/movement_vectors.txt"
+    );
     let on_disk = std::fs::read_to_string(path).unwrap_or_default();
     assert!(
         on_disk == expected,

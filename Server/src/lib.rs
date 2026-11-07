@@ -87,13 +87,15 @@ impl Drop for ServerHandle {
 /// Starts a server and returns immediately.
 pub fn start(cfg: ServerConfig) -> anyhow::Result<ServerHandle> {
     cfg.validate().map_err(anyhow::Error::msg)?;
-    let map = MapDef::load(&cfg.map_path).with_context(|| format!("loading map {}", cfg.map_path.display()))?;
+    let map = MapDef::load(&cfg.map_path)
+        .with_context(|| format!("loading map {}", cfg.map_path.display()))?;
     start_with_map(cfg, map)
 }
 
 pub fn start_with_map(cfg: ServerConfig, map: MapDef) -> anyhow::Result<ServerHandle> {
     cfg.validate().map_err(anyhow::Error::msg)?;
-    let std_socket = std::net::UdpSocket::bind(cfg.bind).with_context(|| format!("binding {}", cfg.bind))?;
+    let std_socket =
+        std::net::UdpSocket::bind(cfg.bind).with_context(|| format!("binding {}", cfg.bind))?;
     std_socket.set_nonblocking(true)?;
     let local_addr = std_socket.local_addr()?;
     let send_socket = std_socket.try_clone()?;
@@ -133,13 +135,21 @@ pub fn start_with_map(cfg: ServerConfig, map: MapDef) -> anyhow::Result<ServerHa
     let sim_thread = {
         let stats = stats.clone();
         let shutdown = shutdown.clone();
-        std::thread::Builder::new().name("tfps-sim".into()).spawn(move || {
-            let core = server::ServerCore::new(cfg, map, send_socket, stats.clone());
-            sim_loop(core, inbox_rx, pool_tx, stats, shutdown);
-        })?
+        std::thread::Builder::new()
+            .name("tfps-sim".into())
+            .spawn(move || {
+                let core = server::ServerCore::new(cfg, map, send_socket, stats.clone());
+                sim_loop(core, inbox_rx, pool_tx, stats, shutdown);
+            })?
     };
 
-    Ok(ServerHandle { local_addr, stats, shutdown, sim_thread: Some(sim_thread), runtime: Some(runtime) })
+    Ok(ServerHandle {
+        local_addr,
+        stats,
+        shutdown,
+        sim_thread: Some(sim_thread),
+        runtime: Some(runtime),
+    })
 }
 
 async fn recv_loop(
@@ -151,7 +161,8 @@ async fn recv_loop(
 ) {
     let mut buf = vec![0u8; RECV_BUF];
     while !shutdown.load(Ordering::Relaxed) {
-        let res = tokio::time::timeout(Duration::from_millis(100), socket.recv_from(&mut buf)).await;
+        let res =
+            tokio::time::timeout(Duration::from_millis(100), socket.recv_from(&mut buf)).await;
         let (n, addr) = match res {
             Err(_) => continue, // timeout: re-check shutdown flag
             Ok(Ok(v)) => v,
@@ -165,7 +176,9 @@ async fn recv_loop(
             stats.packets_invalid.fetch_add(1, Ordering::Relaxed);
             continue;
         }
-        let mut data = pool.try_recv().unwrap_or_else(|_| Vec::with_capacity(RECV_BUF));
+        let mut data = pool
+            .try_recv()
+            .unwrap_or_else(|_| Vec::with_capacity(RECV_BUF));
         data.clear();
         data.extend_from_slice(&buf[..n]);
         match inbox.try_send(Datagram { addr, len: n, data }) {
@@ -223,7 +236,10 @@ fn sim_loop(
             // Fell far behind (debugger pause, overloaded host): resync
             // instead of running a burst of catch-up ticks.
             stats.late_ticks.fetch_add(1, Ordering::Relaxed);
-            warn!(behind_ms = (now - next_tick).as_millis() as u64, "simulation fell behind, resyncing");
+            warn!(
+                behind_ms = (now - next_tick).as_millis() as u64,
+                "simulation fell behind, resyncing"
+            );
             next_tick = now + period;
         }
     }

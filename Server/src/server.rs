@@ -16,8 +16,8 @@ use std::time::{Duration, Instant};
 use tfps_protocol::input::InputBundle;
 use tfps_protocol::messages::{ConnState, Message};
 use tfps_protocol::packet::{
-    self, BodyKind, Challenge, ChallengeResponse, ConnectAccepted, ConnectRejected, ConnectRequest, DataHeader,
-    Disconnect, DisconnectReason, PacketType, RejectReason,
+    self, BodyKind, Challenge, ChallengeResponse, ConnectAccepted, ConnectRejected, ConnectRequest,
+    DataHeader, Disconnect, DisconnectReason, PacketType, RejectReason,
 };
 use tfps_protocol::snapshot::{self, EntityState, SnapshotHeader};
 use tfps_protocol::{Writer, MAX_PACKET_SIZE, PROTOCOL_VERSION};
@@ -128,7 +128,12 @@ impl ServerCore {
         }
     }
 
-    fn process(&mut self, addr: SocketAddr, data: &[u8], now: Instant) -> Result<(), tfps_protocol::DecodeError> {
+    fn process(
+        &mut self,
+        addr: SocketAddr,
+        data: &[u8],
+        now: Instant,
+    ) -> Result<(), tfps_protocol::DecodeError> {
         let (hdr, mut r) = packet::read_header(data)?;
         match hdr.ty {
             PacketType::ConnectRequest => {
@@ -139,7 +144,11 @@ impl ServerCore {
                 }
                 let cookie = self.cookie(addr, req.client_nonce, self.cookie_bucket(now));
                 self.send_buf.clear();
-                Challenge { client_nonce: req.client_nonce, cookie }.encode(&mut self.send_buf);
+                Challenge {
+                    client_nonce: req.client_nonce,
+                    cookie,
+                }
+                .encode(&mut self.send_buf);
                 self.send(addr, &self.send_buf);
             }
             PacketType::ChallengeResponse => {
@@ -166,7 +175,9 @@ impl ServerCore {
             }
             // Server-to-client packet types are never valid here.
             PacketType::Challenge | PacketType::ConnectAccepted | PacketType::ConnectRejected => {
-                return Err(tfps_protocol::DecodeError::Invalid("unexpected packet type"));
+                return Err(tfps_protocol::DecodeError::Invalid(
+                    "unexpected packet type",
+                ));
             }
         }
         Ok(())
@@ -174,11 +185,20 @@ impl ServerCore {
 
     fn reject(&mut self, addr: SocketAddr, client_nonce: u64, reason: RejectReason) {
         self.send_buf.clear();
-        ConnectRejected { client_nonce, reason }.encode(&mut self.send_buf);
+        ConnectRejected {
+            client_nonce,
+            reason,
+        }
+        .encode(&mut self.send_buf);
         self.send(addr, &self.send_buf);
     }
 
-    fn handle_challenge_response(&mut self, addr: SocketAddr, resp: ChallengeResponse, now: Instant) {
+    fn handle_challenge_response(
+        &mut self,
+        addr: SocketAddr,
+        resp: ChallengeResponse,
+        now: Instant,
+    ) {
         // Repeated response from an already accepted client: resend accept.
         if let Some(key) = self.addr_index.get(&addr) {
             if let Some(c) = self.conns.get(key) {
@@ -225,7 +245,10 @@ impl ServerCore {
         // Session takeover: the token belongs to a live connection (client
         // lost its connection but the server has not timed it out yet).
         let takeover = if resp.reconnect_token != 0 {
-            self.conns.iter().find(|(_, c)| c.reconnect_token == resp.reconnect_token).map(|(k, _)| *k)
+            self.conns
+                .iter()
+                .find(|(_, c)| c.reconnect_token == resp.reconnect_token)
+                .map(|(k, _)| *k)
         } else {
             None
         };
@@ -234,7 +257,10 @@ impl ServerCore {
             let old = self.conns.remove(&old_key).expect("conn exists");
             self.addr_index.remove(&old.addr);
             (old.player_id, None, true)
-        } else if let Some(saved) = (resp.reconnect_token != 0).then(|| self.saved.remove(&resp.reconnect_token)).flatten() {
+        } else if let Some(saved) = (resp.reconnect_token != 0)
+            .then(|| self.saved.remove(&resp.reconnect_token))
+            .flatten()
+        {
             (saved.id, Some(saved), false)
         } else {
             if self.game.players().len() + self.saved.len() >= self.cfg.max_players as usize {
@@ -275,7 +301,14 @@ impl ServerCore {
             p.cmds = Default::default();
         }
 
-        let mut conn = Connection::new(addr, session_key, resp.client_nonce, reconnect_token, player_id, now);
+        let mut conn = Connection::new(
+            addr,
+            session_key,
+            resp.client_nonce,
+            reconnect_token,
+            player_id,
+            now,
+        );
         ConnectAccepted {
             client_nonce: resp.client_nonce,
             session_key,
@@ -292,16 +325,33 @@ impl ServerCore {
 
         // Tell the new client about everyone (including itself).
         for p in self.game.players() {
-            let m = Message::PlayerJoined { player_id: p.id, team: p.team, name: p.name.clone() };
+            let m = Message::PlayerJoined {
+                player_id: p.id,
+                team: p.team,
+                name: p.name.clone(),
+            };
             let _ = conn.rel_tx.queue(m.msg_type(), m.encode_payload());
         }
         self.conns.insert(session_key, conn);
         self.addr_index.insert(addr, session_key);
 
         if rejoin_existing {
-            self.broadcast_except(player_id, &Message::PlayerConnState { player_id, state: ConnState::Connected });
+            self.broadcast_except(
+                player_id,
+                &Message::PlayerConnState {
+                    player_id,
+                    state: ConnState::Connected,
+                },
+            );
         } else {
-            self.broadcast_except(player_id, &Message::PlayerJoined { player_id, team, name: pname.clone() });
+            self.broadcast_except(
+                player_id,
+                &Message::PlayerJoined {
+                    player_id,
+                    team,
+                    name: pname.clone(),
+                },
+            );
         }
         info!(
             player_id,
@@ -329,13 +379,20 @@ impl ServerCore {
         }
     }
 
-    fn handle_data(&mut self, addr: SocketAddr, r: &mut tfps_protocol::Reader, now: Instant) -> Result<(), tfps_protocol::DecodeError> {
+    fn handle_data(
+        &mut self,
+        addr: SocketAddr,
+        r: &mut tfps_protocol::Reader,
+        now: Instant,
+    ) -> Result<(), tfps_protocol::DecodeError> {
         let dh = DataHeader::decode(r)?;
         let Some(conn) = self.conns.get_mut(&dh.session_key) else {
             return Err(tfps_protocol::DecodeError::Invalid("unknown session"));
         };
         let Connection { ack, rel_tx, .. } = conn;
-        let fresh = ack.on_incoming(dh.seq, dh.ack, dh.ack_bits, now, |s| rel_tx.on_packet_acked(s));
+        let fresh = ack.on_incoming(dh.seq, dh.ack, dh.ack_bits, now, |s| {
+            rel_tx.on_packet_acked(s)
+        });
         if !fresh {
             return Ok(());
         }
@@ -357,7 +414,9 @@ impl ServerCore {
             BodyKind::None => {}
             BodyKind::Input => {
                 let bundle = InputBundle::decode(r)?;
-                if bundle.ack_snapshot_tick > conn.client_ack_snapshot && bundle.ack_snapshot_tick <= self.game.tick {
+                if bundle.ack_snapshot_tick > conn.client_ack_snapshot
+                    && bundle.ack_snapshot_tick <= self.game.tick
+                {
                     conn.client_ack_snapshot = bundle.ack_snapshot_tick;
                 }
                 if let Some(p) = self.game.player_mut(player_id) {
@@ -366,10 +425,18 @@ impl ServerCore {
                     }
                 }
             }
-            BodyKind::Snapshot => return Err(tfps_protocol::DecodeError::Invalid("snapshot from client")),
+            BodyKind::Snapshot => {
+                return Err(tfps_protocol::DecodeError::Invalid("snapshot from client"))
+            }
         }
         if resumed {
-            self.broadcast_except(player_id, &Message::PlayerConnState { player_id, state: ConnState::Connected });
+            self.broadcast_except(
+                player_id,
+                &Message::PlayerConnState {
+                    player_id,
+                    state: ConnState::Connected,
+                },
+            );
         }
         Ok(())
     }
@@ -384,7 +451,11 @@ impl ServerCore {
         self.game.tick();
         self.check_timeouts(now);
         self.drop_doomed(now);
-        if self.game.tick.is_multiple_of(self.cfg.snapshot_interval as u32) {
+        if self
+            .game
+            .tick
+            .is_multiple_of(self.cfg.snapshot_interval as u32)
+        {
             self.send_snapshots(now);
         }
         self.saved.retain(|_, s| s.expires > now);
@@ -403,12 +474,23 @@ impl ServerCore {
         }
         for id in interrupted {
             info!(player_id = id, "player connection interrupted");
-            self.broadcast_except(id, &Message::PlayerConnState { player_id: id, state: ConnState::Interrupted });
+            self.broadcast_except(
+                id,
+                &Message::PlayerConnState {
+                    player_id: id,
+                    state: ConnState::Interrupted,
+                },
+            );
         }
     }
 
     fn drop_doomed(&mut self, now: Instant) {
-        let doomed: Vec<u64> = self.conns.iter().filter(|(_, c)| c.doomed.is_some()).map(|(k, _)| *k).collect();
+        let doomed: Vec<u64> = self
+            .conns
+            .iter()
+            .filter(|(_, c)| c.doomed.is_some())
+            .map(|(k, _)| *k)
+            .collect();
         for key in doomed {
             let c = self.conns.remove(&key).expect("present");
             let reason = c.doomed.unwrap_or(DisconnectReason::Unknown);
@@ -416,7 +498,11 @@ impl ServerCore {
             if reason != DisconnectReason::Timeout {
                 // Tell the client explicitly (unreliable, sent 3x).
                 self.send_buf.clear();
-                Disconnect { session_key: c.session_key, reason }.encode(&mut self.send_buf);
+                Disconnect {
+                    session_key: c.session_key,
+                    reason,
+                }
+                .encode(&mut self.send_buf);
                 for _ in 0..3 {
                     self.send(c.addr, &self.send_buf);
                 }
@@ -425,12 +511,24 @@ impl ServerCore {
                 if reason != DisconnectReason::Kicked {
                     self.saved.insert(
                         c.reconnect_token,
-                        SavedPlayer { id: p.id, team: p.team, name: p.name, state: p.state, expires: now + self.cfg.reconnect_window },
+                        SavedPlayer {
+                            id: p.id,
+                            team: p.team,
+                            name: p.name,
+                            state: p.state,
+                            expires: now + self.cfg.reconnect_window,
+                        },
                     );
                 }
             }
             info!(player_id = c.player_id, ?reason, "player disconnected");
-            self.broadcast_except(c.player_id, &Message::PlayerLeft { player_id: c.player_id, reason: reason as u8 });
+            self.broadcast_except(
+                c.player_id,
+                &Message::PlayerLeft {
+                    player_id: c.player_id,
+                    reason: reason as u8,
+                },
+            );
         }
         self.update_counts();
     }
@@ -443,7 +541,10 @@ impl ServerCore {
                 continue;
             }
             if c.rel_tx.queue(ty, payload.clone()).is_err() {
-                warn!(player_id = c.player_id, "reliable queue overflow, dropping client");
+                warn!(
+                    player_id = c.player_id,
+                    "reliable queue overflow, dropping client"
+                );
                 c.doomed = Some(DisconnectReason::ProtocolError);
             }
         }
@@ -454,15 +555,26 @@ impl ServerCore {
         let tick = self.game.tick;
         let mut buf = std::mem::take(&mut self.send_buf);
         for c in self.conns.values_mut() {
-            let Some(player) = self.game.player(c.player_id) else { continue };
+            let Some(player) = self.game.player(c.player_id) else {
+                continue;
+            };
             self.scratch.clear();
-            self.scratch.extend(self.entities.iter().filter(|e| e.id != c.player_id).copied());
+            self.scratch.extend(
+                self.entities
+                    .iter()
+                    .filter(|e| e.id != c.player_id)
+                    .copied(),
+            );
 
             let base_idx = c.baseline_index(c.client_ack_snapshot);
             let baseline = base_idx.map(|i| c.history[i].1.as_slice());
             let header = SnapshotHeader {
                 server_tick: tick,
-                baseline_tick: if baseline.is_some() { c.client_ack_snapshot } else { 0 },
+                baseline_tick: if baseline.is_some() {
+                    c.client_ack_snapshot
+                } else {
+                    0
+                },
                 last_cmd_seq: player.cmds.last_processed_seq,
                 input_buffer_depth: player.reported_depth(),
                 local: player.state,
@@ -470,10 +582,22 @@ impl ServerCore {
             };
             buf.clear();
             let mut w = Writer::new(&mut buf);
-            let Connection { ack: c_ack, rel_tx, history, session_key, .. } = c;
+            let Connection {
+                ack: c_ack,
+                rel_tx,
+                history,
+                session_key,
+                ..
+            } = c;
             let baseline = base_idx.map(|i| history[i].1.as_slice());
             let (seq, ack, ack_bits) = c_ack.next_outgoing(now);
-            DataHeader { session_key: *session_key, seq, ack, ack_bits }.encode(&mut w);
+            DataHeader {
+                session_key: *session_key,
+                seq,
+                ack,
+                ack_bits,
+            }
+            .encode(&mut w);
             rel_tx.write(&mut w, seq, now, RELIABLE_RESEND, RELIABLE_BUDGET);
             w.u8(BodyKind::Snapshot as u8);
             snapshot::encode(&mut w, &header, &self.scratch, baseline);
@@ -485,8 +609,12 @@ impl ServerCore {
     }
 
     fn update_counts(&self) {
-        self.stats.players.store(self.game.players().len() as u64, Relaxed);
-        self.stats.connections.store(self.conns.len() as u64, Relaxed);
+        self.stats
+            .players
+            .store(self.game.players().len() as u64, Relaxed);
+        self.stats
+            .connections
+            .store(self.conns.len() as u64, Relaxed);
     }
 
     /// Logs periodic statistics.
@@ -507,8 +635,14 @@ impl ServerCore {
             ticks_per_s = format!("{:.1}", (s.ticks - prev.ticks) as f64 / secs),
             pkts_in_s = format!("{:.0}", (s.packets_in - prev.packets_in) as f64 / secs),
             pkts_out_s = format!("{:.0}", (s.packets_out - prev.packets_out) as f64 / secs),
-            kbit_in_s = format!("{:.1}", (s.bytes_in - prev.bytes_in) as f64 * 8.0 / 1000.0 / secs),
-            kbit_out_s = format!("{:.1}", (s.bytes_out - prev.bytes_out) as f64 * 8.0 / 1000.0 / secs),
+            kbit_in_s = format!(
+                "{:.1}",
+                (s.bytes_in - prev.bytes_in) as f64 * 8.0 / 1000.0 / secs
+            ),
+            kbit_out_s = format!(
+                "{:.1}",
+                (s.bytes_out - prev.bytes_out) as f64 * 8.0 / 1000.0 / secs
+            ),
             invalid = s.packets_invalid - prev.packets_invalid,
             late_ticks = s.late_ticks - prev.late_ticks,
             "server stats"

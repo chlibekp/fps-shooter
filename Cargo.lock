@@ -580,6 +580,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tfps-devclient"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "rand",
+ "tfps-protocol",
+ "tfps-sim",
+]
+
+[[package]]
 name = "tfps-protocol"
 version = "0.1.0"
 dependencies = [
@@ -596,6 +607,7 @@ dependencies = [
  "clap",
  "criterion",
  "rand",
+ "tfps-devclient",
  "tfps-protocol",
  "tfps-sim",
  "tokio",

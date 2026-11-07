@@ -1,7 +1,9 @@
 //! Packet envelopes: handshake packets and the connected `Data` packet header.
 
 use crate::bytes::{Reader, Writer};
-use crate::{DecodeError, HANDSHAKE_PACKET_SIZE, MAGIC, MAX_MAP_NAME_LEN, MAX_NAME_LEN, PROTOCOL_VERSION};
+use crate::{
+    DecodeError, HANDSHAKE_PACKET_SIZE, MAGIC, MAX_MAP_NAME_LEN, MAX_NAME_LEN, PROTOCOL_VERSION,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -121,7 +123,9 @@ impl ConnectRequest {
         if total_len < HANDSHAKE_PACKET_SIZE {
             return Err(DecodeError::Invalid("handshake not padded"));
         }
-        Ok(Self { client_nonce: r.u64()? })
+        Ok(Self {
+            client_nonce: r.u64()?,
+        })
     }
 }
 
@@ -141,7 +145,10 @@ impl Challenge {
         w.u64(self.cookie);
     }
     pub fn decode(r: &mut Reader) -> Result<Self, DecodeError> {
-        Ok(Self { client_nonce: r.u64()?, cookie: r.u64()? })
+        Ok(Self {
+            client_nonce: r.u64()?,
+            cookie: r.u64()?,
+        })
     }
 }
 
@@ -242,7 +249,10 @@ impl ConnectRejected {
         w.u8(self.reason as u8);
     }
     pub fn decode(r: &mut Reader) -> Result<Self, DecodeError> {
-        Ok(Self { client_nonce: r.u64()?, reason: RejectReason::from_u8(r.u8()?) })
+        Ok(Self {
+            client_nonce: r.u64()?,
+            reason: RejectReason::from_u8(r.u8()?),
+        })
     }
 }
 
@@ -260,7 +270,10 @@ impl Disconnect {
         w.u8(self.reason as u8);
     }
     pub fn decode(r: &mut Reader) -> Result<Self, DecodeError> {
-        Ok(Self { session_key: r.u64()?, reason: DisconnectReason::from_u8(r.u8()?) })
+        Ok(Self {
+            session_key: r.u64()?,
+            reason: DisconnectReason::from_u8(r.u8()?),
+        })
     }
 }
 
@@ -283,7 +296,12 @@ impl DataHeader {
         w.u32(self.ack_bits);
     }
     pub fn decode(r: &mut Reader) -> Result<Self, DecodeError> {
-        Ok(Self { session_key: r.u64()?, seq: r.u16()?, ack: r.u16()?, ack_bits: r.u32()? })
+        Ok(Self {
+            session_key: r.u64()?,
+            seq: r.u16()?,
+            ack: r.u16()?,
+            ack_bits: r.u32()?,
+        })
     }
 }
 
@@ -320,9 +338,20 @@ mod tests {
         assert_eq!(buf.len(), HANDSHAKE_PACKET_SIZE);
         let (h, mut r) = read_header(&buf).unwrap();
         assert_eq!(h.ty, PacketType::ConnectRequest);
-        assert_eq!(ConnectRequest::decode(&mut r, buf.len()).unwrap().client_nonce, 42);
+        assert_eq!(
+            ConnectRequest::decode(&mut r, buf.len())
+                .unwrap()
+                .client_nonce,
+            42
+        );
 
-        let cr = ChallengeResponse { client_nonce: 1, cookie: 2, reconnect_token: 3, join_token: 4, name: "Operator".into() };
+        let cr = ChallengeResponse {
+            client_nonce: 1,
+            cookie: 2,
+            reconnect_token: 3,
+            join_token: 4,
+            name: "Operator".into(),
+        };
         buf.clear();
         cr.encode(&mut buf);
         assert_eq!(buf.len(), HANDSHAKE_PACKET_SIZE);
@@ -350,7 +379,10 @@ mod tests {
     #[test]
     fn rejects_garbage() {
         assert!(read_header(&[1, 2, 3]).is_err());
-        assert_eq!(read_header(&[0x54, 0x46, 1, 0, 99]).err(), Some(DecodeError::BadType(99)));
+        assert_eq!(
+            read_header(&[0x54, 0x46, 1, 0, 99]).err(),
+            Some(DecodeError::BadType(99))
+        );
         let mut buf = Vec::new();
         ConnectRequest { client_nonce: 42 }.encode(&mut buf);
         buf.truncate(100);
@@ -362,7 +394,14 @@ mod tests {
     fn long_names_are_truncated_on_char_boundary() {
         let mut buf = Vec::new();
         let name = "é".repeat(30); // 60 bytes
-        ChallengeResponse { client_nonce: 1, cookie: 2, reconnect_token: 0, join_token: 0, name }.encode(&mut buf);
+        ChallengeResponse {
+            client_nonce: 1,
+            cookie: 2,
+            reconnect_token: 0,
+            join_token: 0,
+            name,
+        }
+        .encode(&mut buf);
         let (_, mut r) = read_header(&buf).unwrap();
         let d = ChallengeResponse::decode(&mut r, buf.len()).unwrap();
         assert_eq!(d.name.len(), 24);

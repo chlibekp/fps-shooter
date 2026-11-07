@@ -34,7 +34,14 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new(addr: SocketAddr, session_key: u64, client_nonce: u64, reconnect_token: u64, player_id: u16, now: Instant) -> Self {
+    pub fn new(
+        addr: SocketAddr,
+        session_key: u64,
+        client_nonce: u64,
+        reconnect_token: u64,
+        player_id: u16,
+        now: Instant,
+    ) -> Self {
         Self {
             addr,
             session_key,
@@ -48,7 +55,9 @@ impl Connection {
             connected_at: now,
             interrupted: false,
             client_ack_snapshot: 0,
-            history: (0..SNAPSHOT_HISTORY).map(|_| (0u32, Vec::with_capacity(16))).collect(),
+            history: (0..SNAPSHOT_HISTORY)
+                .map(|_| (0u32, Vec::with_capacity(16)))
+                .collect(),
             history_cursor: 0,
             accepted_packet: Vec::new(),
             doomed: None,

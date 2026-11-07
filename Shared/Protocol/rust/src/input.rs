@@ -26,7 +26,12 @@ pub struct InputBundle {
 
 impl Default for InputBundle {
     fn default() -> Self {
-        Self { ack_snapshot_tick: 0, newest_seq: 0, count: 0, cmds: [MoveInput::default(); MAX_INPUT_REDUNDANCY] }
+        Self {
+            ack_snapshot_tick: 0,
+            newest_seq: 0,
+            count: 0,
+            cmds: [MoveInput::default(); MAX_INPUT_REDUNDANCY],
+        }
     }
 }
 
@@ -43,7 +48,12 @@ impl InputBundle {
     }
 
     pub fn decode(r: &mut Reader) -> Result<Self, DecodeError> {
-        let mut b = InputBundle { ack_snapshot_tick: r.u32()?, newest_seq: r.u32()?, count: r.u8()?, ..Default::default() };
+        let mut b = InputBundle {
+            ack_snapshot_tick: r.u32()?,
+            newest_seq: r.u32()?,
+            count: r.u8()?,
+            ..Default::default()
+        };
         if b.count == 0 || b.count as usize > MAX_INPUT_REDUNDANCY {
             return Err(DecodeError::Invalid("bad input count"));
         }
@@ -51,14 +61,20 @@ impl InputBundle {
             return Err(DecodeError::Invalid("input seq underflow"));
         }
         for i in 0..b.count as usize {
-            b.cmds[i] = MoveInput { buttons: r.u16()?, yaw_q: r.u16()?, pitch_q: r.i16()? };
+            b.cmds[i] = MoveInput {
+                buttons: r.u16()?,
+                yaw_q: r.u16()?,
+                pitch_q: r.i16()?,
+            };
         }
         Ok(b)
     }
 
     /// Iterates `(seq, cmd)` oldest first.
     pub fn iter_oldest_first(&self) -> impl Iterator<Item = (u32, MoveInput)> + '_ {
-        (0..self.count as usize).rev().map(move |i| (self.newest_seq - i as u32, self.cmds[i]))
+        (0..self.count as usize)
+            .rev()
+            .map(move |i| (self.newest_seq - i as u32, self.cmds[i]))
     }
 }
 
@@ -67,9 +83,22 @@ mod tests {
     use super::*;
     #[test]
     fn roundtrip() {
-        let mut b = InputBundle { ack_snapshot_tick: 5, newest_seq: 100, count: 3, ..Default::default() };
-        b.cmds[0] = MoveInput { buttons: 1, yaw_q: 2, pitch_q: -3 };
-        b.cmds[2] = MoveInput { buttons: 9, yaw_q: 65535, pitch_q: 32767 };
+        let mut b = InputBundle {
+            ack_snapshot_tick: 5,
+            newest_seq: 100,
+            count: 3,
+            ..Default::default()
+        };
+        b.cmds[0] = MoveInput {
+            buttons: 1,
+            yaw_q: 2,
+            pitch_q: -3,
+        };
+        b.cmds[2] = MoveInput {
+            buttons: 9,
+            yaw_q: 65535,
+            pitch_q: 32767,
+        };
         let mut v = Vec::new();
         b.encode(&mut Writer::new(&mut v));
         assert_eq!(v.len(), 9 + 3 * 6);
@@ -82,7 +111,9 @@ mod tests {
     fn rejects_bad_counts() {
         let v = [0u8, 0, 0, 0, 1, 0, 0, 0, 0];
         assert!(InputBundle::decode(&mut Reader::new(&v)).is_err());
-        let v = [0u8, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let v = [
+            0u8, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
         assert!(InputBundle::decode(&mut Reader::new(&v)).is_err());
     }
 }

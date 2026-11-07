@@ -69,14 +69,26 @@ impl ReliableSender {
         if self.pending.len() >= MAX_PENDING {
             return Err(SendError::Overflow);
         }
-        self.pending.push_back(Pending { seq: self.next_seq, ty, payload, last_sent: None });
+        self.pending.push_back(Pending {
+            seq: self.next_seq,
+            ty,
+            payload,
+            last_sent: None,
+        });
         self.next_seq = self.next_seq.wrapping_add(1);
         Ok(())
     }
 
     /// Writes the reliable section for packet `packet_seq`, using at most
     /// `budget` bytes (the count byte is always written).
-    pub fn write(&mut self, w: &mut Writer, packet_seq: u16, now: Instant, resend_after: Duration, budget: usize) {
+    pub fn write(
+        &mut self,
+        w: &mut Writer,
+        packet_seq: u16,
+        now: Instant,
+        resend_after: Duration,
+        budget: usize,
+    ) {
         let count_at = w.len();
         w.u8(0);
         let slot = &mut self.in_flight[packet_seq as usize % PACKET_WINDOW];
@@ -139,7 +151,11 @@ pub struct ReliableReceiver {
 
 impl ReliableReceiver {
     pub fn new() -> Self {
-        Self { next_expected: 0, buffer: (0..RECV_WINDOW).map(|_| None).collect(), ready: VecDeque::new() }
+        Self {
+            next_expected: 0,
+            buffer: (0..RECV_WINDOW).map(|_| None).collect(),
+            ready: VecDeque::new(),
+        }
     }
 
     /// Parses the reliable section of a received packet.

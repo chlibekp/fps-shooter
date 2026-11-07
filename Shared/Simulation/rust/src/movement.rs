@@ -86,7 +86,10 @@ pub struct MoveState {
 
 impl MoveState {
     pub fn at(pos: Vec3) -> Self {
-        Self { pos, ..Default::default() }
+        Self {
+            pos,
+            ..Default::default()
+        }
     }
 
     pub fn height(&self) -> f32 {
@@ -112,7 +115,11 @@ impl MoveState {
 
 #[inline]
 pub fn player_box(pos: Vec3, crouched: bool) -> Aabb {
-    let h = if crouched { CROUCH_HEIGHT } else { STAND_HEIGHT };
+    let h = if crouched {
+        CROUCH_HEIGHT
+    } else {
+        STAND_HEIGHT
+    };
     Aabb {
         min: Vec3::new(pos.x - HALF_WIDTH, pos.y - HALF_WIDTH, pos.z),
         max: Vec3::new(pos.x + HALF_WIDTH, pos.y + HALF_WIDTH, pos.z + h),
@@ -172,7 +179,8 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
         wy *= inv;
     }
 
-    let sprinting = b & buttons::SPRINT != 0 && b & buttons::WALK == 0 && fwd > 0.0 && !state.crouched;
+    let sprinting =
+        b & buttons::SPRINT != 0 && b & buttons::WALK == 0 && fwd > 0.0 && !state.crouched;
     let speed = if state.crouched {
         CROUCH_SPEED
     } else if b & buttons::WALK != 0 {
@@ -187,7 +195,11 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
 
     // 3. Horizontal acceleration and jumping.
     if state.on_ground {
-        let accel = if has_input { GROUND_ACCEL } else { GROUND_DECEL };
+        let accel = if has_input {
+            GROUND_ACCEL
+        } else {
+            GROUND_DECEL
+        };
         approach(&mut state.vel.x, &mut state.vel.y, tx, ty, accel * dt);
         if b & buttons::JUMP != 0 && state.jump_timer <= 0.0 && !state.crouched {
             state.vel.z = JUMP_SPEED;
@@ -236,7 +248,13 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
 }
 
 /// Moves along one axis in sub-steps. Returns true if blocked.
-fn move_axis(state: &mut MoveState, axis: usize, dist: f32, allow_step: bool, world: &CollisionWorld) -> bool {
+fn move_axis(
+    state: &mut MoveState,
+    axis: usize,
+    dist: f32,
+    allow_step: bool,
+    world: &CollisionWorld,
+) -> bool {
     if dist == 0.0 {
         return false;
     }
@@ -255,7 +273,13 @@ fn move_axis(state: &mut MoveState, axis: usize, dist: f32, allow_step: bool, wo
     false
 }
 
-fn resolve_axis(state: &mut MoveState, axis: usize, step: f32, allow_step: bool, world: &CollisionWorld) -> bool {
+fn resolve_axis(
+    state: &mut MoveState,
+    axis: usize,
+    step: f32,
+    allow_step: bool,
+    world: &CollisionWorld,
+) -> bool {
     let mut blocked = false;
     let mut pb = player_box(state.pos, state.crouched);
     for wb in &world.boxes {
@@ -324,7 +348,10 @@ mod tests {
 
     fn flat_world() -> CollisionWorld {
         CollisionWorld {
-            boxes: vec![Aabb { min: Vec3::new(-50.0, -50.0, -1.0), max: Vec3::new(50.0, 50.0, 0.0) }],
+            boxes: vec![Aabb {
+                min: Vec3::new(-50.0, -50.0, -1.0),
+                max: Vec3::new(50.0, 50.0, 0.0),
+            }],
         }
     }
 
@@ -350,7 +377,11 @@ mod tests {
         let w = flat_world();
         let mut s = MoveState::at(Vec3::new(0.0, 0.0, 0.0));
         run(&mut s, MoveInput::default(), 2, &w);
-        let inp = MoveInput { buttons: buttons::FORWARD, yaw_q: 0, pitch_q: 0 };
+        let inp = MoveInput {
+            buttons: buttons::FORWARD,
+            yaw_q: 0,
+            pitch_q: 0,
+        };
         run(&mut s, inp, 64, &w);
         assert!((s.vel.x - RUN_SPEED).abs() < 1e-4, "{:?}", s.vel);
         assert!(s.vel.y.abs() < 1e-4);
@@ -361,7 +392,11 @@ mod tests {
     fn yaw_90_moves_along_y_and_sprint_is_faster() {
         let w = flat_world();
         let mut s = MoveState::at(Vec3::ZERO);
-        let inp = MoveInput { buttons: buttons::FORWARD | buttons::SPRINT, yaw_q: quantize_yaw_deg(90.0), pitch_q: 0 };
+        let inp = MoveInput {
+            buttons: buttons::FORWARD | buttons::SPRINT,
+            yaw_q: quantize_yaw_deg(90.0),
+            pitch_q: 0,
+        };
         run(&mut s, inp, 128, &w);
         assert!((s.vel.y - SPRINT_SPEED).abs() < 1e-3, "{:?}", s.vel);
         assert!(s.vel.x.abs() < 1e-3);
@@ -371,7 +406,11 @@ mod tests {
     fn diagonal_is_not_faster() {
         let w = flat_world();
         let mut s = MoveState::at(Vec3::ZERO);
-        let inp = MoveInput { buttons: buttons::FORWARD | buttons::RIGHT, yaw_q: 0, pitch_q: 0 };
+        let inp = MoveInput {
+            buttons: buttons::FORWARD | buttons::RIGHT,
+            yaw_q: 0,
+            pitch_q: 0,
+        };
         run(&mut s, inp, 128, &w);
         let sp = (s.vel.x * s.vel.x + s.vel.y * s.vel.y).sqrt();
         assert!((sp - RUN_SPEED).abs() < 1e-3, "{sp}");
@@ -380,20 +419,38 @@ mod tests {
     #[test]
     fn wall_blocks_movement() {
         let mut w = flat_world();
-        w.boxes.push(Aabb { min: Vec3::new(2.0, -5.0, 0.0), max: Vec3::new(2.2, 5.0, 3.0) });
+        w.boxes.push(Aabb {
+            min: Vec3::new(2.0, -5.0, 0.0),
+            max: Vec3::new(2.2, 5.0, 3.0),
+        });
         let mut s = MoveState::at(Vec3::ZERO);
-        let inp = MoveInput { buttons: buttons::FORWARD | buttons::SPRINT, yaw_q: 0, pitch_q: 0 };
+        let inp = MoveInput {
+            buttons: buttons::FORWARD | buttons::SPRINT,
+            yaw_q: 0,
+            pitch_q: 0,
+        };
         run(&mut s, inp, 200, &w);
-        assert!(s.pos.x < 2.0 - HALF_WIDTH + 0.001 && s.pos.x > 1.6, "{:?}", s.pos);
+        assert!(
+            s.pos.x < 2.0 - HALF_WIDTH + 0.001 && s.pos.x > 1.6,
+            "{:?}",
+            s.pos
+        );
         assert!(!w.overlaps_any(&s.bounds()));
     }
 
     #[test]
     fn steps_up_low_step_but_not_high_wall() {
         let mut w = flat_world();
-        w.boxes.push(Aabb { min: Vec3::new(1.0, -5.0, 0.0), max: Vec3::new(2.0, 5.0, 0.3) });
+        w.boxes.push(Aabb {
+            min: Vec3::new(1.0, -5.0, 0.0),
+            max: Vec3::new(2.0, 5.0, 0.3),
+        });
         let mut s = MoveState::at(Vec3::ZERO);
-        let inp = MoveInput { buttons: buttons::FORWARD, yaw_q: 0, pitch_q: 0 };
+        let inp = MoveInput {
+            buttons: buttons::FORWARD,
+            yaw_q: 0,
+            pitch_q: 0,
+        };
         run(&mut s, inp, 40, &w);
         assert!(s.pos.x > 1.0 && s.pos.z == 0.3 && s.on_ground, "{s:?}");
         // and back down with ground snap (no airborne phase)
@@ -403,7 +460,10 @@ mod tests {
         assert!(s.on_ground);
 
         let mut w2 = flat_world();
-        w2.boxes.push(Aabb { min: Vec3::new(1.0, -5.0, 0.0), max: Vec3::new(2.0, 5.0, 0.5) });
+        w2.boxes.push(Aabb {
+            min: Vec3::new(1.0, -5.0, 0.0),
+            max: Vec3::new(2.0, 5.0, 0.5),
+        });
         let mut s2 = MoveState::at(Vec3::ZERO);
         run(&mut s2, inp, 100, &w2);
         assert!(s2.pos.x < 1.0 && s2.pos.z == 0.0);
@@ -414,7 +474,11 @@ mod tests {
         let w = flat_world();
         let mut s = MoveState::at(Vec3::ZERO);
         run(&mut s, MoveInput::default(), 2, &w);
-        let jump = MoveInput { buttons: buttons::JUMP, yaw_q: 0, pitch_q: 0 };
+        let jump = MoveInput {
+            buttons: buttons::JUMP,
+            yaw_q: 0,
+            pitch_q: 0,
+        };
         let mut apex = 0.0f32;
         let mut jumps = 0;
         let mut was_ground = true;
@@ -435,9 +499,16 @@ mod tests {
     fn crouch_slows_and_needs_headroom_to_stand() {
         let mut w = flat_world();
         // Low ceiling (1.5 m) from x = 1..5
-        w.boxes.push(Aabb { min: Vec3::new(1.0, -5.0, 1.5), max: Vec3::new(5.0, 5.0, 2.0) });
+        w.boxes.push(Aabb {
+            min: Vec3::new(1.0, -5.0, 1.5),
+            max: Vec3::new(5.0, 5.0, 2.0),
+        });
         let mut s = MoveState::at(Vec3::ZERO);
-        let crouch_fwd = MoveInput { buttons: buttons::FORWARD | buttons::CROUCH, yaw_q: 0, pitch_q: 0 };
+        let crouch_fwd = MoveInput {
+            buttons: buttons::FORWARD | buttons::CROUCH,
+            yaw_q: 0,
+            pitch_q: 0,
+        };
         run(&mut s, crouch_fwd, 128, &w);
         assert!(s.crouched);
         assert!((s.vel.x - CROUCH_SPEED).abs() < 1e-3);
@@ -451,7 +522,10 @@ mod tests {
     #[test]
     fn high_speed_does_not_tunnel_thin_walls() {
         let mut w = flat_world();
-        w.boxes.push(Aabb { min: Vec3::new(1.0, -5.0, 0.0), max: Vec3::new(1.05, 5.0, 3.0) });
+        w.boxes.push(Aabb {
+            min: Vec3::new(1.0, -5.0, 0.0),
+            max: Vec3::new(1.05, 5.0, 3.0),
+        });
         let mut s = MoveState::at(Vec3::new(0.0, 0.0, 0.0));
         s.vel.x = 200.0; // absurd, e.g. from an explosion impulse
         s.on_ground = false;

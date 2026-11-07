@@ -14,8 +14,8 @@
 //! `<state>` = `px py pz vx vy vz on_ground crouched jump_timer`.
 
 use crate::map::CollisionWorld;
-use crate::movement::{buttons, simulate, MoveInput, MoveState};
 use crate::math::Vec3;
+use crate::movement::{buttons, simulate, MoveInput, MoveState};
 use std::fmt::Write;
 
 pub const FORMAT_VERSION: u32 = 1;
@@ -36,7 +36,13 @@ fn fmt_state(out: &mut String, s: &MoveState) {
     for v in [s.pos.x, s.pos.y, s.pos.z, s.vel.x, s.vel.y, s.vel.z] {
         let _ = write!(out, " {:08x}", v.to_bits());
     }
-    let _ = write!(out, " {} {} {:08x}", s.on_ground as u8, s.crouched as u8, s.jump_timer.to_bits());
+    let _ = write!(
+        out,
+        " {} {} {:08x}",
+        s.on_ground as u8,
+        s.crouched as u8,
+        s.jump_timer.to_bits()
+    );
 }
 
 /// Builds the vector file for `world`, starting sequences at `starts`.
@@ -56,7 +62,8 @@ pub fn generate(world: &CollisionWorld, starts: &[Vec3], steps_per_seq: usize) -
         for &rate in &rates {
             seq_idx += 1;
             let dt = crate::tick_dt(rate);
-            let mut rng = XorShift(0x9E37_79B9_7F4A_7C15 ^ (seq_idx.wrapping_mul(0x1234_5678_9ABC_DEF1)));
+            let mut rng =
+                XorShift(0x9E37_79B9_7F4A_7C15 ^ (seq_idx.wrapping_mul(0x1234_5678_9ABC_DEF1)));
             let mut state = MoveState::at(*start);
             let _ = write!(out, "seq s{si}_r{rate} {:08x}\nstart", dt.to_bits());
             fmt_state(&mut out, &state);
@@ -87,10 +94,16 @@ pub fn generate(world: &CollisionWorld, starts: &[Vec3], steps_per_seq: usize) -
                 hold -= 1;
                 // Continuous mouse look.
                 let r = rng.next();
-                input.yaw_q = input.yaw_q.wrapping_add(((r & 0x3FF) as u16).wrapping_sub(0x1FF));
+                input.yaw_q = input
+                    .yaw_q
+                    .wrapping_add(((r & 0x3FF) as u16).wrapping_sub(0x1FF));
                 input.pitch_q = ((r >> 10) & 0x7FFF) as i16 - 16383;
                 simulate(&mut state, &input, dt, world);
-                let _ = write!(out, "step {} {} {}", input.buttons, input.yaw_q, input.pitch_q);
+                let _ = write!(
+                    out,
+                    "step {} {} {}",
+                    input.buttons, input.yaw_q, input.pitch_q
+                );
                 fmt_state(&mut out, &state);
                 out.push('\n');
             }

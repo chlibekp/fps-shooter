@@ -1,0 +1,11 @@
+[package]
+name = "tfps-sim"
+description = "Deterministic shared gameplay simulation (movement, map collision). Mirrored in C++ by Client/Source/TacticalFPS/*/NetCore."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

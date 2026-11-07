@@ -1,0 +1,1280 @@
+{
+ "name": "test_arena",
+ "kill_z": -30.0,
+ "solids": [
+  {
+   "min": [
+    -24,
+    -24,
+    -0.5
+   ],
+   "max": [
+    24,
+    24,
+    0.0
+   ],
+   "material": "dirt",
+   "tag": "ground"
+  },
+  {
+   "min": [
+    -24,
+    23.5,
+    0
+   ],
+   "max": [
+    24,
+    24,
+    4.0
+   ],
+   "material": "concrete",
+   "tag": "perimeter"
+  },
+  {
+   "min": [
+    -24,
+    -24,
+    0
+   ],
+   "max": [
+    24,
+    -23.5,
+    4.0
+   ],
+   "material": "concrete",
+   "tag": "perimeter"
+  },
+  {
+   "min": [
+    23.5,
+    -23.5,
+    0
+   ],
+   "max": [
+    24,
+    23.5,
+    4.0
+   ],
+   "material": "concrete",
+   "tag": "perimeter"
+  },
+  {
+   "min": [
+    -24,
+    -23.5,
+    0
+   ],
+   "max": [
+    -23.5,
+    23.5,
+    4.0
+   ],
+   "material": "concrete",
+   "tag": "perimeter"
+  },
+  {
+   "min": [
+    -6,
+    -5,
+    0
+   ],
+   "max": [
+    6,
+    5,
+    0.1
+   ],
+   "material": "concrete",
+   "tag": "floor"
+  },
+  {
+   "min": [
+    -6,
+    -5,
+    0.1
+   ],
+   "max": [
+    -1,
+    -4.7,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_s1"
+  },
+  {
+   "min": [
+    -1,
+    -5,
+    2.2
+   ],
+   "max": [
+    1,
+    -4.7,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_s1_lintel"
+  },
+  {
+   "min": [
+    1,
+    -5,
+    0.1
+   ],
+   "max": [
+    3,
+    -4.7,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_s1"
+  },
+  {
+   "min": [
+    3,
+    -5,
+    0.1
+   ],
+   "max": [
+    5,
+    -4.7,
+    1.0
+   ],
+   "material": "brick",
+   "tag": "wall_s1_sill"
+  },
+  {
+   "min": [
+    3,
+    -5,
+    2.0
+   ],
+   "max": [
+    5,
+    -4.7,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_s1_lintel"
+  },
+  {
+   "min": [
+    5,
+    -5,
+    0.1
+   ],
+   "max": [
+    6,
+    -4.7,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_s1"
+  },
+  {
+   "min": [
+    -6,
+    4.7,
+    0.1
+   ],
+   "max": [
+    -4,
+    5,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_n1"
+  },
+  {
+   "min": [
+    -4,
+    4.7,
+    0.1
+   ],
+   "max": [
+    -2,
+    5,
+    1.0
+   ],
+   "material": "brick",
+   "tag": "wall_n1_sill"
+  },
+  {
+   "min": [
+    -4,
+    4.7,
+    2.0
+   ],
+   "max": [
+    -2,
+    5,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_n1_lintel"
+  },
+  {
+   "min": [
+    -2,
+    4.7,
+    0.1
+   ],
+   "max": [
+    2.0,
+    5,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_n1"
+  },
+  {
+   "min": [
+    2.0,
+    4.7,
+    2.2
+   ],
+   "max": [
+    3.6,
+    5,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_n1_lintel"
+  },
+  {
+   "min": [
+    3.6,
+    4.7,
+    0.1
+   ],
+   "max": [
+    6,
+    5,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_n1"
+  },
+  {
+   "min": [
+    -6,
+    -4.7,
+    0.1
+   ],
+   "max": [
+    -5.7,
+    -1,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_w1"
+  },
+  {
+   "min": [
+    -6,
+    -1,
+    2.2
+   ],
+   "max": [
+    -5.7,
+    1,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_w1_lintel"
+  },
+  {
+   "min": [
+    -6,
+    1,
+    0.1
+   ],
+   "max": [
+    -5.7,
+    4.7,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_w1"
+  },
+  {
+   "min": [
+    5.7,
+    -4.7,
+    0.1
+   ],
+   "max": [
+    6,
+    -1.5,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_e1"
+  },
+  {
+   "min": [
+    5.7,
+    -1.5,
+    0.1
+   ],
+   "max": [
+    6,
+    0.5,
+    1.0
+   ],
+   "material": "brick",
+   "tag": "wall_e1_sill"
+  },
+  {
+   "min": [
+    5.7,
+    -1.5,
+    2.0
+   ],
+   "max": [
+    6,
+    0.5,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_e1_lintel"
+  },
+  {
+   "min": [
+    5.7,
+    0.5,
+    0.1
+   ],
+   "max": [
+    6,
+    4.7,
+    3.0
+   ],
+   "material": "brick",
+   "tag": "wall_e1"
+  },
+  {
+   "min": [
+    -0.05,
+    -4.7,
+    0.1
+   ],
+   "max": [
+    0.05,
+    -3.2,
+    3.0
+   ],
+   "material": "drywall",
+   "tag": "partition"
+  },
+  {
+   "min": [
+    -0.05,
+    -3.2,
+    2.2
+   ],
+   "max": [
+    0.05,
+    -2.2,
+    3.0
+   ],
+   "material": "drywall",
+   "tag": "partition_lintel"
+  },
+  {
+   "min": [
+    -0.05,
+    -2.2,
+    0.1
+   ],
+   "max": [
+    0.05,
+    1.8,
+    3.0
+   ],
+   "material": "drywall",
+   "tag": "partition"
+  },
+  {
+   "min": [
+    0.8,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    0.3462
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    1.1077,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    0.5923
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    1.4154,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    0.8385
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    1.7231,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    1.0846
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    2.0308,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    1.3308
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    2.3385,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    1.5769
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    2.6462,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    1.8231
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    2.9538,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    2.0692
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    3.2615,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    2.3154
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    3.5692,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    2.5615
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    3.8769,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    2.8077
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    4.1846,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    3.0538
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    4.4923,
+    2.6,
+    0.1
+   ],
+   "max": [
+    4.8,
+    4.7,
+    3.3
+   ],
+   "material": "wood",
+   "tag": "stairs"
+  },
+  {
+   "min": [
+    -6,
+    -5,
+    3.0
+   ],
+   "max": [
+    0.8,
+    5,
+    3.3
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    4.8,
+    -5,
+    3.0
+   ],
+   "max": [
+    6,
+    5,
+    3.3
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    0.8,
+    -5,
+    3.0
+   ],
+   "max": [
+    4.8,
+    2.6,
+    3.3
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    0.8,
+    4.7,
+    3.0
+   ],
+   "max": [
+    4.8,
+    5,
+    3.3
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    0.8,
+    2.52,
+    3.3
+   ],
+   "max": [
+    3.9,
+    2.6,
+    4.3
+   ],
+   "material": "wood",
+   "tag": "railing"
+  },
+  {
+   "min": [
+    -6,
+    -5,
+    3.3
+   ],
+   "max": [
+    -4,
+    -4.7,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_s2"
+  },
+  {
+   "min": [
+    -4,
+    -5,
+    3.3
+   ],
+   "max": [
+    -2,
+    -4.7,
+    4.2
+   ],
+   "material": "wood",
+   "tag": "wall_s2_sill"
+  },
+  {
+   "min": [
+    -4,
+    -5,
+    5.3
+   ],
+   "max": [
+    -2,
+    -4.7,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_s2_lintel"
+  },
+  {
+   "min": [
+    -2,
+    -5,
+    3.3
+   ],
+   "max": [
+    2,
+    -4.7,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_s2"
+  },
+  {
+   "min": [
+    2,
+    -5,
+    3.3
+   ],
+   "max": [
+    4,
+    -4.7,
+    4.2
+   ],
+   "material": "wood",
+   "tag": "wall_s2_sill"
+  },
+  {
+   "min": [
+    2,
+    -5,
+    5.3
+   ],
+   "max": [
+    4,
+    -4.7,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_s2_lintel"
+  },
+  {
+   "min": [
+    4,
+    -5,
+    3.3
+   ],
+   "max": [
+    6,
+    -4.7,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_s2"
+  },
+  {
+   "min": [
+    -6,
+    4.7,
+    3.3
+   ],
+   "max": [
+    -3,
+    5,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_n2"
+  },
+  {
+   "min": [
+    -3,
+    4.7,
+    3.3
+   ],
+   "max": [
+    -1,
+    5,
+    4.2
+   ],
+   "material": "wood",
+   "tag": "wall_n2_sill"
+  },
+  {
+   "min": [
+    -3,
+    4.7,
+    5.3
+   ],
+   "max": [
+    -1,
+    5,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_n2_lintel"
+  },
+  {
+   "min": [
+    -1,
+    4.7,
+    3.3
+   ],
+   "max": [
+    6,
+    5,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_n2"
+  },
+  {
+   "min": [
+    -6,
+    -4.7,
+    3.3
+   ],
+   "max": [
+    -5.7,
+    -1,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_w2"
+  },
+  {
+   "min": [
+    -6,
+    -1,
+    3.3
+   ],
+   "max": [
+    -5.7,
+    1,
+    4.2
+   ],
+   "material": "wood",
+   "tag": "wall_w2_sill"
+  },
+  {
+   "min": [
+    -6,
+    -1,
+    5.3
+   ],
+   "max": [
+    -5.7,
+    1,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_w2_lintel"
+  },
+  {
+   "min": [
+    -6,
+    1,
+    3.3
+   ],
+   "max": [
+    -5.7,
+    4.7,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_w2"
+  },
+  {
+   "min": [
+    5.7,
+    -4.7,
+    3.3
+   ],
+   "max": [
+    6,
+    -3,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_e2"
+  },
+  {
+   "min": [
+    5.7,
+    -3,
+    3.3
+   ],
+   "max": [
+    6,
+    -1,
+    4.2
+   ],
+   "material": "wood",
+   "tag": "wall_e2_sill"
+  },
+  {
+   "min": [
+    5.7,
+    -3,
+    5.3
+   ],
+   "max": [
+    6,
+    -1,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_e2_lintel"
+  },
+  {
+   "min": [
+    5.7,
+    -1,
+    3.3
+   ],
+   "max": [
+    6,
+    4.7,
+    6.0
+   ],
+   "material": "wood",
+   "tag": "wall_e2"
+  },
+  {
+   "min": [
+    -6,
+    -5,
+    6.0
+   ],
+   "max": [
+    6,
+    5,
+    6.3
+   ],
+   "material": "concrete",
+   "tag": "roof"
+  },
+  {
+   "min": [
+    10,
+    -12,
+    0
+   ],
+   "max": [
+    16,
+    -11.9,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    10,
+    -9.6,
+    0
+   ],
+   "max": [
+    16,
+    -9.5,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    15.9,
+    -11.9,
+    0
+   ],
+   "max": [
+    16,
+    -9.6,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    10,
+    -12,
+    2.5
+   ],
+   "max": [
+    16,
+    -9.5,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container_roof"
+  },
+  {
+   "min": [
+    10,
+    -12,
+    0
+   ],
+   "max": [
+    16,
+    -9.5,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container_floor"
+  },
+  {
+   "min": [
+    -12.6,
+    7.4,
+    0
+   ],
+   "max": [
+    -11.4,
+    8.6,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    -11.1,
+    7.7,
+    0
+   ],
+   "max": [
+    -10.1,
+    8.7,
+    1.0
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    11.4,
+    8.4,
+    0
+   ],
+   "max": [
+    12.6,
+    9.6,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    11.4,
+    9.7,
+    0
+   ],
+   "max": [
+    12.6,
+    10.9,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    -14.6,
+    -9.6,
+    0
+   ],
+   "max": [
+    -13.4,
+    -8.4,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    11.4,
+    8.4,
+    1.2
+   ],
+   "max": [
+    12.6,
+    9.6,
+    2.4
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    -9.3,
+    -4.5,
+    0
+   ],
+   "max": [
+    -8.7,
+    -1.5,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "barrier"
+  },
+  {
+   "min": [
+    8.7,
+    1.5,
+    0
+   ],
+   "max": [
+    9.3,
+    4.5,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "barrier"
+  },
+  {
+   "min": [
+    -1.5,
+    -14.3,
+    0
+   ],
+   "max": [
+    1.5,
+    -13.7,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "barrier"
+  },
+  {
+   "min": [
+    -1.5,
+    13.7,
+    0
+   ],
+   "max": [
+    1.5,
+    14.3,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "barrier"
+  },
+  {
+   "min": [
+    -18.5,
+    13.7,
+    0
+   ],
+   "max": [
+    -15.5,
+    14.3,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "barrier"
+  },
+  {
+   "min": [
+    -18,
+    -4,
+    0
+   ],
+   "max": [
+    -17.6,
+    4,
+    0.4
+   ],
+   "material": "brick",
+   "tag": "low_wall"
+  },
+  {
+   "min": [
+    17.0,
+    14,
+    0
+   ],
+   "max": [
+    20,
+    18,
+    0.3
+   ],
+   "material": "concrete",
+   "tag": "steps"
+  },
+  {
+   "min": [
+    17.4,
+    14,
+    0
+   ],
+   "max": [
+    20,
+    18,
+    0.6
+   ],
+   "material": "concrete",
+   "tag": "steps"
+  },
+  {
+   "min": [
+    17.8,
+    14,
+    0
+   ],
+   "max": [
+    20,
+    18,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "steps"
+  },
+  {
+   "min": [
+    20,
+    14,
+    0
+   ],
+   "max": [
+    23.5,
+    18,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "platform"
+  }
+ ],
+ "spawns": [
+  {
+   "pos": [
+    -20.0,
+    0.0,
+    0.0
+   ],
+   "yaw": 0.0,
+   "team": 0
+  },
+  {
+   "pos": [
+    -20.0,
+    6.0,
+    0.0
+   ],
+   "yaw": 0.0,
+   "team": 0
+  },
+  {
+   "pos": [
+    -20.0,
+    -6.0,
+    0.0
+   ],
+   "yaw": 0.0,
+   "team": 0
+  },
+  {
+   "pos": [
+    20.0,
+    0.0,
+    0.0
+   ],
+   "yaw": 180.0,
+   "team": 1
+  },
+  {
+   "pos": [
+    20.0,
+    -6.0,
+    0.0
+   ],
+   "yaw": 180.0,
+   "team": 1
+  },
+  {
+   "pos": [
+    20.0,
+    6.0,
+    0.0
+   ],
+   "yaw": 180.0,
+   "team": 1
+  }
+ ]
+}

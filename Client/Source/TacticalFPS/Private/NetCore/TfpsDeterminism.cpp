@@ -14,10 +14,10 @@ namespace tfps
 			B.Max = Vec3(X1, Y1, Z1);
 			return B;
 		};
-		World.Boxes.push_back(Box(-20.0f, -20.0f, -1.0f, 20.0f, 20.0f, 0.0f));
-		World.Boxes.push_back(Box(3.0f, -2.0f, 0.0f, 4.0f, 2.0f, 0.3f));
-		World.Boxes.push_back(Box(6.0f, -6.0f, 0.0f, 6.2f, 6.0f, 3.0f));
-		World.Boxes.push_back(Box(-2.0f, 3.0f, 1.4f, 2.0f, 6.0f, 1.6f));
+		World.PushBox(Box(-20.0f, -20.0f, -1.0f, 20.0f, 20.0f, 0.0f));
+		World.PushBox(Box(3.0f, -2.0f, 0.0f, 4.0f, 2.0f, 0.3f));
+		World.PushBox(Box(6.0f, -6.0f, 0.0f, 6.2f, 6.0f, 3.0f));
+		World.PushBox(Box(-2.0f, 3.0f, 1.4f, 2.0f, 6.0f, 1.6f));
 		const float Dt = TickDt(64);
 		MoveState S;
 		S.Pos = Vec3(0.0f, 0.0f, 0.5f);

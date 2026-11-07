@@ -1,6 +1,7 @@
 // Copyright TacticalFPS project. Engine-independent NetCore.
 #include "NetCore/TfpsMap.h"
 #include "NetCore/TfpsJson.h"
+#include "NetCore/TfpsFloatDeterminism.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -39,6 +40,11 @@ namespace tfps
 		return false;
 	}
 
+	bool MaterialDestructibleByDefault(EMaterial M)
+	{
+		return M == EMaterial::Wood || M == EMaterial::Drywall || M == EMaterial::Glass || M == EMaterial::Brick;
+	}
+
 	const char* MaterialName(EMaterial M)
 	{
 		for (const FMaterialEntry& E : GMaterialTable)
@@ -56,8 +62,8 @@ namespace tfps
 		{
 			H.WriteF32(S.Bounds.Min.X); H.WriteF32(S.Bounds.Min.Y); H.WriteF32(S.Bounds.Min.Z);
 			H.WriteF32(S.Bounds.Max.X); H.WriteF32(S.Bounds.Max.Y); H.WriteF32(S.Bounds.Max.Z);
-			const uint8_t M = static_cast<uint8_t>(S.Material);
-			H.Write(&M, 1);
+			const uint8_t M[2] = {static_cast<uint8_t>(S.Material), static_cast<uint8_t>(S.bDestructible ? 1 : 0)};
+			H.Write(M, 2);
 		}
 		H.WriteF32(KillZ);
 		return H.Finish();
@@ -110,6 +116,12 @@ namespace tfps
 			{
 				if (Tag->Kind == JsonValue::EKind::String) { S.Tag = Tag->String; }
 			}
+			bool bAllow = true;
+			if (const JsonValue* D = SV.Find("destructible"))
+			{
+				if (D->Kind == JsonValue::EKind::Bool) { bAllow = D->Bool; }
+			}
+			S.bDestructible = bAllow && MaterialDestructibleByDefault(S.Material);
 			Map.Solids.push_back(S);
 		}
 		const JsonValue* Spawns = Root.Find("spawns");
@@ -175,11 +187,78 @@ namespace tfps
 		return Vec3(std::cos(P) * std::cos(Y), std::cos(P) * std::sin(Y), std::sin(P));
 	}
 
+	uint32_t CellsAlong(float Size)
+	{
+		if (Size < kMinSplit) { return 1; }
+		uint32_t N = static_cast<uint32_t>(Size / kCellSize + 0.5f);
+		if (N < 1) { N = 1; }
+		if (N > kMaxCellsPerAxis) { N = kMaxCellsPerAxis; }
+		return N;
+	}
+
 	CollisionWorld CollisionWorld::FromMap(const MapDef& Map)
 	{
 		CollisionWorld W;
-		W.Boxes.reserve(Map.Solids.size());
-		for (const Solid& S : Map.Solids) { W.Boxes.push_back(S.Bounds); }
+		W.Solids.reserve(Map.Solids.size());
+		for (const Solid& S : Map.Solids) { W.PushSolid(S.Bounds, S.Material, S.bDestructible); }
 		return W;
 	}
+
+	void CollisionWorld::PushSolid(const Aabb& B, EMaterial Material, bool bDestructible)
+	{
+		WorldSolid S;
+		S.Bounds = B;
+		S.Material = Material;
+		S.bHasGrid = bDestructible;
+		if (bDestructible)
+		{
+			S.Grid.N[0] = CellsAlong(B.Max.X - B.Min.X);
+			S.Grid.N[1] = CellsAlong(B.Max.Y - B.Min.Y);
+			S.Grid.N[2] = CellsAlong(B.Max.Z - B.Min.Z);
+			S.Grid.First = CellCount;
+			CellCount += S.Grid.Count();
+		}
+		Destroyed.resize((CellCount + 63) / 64, 0);
+		Solids.push_back(S);
+	}
+
+	bool CollisionWorld::DestroyCell(uint32_t Cell)
+	{
+		if (Cell >= CellCount || IsDestroyed(Cell)) { return false; }
+		Destroyed[Cell / 64] |= 1ull << (Cell % 64);
+		++Revision;
+		return true;
+	}
+
+	Aabb CollisionWorld::CellBounds(const Aabb& Solid, const uint32_t N[3], uint32_t IX, uint32_t IY, uint32_t IZ)
+	{
+		auto F = [&](int Axis, uint32_t I) {
+			const float Mn = Solid.Min.Get(Axis);
+			const float Mx = Solid.Max.Get(Axis);
+			return Mn + (Mx - Mn) * (static_cast<float>(I) / static_cast<float>(N[Axis]));
+		};
+		Aabb B;
+		B.Min = Vec3(F(0, IX), F(1, IY), F(2, IZ));
+		B.Max = Vec3(F(0, IX + 1), F(1, IY + 1), F(2, IZ + 1));
+		return B;
+	}
+
+	bool CollisionWorld::CellInfo(uint32_t Cell, size_t& OutSolid, Aabb& OutBounds) const
+	{
+		for (size_t SI = 0; SI < Solids.size(); ++SI)
+		{
+			const WorldSolid& S = Solids[SI];
+			if (!S.bHasGrid || Cell < S.Grid.First || Cell >= S.Grid.First + S.Grid.Count()) { continue; }
+			const uint32_t Local = Cell - S.Grid.First;
+			const uint32_t IX = Local % S.Grid.N[0];
+			const uint32_t IY = (Local / S.Grid.N[0]) % S.Grid.N[1];
+			const uint32_t IZ = Local / (S.Grid.N[0] * S.Grid.N[1]);
+			OutSolid = SI;
+			OutBounds = CellBounds(S.Bounds, S.Grid.N, IX, IY, IZ);
+			return true;
+		}
+		return false;
+	}
 }
+
+#include "NetCore/TfpsFloatDeterminismEnd.h"

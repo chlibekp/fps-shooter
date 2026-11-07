@@ -4,8 +4,9 @@
 //! Text format (one record per line, all floats as raw IEEE-754 bits in hex):
 //!
 //! ```text
-//! tfps-player-vectors 2
-//! box <minx> <miny> <minz> <maxx> <maxy> <maxz>
+//! tfps-player-vectors 3
+//! solid <minx> <miny> <minz> <maxx> <maxy> <maxz> <material> <destructible>
+//! destroyed <cell_id>
 //! seq <name> <dt> <primary_id> <secondary_id>
 //! start <move> <weapon>
 //! step <buttons> <yaw_q> <pitch_q> <slot> <move> <weapon> <n_shots> {<shot>}
@@ -22,7 +23,7 @@ use crate::movement::{buttons, simulate, MoveInput, MoveState};
 use crate::weapon::{simulate_player, ShotBuffer, WeaponDef, WeaponSet, WeaponState};
 use std::fmt::Write;
 
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 struct XorShift(u64);
 impl XorShift {
@@ -74,6 +75,30 @@ fn fmt_weapon(out: &mut String, w: &WeaponState) {
     let _ = write!(out, " {}", w.shot_counter);
 }
 
+/// Punches deterministic holes into destructible solids: a 1.2 m wide,
+/// 2.1 m high opening at the middle of every destructible solid, plus every
+/// 5th remaining cell. Used for the conformance vectors so the C++ mirror is
+/// tested against holes as well as intact geometry.
+pub fn punch_test_holes(world: &mut CollisionWorld) {
+    let mut ids = Vec::new();
+    for c in 0..world.cell_count() {
+        let Some((si, b)) = world.cell_info(c) else {
+            continue;
+        };
+        let sb = world.solids[si].bounds;
+        let (cx, cy) = ((sb.min.x + sb.max.x) * 0.5, (sb.min.y + sb.max.y) * 0.5);
+        let mx = (b.min.x + b.max.x) * 0.5;
+        let my = (b.min.y + b.max.y) * 0.5;
+        let doorway = (mx - cx).abs() < 0.6 && (my - cy).abs() < 0.6 && b.min.z < sb.min.z + 2.1;
+        if doorway || c % 5 == 0 {
+            ids.push(c);
+        }
+    }
+    for c in ids {
+        world.destroy_cell(c);
+    }
+}
+
 /// Builds the vector file for `world`, starting sequences at `starts`, cycling
 /// through every weapon of `weapons` as the primary.
 pub fn generate(
@@ -84,12 +109,16 @@ pub fn generate(
 ) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "tfps-player-vectors {FORMAT_VERSION}");
-    for b in &world.boxes {
-        let _ = write!(out, "box");
+    for sld in &world.solids {
+        let b = &sld.bounds;
+        let _ = write!(out, "solid");
         for v in [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] {
             f(&mut out, v);
         }
-        out.push('\n');
+        let _ = writeln!(out, " {} {}", sld.material as u8, sld.grid.is_some() as u8);
+    }
+    for c in world.destroyed_cells() {
+        let _ = writeln!(out, "destroyed {c}");
     }
     let rates: [u16; 3] = [60, 64, 128];
     let mut seq_idx = 0u64;
@@ -200,26 +229,24 @@ pub fn generate(
 pub fn determinism_selftest_hash() -> u64 {
     use crate::map::Aabb;
     use crate::math::Fnv1a64;
-    let world = CollisionWorld {
-        boxes: vec![
-            Aabb {
-                min: Vec3::new(-20.0, -20.0, -1.0),
-                max: Vec3::new(20.0, 20.0, 0.0),
-            },
-            Aabb {
-                min: Vec3::new(3.0, -2.0, 0.0),
-                max: Vec3::new(4.0, 2.0, 0.3),
-            },
-            Aabb {
-                min: Vec3::new(6.0, -6.0, 0.0),
-                max: Vec3::new(6.2, 6.0, 3.0),
-            },
-            Aabb {
-                min: Vec3::new(-2.0, 3.0, 1.4),
-                max: Vec3::new(2.0, 6.0, 1.6),
-            },
-        ],
-    };
+    let world = CollisionWorld::from_boxes(vec![
+        Aabb {
+            min: Vec3::new(-20.0, -20.0, -1.0),
+            max: Vec3::new(20.0, 20.0, 0.0),
+        },
+        Aabb {
+            min: Vec3::new(3.0, -2.0, 0.0),
+            max: Vec3::new(4.0, 2.0, 0.3),
+        },
+        Aabb {
+            min: Vec3::new(6.0, -6.0, 0.0),
+            max: Vec3::new(6.2, 6.0, 3.0),
+        },
+        Aabb {
+            min: Vec3::new(-2.0, 3.0, 1.4),
+            max: Vec3::new(2.0, 6.0, 1.6),
+        },
+    ]);
     let dt = crate::tick_dt(64);
     let mut s = MoveState::at(Vec3::new(0.0, 0.0, 0.5));
     let mut h = Fnv1a64::default();

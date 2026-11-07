@@ -576,12 +576,10 @@ mod tests {
     }
 
     fn world() -> CollisionWorld {
-        CollisionWorld {
-            boxes: vec![Aabb {
-                min: Vec3::new(-50.0, -50.0, -1.0),
-                max: Vec3::new(50.0, 50.0, 0.0),
-            }],
-        }
+        CollisionWorld::from_boxes(vec![Aabb {
+            min: Vec3::new(-50.0, -50.0, -1.0),
+            max: Vec3::new(50.0, 50.0, 0.0),
+        }])
     }
 
     struct Rig {
@@ -853,7 +851,7 @@ mod tests {
     fn lean_is_blocked_by_walls() {
         let mut r = Rig::new(1, 4);
         // Wall 0.35 m to the left (-Y side when facing +X... left is -Y).
-        r.w.boxes.push(Aabb {
+        r.w.push_box(Aabb {
             min: Vec3::new(-5.0, -1.0, 0.0),
             max: Vec3::new(5.0, -0.45, 3.0),
         });

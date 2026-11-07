@@ -12,6 +12,7 @@ namespace tfps
 		constexpr float MoveSkin = 0.0001f;
 		constexpr float MoveMaxSubstep = 0.1f;
 		constexpr int MoveMaxSubsteps = 32;
+		constexpr float MoveCandidateMargin = 0.5f;
 
 		Aabb MoveHeadBox(const Vec3& Eye)
 		{
@@ -101,11 +102,11 @@ namespace tfps
 			bool bBlocked = false;
 			const float H = State.Height();
 			Aabb PB = PlayerBox(State.Pos, H);
-			for (const Aabb& WB : World.Boxes)
-			{
+			const Aabb Query = PB;
+			World.ForEachCandidate(Query, MoveCandidateMargin, [&](const Aabb& WB, uint32_t) {
 				if (!PB.Overlaps(WB))
 				{
-					continue;
+					return true;
 				}
 				if (Axis == 2)
 				{
@@ -131,7 +132,7 @@ namespace tfps
 							{
 								State.Pos = Cand;
 								PB = PlayerBox(State.Pos, H);
-								continue;
+								return true;
 							}
 						}
 					}
@@ -146,7 +147,8 @@ namespace tfps
 				}
 				bBlocked = true;
 				PB = PlayerBox(State.Pos, H);
-			}
+				return true;
+			});
 			return bBlocked;
 		}
 
@@ -180,14 +182,14 @@ namespace tfps
 			Probe.Max = Vec3(PB.Max.X, PB.Max.Y, State.Pos.Z);
 			bool bFound = false;
 			float Best = 0.0f;
-			for (const Aabb& WB : World.Boxes)
-			{
+			World.ForEachCandidate(Probe, 0.0f, [&](const Aabb& WB, uint32_t) {
 				if (WB.Overlaps(Probe) && WB.Max.Z <= State.Pos.Z && (!bFound || WB.Max.Z > Best))
 				{
 					Best = WB.Max.Z;
 					bFound = true;
 				}
-			}
+				return true;
+			});
 			if (!bFound)
 			{
 				return;

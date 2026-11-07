@@ -63,7 +63,7 @@ TFPS_TEST(PlayerSimConformanceWithRust)
 	std::istringstream Lines(Text);
 	std::string Line;
 	std::getline(Lines, Line);
-	TFPS_REQUIRE(Line == "tfps-player-vectors 2");
+	TFPS_REQUIRE(Line == "tfps-player-vectors 3");
 	tfps::CollisionWorld World;
 	tfps::MoveState Ms;
 	tfps::WeaponState Ws;
@@ -71,18 +71,26 @@ TFPS_TEST(PlayerSimConformanceWithRust)
 	tfps::ShotBuffer Shots;
 	float Dt = 0.0f;
 	std::string SeqName;
-	int Steps = 0, Mismatches = 0, Sequences = 0, ShotsChecked = 0;
+	int Steps = 0, Mismatches = 0, Sequences = 0, ShotsChecked = 0, DestroyedCells = 0;
 	while (std::getline(Lines, Line))
 	{
 		std::istringstream In(Line);
 		std::string Kind;
 		In >> Kind;
-		if (Kind == "box")
+		if (Kind == "solid")
 		{
 			tfps::Aabb B;
 			B.Min.X = NextHex(In); B.Min.Y = NextHex(In); B.Min.Z = NextHex(In);
 			B.Max.X = NextHex(In); B.Max.Y = NextHex(In); B.Max.Z = NextHex(In);
-			World.Boxes.push_back(B);
+			const auto Mat = static_cast<tfps::EMaterial>(NextU(In));
+			const bool bDestructible = NextU(In) != 0;
+			World.PushSolid(B, Mat, bDestructible);
+		}
+		else if (Kind == "destroyed")
+		{
+			const uint32_t Cell = static_cast<uint32_t>(NextU(In));
+			if (!World.DestroyCell(Cell)) { ++Mismatches; }
+			++DestroyedCells;
 		}
 		else if (Kind == "seq")
 		{
@@ -136,7 +144,15 @@ TFPS_TEST(PlayerSimConformanceWithRust)
 			}
 		}
 	}
-	std::printf("  %d sequences, %d steps, %d shots, %d mismatches\n", Sequences, Steps, ShotsChecked, Mismatches);
+	std::printf("  %zu solids, %u cells (%d destroyed), %d sequences, %d steps, %d shots, %d mismatches\n", World.Solids.size(), World.CellCount,
+		DestroyedCells, Sequences, Steps, ShotsChecked, Mismatches);
+	// The same map parsed by C++ must subdivide into the same cells.
+	tfps::MapDef Arena;
+	std::string Err;
+	TFPS_REQUIRE(tfps::ParseMapJson(ReadFile(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/maps/test_arena.json"), Arena, Err));
+	const tfps::CollisionWorld FromMap = tfps::CollisionWorld::FromMap(Arena);
+	TFPS_EXPECT(FromMap.CellCount == World.CellCount);
+	TFPS_EXPECT(DestroyedCells > 100);
 	TFPS_EXPECT(Sequences == 18);
 	TFPS_EXPECT(Steps > 10000);
 	TFPS_EXPECT(ShotsChecked > 100);

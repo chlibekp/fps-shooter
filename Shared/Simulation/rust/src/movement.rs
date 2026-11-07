@@ -80,6 +80,10 @@ const SKIN: f32 = 0.0001;
 /// Maximum distance moved along an axis before collision is resolved.
 const MAX_SUBSTEP: f32 = 0.1;
 const MAX_SUBSTEPS: i32 = 32;
+/// Candidate margin for `resolve_axis`: covers every position the player box
+/// can reach while resolving one sub-step (push-back <= sub-step, step-up <=
+/// STEP_HEIGHT), so the candidate scan equals a full scan.
+const CANDIDATE_MARGIN: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MoveInput {
@@ -457,9 +461,10 @@ fn resolve_axis(
     let mut blocked = false;
     let h = state.height();
     let mut pb = player_box(state.pos, h);
-    for wb in &world.boxes {
+    let query = pb;
+    world.for_each_candidate(&query, CANDIDATE_MARGIN, |wb, _| {
         if !pb.overlaps(wb) {
-            continue;
+            return true;
         }
         if axis == 2 {
             if step > 0.0 {
@@ -476,7 +481,7 @@ fn resolve_axis(
                     if !world.overlaps_any(&player_box(cand, h)) {
                         state.pos = cand;
                         pb = player_box(state.pos, h);
-                        continue;
+                        return true;
                     }
                 }
             }
@@ -488,7 +493,8 @@ fn resolve_axis(
         }
         blocked = true;
         pb = player_box(state.pos, h);
-    }
+        true
+    });
     blocked
 }
 
@@ -501,12 +507,13 @@ fn ground_snap(state: &mut MoveState, world: &CollisionWorld) {
     };
     let mut found = false;
     let mut best = 0.0f32;
-    for wb in &world.boxes {
+    world.for_each_candidate(&probe, 0.0, |wb, _| {
         if wb.overlaps(&probe) && wb.max.z <= state.pos.z && (!found || wb.max.z > best) {
             best = wb.max.z;
             found = true;
         }
-    }
+        true
+    });
     if !found {
         return;
     }
@@ -525,12 +532,10 @@ mod tests {
     use crate::math::quantize_yaw_deg;
 
     fn flat_world() -> CollisionWorld {
-        CollisionWorld {
-            boxes: vec![Aabb {
-                min: Vec3::new(-50.0, -50.0, -1.0),
-                max: Vec3::new(50.0, 50.0, 0.0),
-            }],
-        }
+        CollisionWorld::from_boxes(vec![Aabb {
+            min: Vec3::new(-50.0, -50.0, -1.0),
+            max: Vec3::new(50.0, 50.0, 0.0),
+        }])
     }
 
     const DT: f32 = 1.0 / 64.0;
@@ -600,7 +605,7 @@ mod tests {
     #[test]
     fn wall_blocks_movement() {
         let mut w = flat_world();
-        w.boxes.push(Aabb {
+        w.push_box(Aabb {
             min: Vec3::new(2.0, -5.0, 0.0),
             max: Vec3::new(2.2, 5.0, 3.0),
         });
@@ -623,7 +628,7 @@ mod tests {
     #[test]
     fn steps_up_low_step_but_not_high_wall() {
         let mut w = flat_world();
-        w.boxes.push(Aabb {
+        w.push_box(Aabb {
             min: Vec3::new(1.0, -5.0, 0.0),
             max: Vec3::new(2.0, 5.0, 0.3),
         });
@@ -643,7 +648,7 @@ mod tests {
         assert!(s.on_ground);
 
         let mut w2 = flat_world();
-        w2.boxes.push(Aabb {
+        w2.push_box(Aabb {
             min: Vec3::new(1.0, -5.0, 0.0),
             max: Vec3::new(2.0, 5.0, 0.5),
         });
@@ -683,7 +688,7 @@ mod tests {
     fn crouch_slows_and_needs_headroom_to_stand() {
         let mut w = flat_world();
         // Low ceiling (1.5 m) from x = 1..5
-        w.boxes.push(Aabb {
+        w.push_box(Aabb {
             min: Vec3::new(1.0, -5.0, 1.5),
             max: Vec3::new(5.0, 5.0, 2.0),
         });
@@ -707,7 +712,7 @@ mod tests {
     #[test]
     fn high_speed_does_not_tunnel_thin_walls() {
         let mut w = flat_world();
-        w.boxes.push(Aabb {
+        w.push_box(Aabb {
             min: Vec3::new(1.0, -5.0, 0.0),
             max: Vec3::new(1.05, 5.0, 3.0),
         });

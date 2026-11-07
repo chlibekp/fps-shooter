@@ -42,12 +42,25 @@ impl Aabb {
     }
 }
 
+impl Material {
+    /// Whether solids of this material can be destroyed (unless the map
+    /// disables it per solid).
+    pub fn destructible_by_default(self) -> bool {
+        matches!(
+            self,
+            Material::Wood | Material::Drywall | Material::Glass | Material::Brick
+        )
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Solid {
     pub bounds: Aabb,
     pub material: Material,
     /// Free-form tag for the client (e.g. "floor", "wall", "crate").
     pub tag: String,
+    /// Split into destructible cells (see `CollisionWorld`).
+    pub destructible: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -98,6 +111,10 @@ struct JsonSolid {
     material: Material,
     #[serde(default)]
     tag: String,
+    /// Overrides the material default (only `false` is meaningful for
+    /// materials that are destructible by default).
+    #[serde(default)]
+    destructible: Option<bool>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -130,6 +147,8 @@ impl MapDef {
                     },
                     material: s.material,
                     tag: s.tag,
+                    destructible: s.destructible.unwrap_or(true)
+                        && s.material.destructible_by_default(),
                 })
                 .collect(),
             spawns: j
@@ -185,32 +204,239 @@ impl MapDef {
             ] {
                 h.write_f32(v);
             }
-            h.write(&[s.material as u8]);
+            h.write(&[s.material as u8, s.destructible as u8]);
         }
         h.write_f32(self.kill_z);
         h.finish()
     }
 }
 
+/// Target edge length of destruction cells (meters).
+pub const CELL_SIZE: f32 = 0.3;
+/// Solids thinner than this along an axis are not subdivided along it.
+pub const MIN_SPLIT: f32 = 0.6;
+pub const MAX_CELLS_PER_AXIS: u32 = 64;
+
+/// Cell subdivision of a destructible solid.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CellGrid {
+    pub n: [u32; 3],
+    /// Global id of this solid's first cell.
+    pub first: u32,
+}
+
+impl CellGrid {
+    pub fn count(&self) -> u32 {
+        self.n[0] * self.n[1] * self.n[2]
+    }
+}
+
+/// Number of cells along an axis of length `size`. Mirrored in C++.
+pub fn cells_along(size: f32) -> u32 {
+    if size < MIN_SPLIT {
+        return 1;
+    }
+    let n = (size / CELL_SIZE + 0.5) as u32;
+    n.clamp(1, MAX_CELLS_PER_AXIS)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct WorldSolid {
+    pub bounds: Aabb,
+    pub material: Material,
+    pub grid: Option<CellGrid>,
+}
+
 /// Collision world used by the movement simulation.
 ///
-/// Brute-force over all solids is fine for a few hundred boxes; a uniform grid
-/// broadphase can be dropped in here without changing callers.
+/// Indestructible solids are single boxes. Destructible solids are split into
+/// a grid of cells; destroyed cells stop colliding. Queries visit candidate
+/// boxes in ascending (solid, cell) order -- exactly the order of a full scan
+/// over the flattened box list -- so results are deterministic and identical
+/// to the C++ mirror, while only the cells near the query are touched.
 #[derive(Clone, Debug, Default)]
 pub struct CollisionWorld {
-    pub boxes: Vec<Aabb>,
+    pub solids: Vec<WorldSolid>,
+    destroyed: Vec<u64>,
+    cell_count: u32,
+    /// Bumped on every destruction (lets clients detect changes cheaply).
+    pub revision: u32,
 }
 
 impl CollisionWorld {
     pub fn from_map(map: &MapDef) -> Self {
-        Self {
-            boxes: map.solids.iter().map(|s| s.bounds).collect(),
+        let mut w = CollisionWorld::default();
+        for s in &map.solids {
+            w.push_solid(s.bounds, s.material, s.destructible);
         }
+        w
+    }
+
+    /// World of plain indestructible boxes (tests, tools).
+    pub fn from_boxes(boxes: Vec<Aabb>) -> Self {
+        let mut w = CollisionWorld::default();
+        for b in boxes {
+            w.push_box(b);
+        }
+        w
+    }
+
+    pub fn push_box(&mut self, b: Aabb) {
+        self.push_solid(b, Material::Concrete, false);
+    }
+
+    pub fn push_solid(&mut self, bounds: Aabb, material: Material, destructible: bool) {
+        let grid = destructible.then(|| {
+            let n = [
+                cells_along(bounds.max.x - bounds.min.x),
+                cells_along(bounds.max.y - bounds.min.y),
+                cells_along(bounds.max.z - bounds.min.z),
+            ];
+            let g = CellGrid {
+                n,
+                first: self.cell_count,
+            };
+            self.cell_count += g.count();
+            g
+        });
+        self.destroyed
+            .resize(self.cell_count.div_ceil(64) as usize, 0);
+        self.solids.push(WorldSolid {
+            bounds,
+            material,
+            grid,
+        });
+    }
+
+    pub fn cell_count(&self) -> u32 {
+        self.cell_count
     }
 
     #[inline]
+    pub fn is_destroyed(&self, cell: u32) -> bool {
+        self.destroyed
+            .get((cell / 64) as usize)
+            .is_some_and(|w| w & (1u64 << (cell % 64)) != 0)
+    }
+
+    /// Marks a cell destroyed. Returns false if it was already destroyed or invalid.
+    pub fn destroy_cell(&mut self, cell: u32) -> bool {
+        if cell >= self.cell_count || self.is_destroyed(cell) {
+            return false;
+        }
+        self.destroyed[(cell / 64) as usize] |= 1u64 << (cell % 64);
+        self.revision = self.revision.wrapping_add(1);
+        true
+    }
+
+    /// All destroyed cell ids, ascending.
+    pub fn destroyed_cells(&self) -> impl Iterator<Item = u32> + '_ {
+        (0..self.cell_count).filter(move |c| self.is_destroyed(*c))
+    }
+
+    /// Bounds of cell (ix, iy, iz) of a grid solid.
+    #[inline]
+    pub fn cell_bounds(solid: &Aabb, n: [u32; 3], ix: u32, iy: u32, iz: u32) -> Aabb {
+        let f = |axis: usize, i: u32| {
+            let mn = solid.min.get(axis);
+            let mx = solid.max.get(axis);
+            mn + (mx - mn) * (i as f32 / n[axis] as f32)
+        };
+        Aabb {
+            min: Vec3::new(f(0, ix), f(1, iy), f(2, iz)),
+            max: Vec3::new(f(0, ix + 1), f(1, iy + 1), f(2, iz + 1)),
+        }
+    }
+
+    /// Solid index and bounds of a global cell id.
+    pub fn cell_info(&self, cell: u32) -> Option<(usize, Aabb)> {
+        for (si, s) in self.solids.iter().enumerate() {
+            if let Some(g) = s.grid {
+                if cell >= g.first && cell < g.first + g.count() {
+                    let local = cell - g.first;
+                    let ix = local % g.n[0];
+                    let iy = (local / g.n[0]) % g.n[1];
+                    let iz = local / (g.n[0] * g.n[1]);
+                    return Some((si, Self::cell_bounds(&s.bounds, g.n, ix, iy, iz)));
+                }
+            }
+        }
+        None
+    }
+
+    /// Calls `f(box, cell_id)` for every intact box that may overlap `query`
+    /// expanded by `margin`, in ascending (solid, cell) order. `cell_id` is
+    /// `u32::MAX` for indestructible solids. Stops when `f` returns false.
+    pub fn for_each_candidate(
+        &self,
+        query: &Aabb,
+        margin: f32,
+        mut f: impl FnMut(&Aabb, u32) -> bool,
+    ) {
+        let q = Aabb {
+            min: Vec3::new(
+                query.min.x - margin,
+                query.min.y - margin,
+                query.min.z - margin,
+            ),
+            max: Vec3::new(
+                query.max.x + margin,
+                query.max.y + margin,
+                query.max.z + margin,
+            ),
+        };
+        for s in &self.solids {
+            if !s.bounds.overlaps(&q) {
+                continue;
+            }
+            let Some(g) = s.grid else {
+                if !f(&s.bounds, u32::MAX) {
+                    return;
+                }
+                continue;
+            };
+            // Conservative index range per axis (+-1 against rounding).
+            let range = |axis: usize| {
+                let mn = s.bounds.min.get(axis);
+                let size = s.bounds.max.get(axis) - mn;
+                let n = g.n[axis] as f32;
+                let lo = ((q.min.get(axis) - mn) / size * n).floor() as i64 - 1;
+                let hi = ((q.max.get(axis) - mn) / size * n).floor() as i64 + 1;
+                (
+                    lo.max(0) as u32,
+                    (hi.min(g.n[axis] as i64 - 1)).max(0) as u32,
+                )
+            };
+            let (x0, x1) = range(0);
+            let (y0, y1) = range(1);
+            let (z0, z1) = range(2);
+            for iz in z0..=z1 {
+                for iy in y0..=y1 {
+                    for ix in x0..=x1 {
+                        let id = g.first + ix + g.n[0] * (iy + g.n[1] * iz);
+                        if self.is_destroyed(id) {
+                            continue;
+                        }
+                        let cb = Self::cell_bounds(&s.bounds, g.n, ix, iy, iz);
+                        if !f(&cb, id) {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn overlaps_any(&self, b: &Aabb) -> bool {
-        self.boxes.iter().any(|o| o.overlaps(b))
+        let mut hit = false;
+        self.for_each_candidate(b, 0.0, |o, _| {
+            if o.overlaps(b) {
+                hit = true;
+                return false;
+            }
+            true
+        });
+        hit
     }
 }
 
@@ -232,6 +458,118 @@ mod tests {
         let h1 = m.geometry_hash();
         let h2 = MapDef::from_json(SAMPLE).unwrap().geometry_hash();
         assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn destructible_solids_are_split_into_cells() {
+        let m = MapDef::from_json(
+            r#"{"name":"t","solids":[
+                {"min":[-5,-5,-1],"max":[5,5,0],"material":"concrete"},
+                {"min":[0,-3,0],"max":[0.3,3,3],"material":"drywall"},
+                {"min":[2,-1,0],"max":[3.2,0.2,1.2],"material":"wood","destructible":false}],
+                "spawns":[{"pos":[-1,0,0]}]}"#,
+        )
+        .unwrap();
+        assert!(!m.solids[0].destructible && m.solids[1].destructible && !m.solids[2].destructible);
+        let mut w = CollisionWorld::from_map(&m);
+        let g = w.solids[1].grid.unwrap();
+        assert_eq!(g.n, [1, 20, 10]);
+        assert_eq!(w.cell_count(), 200);
+        // A probe inside the wall overlaps it; destroy the cells around it and it no longer does.
+        let probe = Aabb {
+            min: Vec3::new(0.1, -0.2, 1.0),
+            max: Vec3::new(0.2, 0.2, 1.4),
+        };
+        assert!(w.overlaps_any(&probe));
+        let mut destroyed = 0;
+        let mut ids = Vec::new();
+        w.for_each_candidate(&probe, 0.0, |b, id| {
+            if b.overlaps(&probe) {
+                ids.push(id);
+            }
+            true
+        });
+        for id in ids {
+            destroyed += w.destroy_cell(id) as u32;
+        }
+        assert!(destroyed >= 2 && destroyed <= 6, "{destroyed}");
+        assert!(!w.overlaps_any(&probe));
+        let first = w.destroyed_cells().next().unwrap();
+        assert!(!w.destroy_cell(first));
+        let (si, b) = w.cell_info(g.first + 21).unwrap();
+        assert_eq!(si, 1);
+        assert!(
+            (b.min.y - (-2.7)).abs() < 1e-5 && (b.min.z - 0.3).abs() < 1e-5,
+            "{b:?}"
+        );
+    }
+
+    #[test]
+    fn candidate_scan_matches_full_scan() {
+        let mut w = CollisionWorld::default();
+        w.push_solid(
+            Aabb {
+                min: Vec3::new(-3.0, -2.0, 0.0),
+                max: Vec3::new(3.0, -1.8, 3.0),
+            },
+            Material::Wood,
+            true,
+        );
+        w.push_box(Aabb {
+            min: Vec3::new(-1.0, -1.0, 0.0),
+            max: Vec3::new(1.0, 1.0, 0.5),
+        });
+        w.push_solid(
+            Aabb {
+                min: Vec3::new(-1.0, 1.0, 0.0),
+                max: Vec3::new(1.2, 2.2, 1.2),
+            },
+            Material::Wood,
+            true,
+        );
+        for c in (0..w.cell_count()).step_by(7) {
+            w.destroy_cell(c);
+        }
+        // Full scan reference over every intact box.
+        let mut all = Vec::new();
+        for s in &w.solids {
+            match s.grid {
+                None => all.push(s.bounds),
+                Some(g) => {
+                    for iz in 0..g.n[2] {
+                        for iy in 0..g.n[1] {
+                            for ix in 0..g.n[0] {
+                                if !w.is_destroyed(g.first + ix + g.n[0] * (iy + g.n[1] * iz)) {
+                                    all.push(CollisionWorld::cell_bounds(
+                                        &s.bounds, g.n, ix, iy, iz,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let mut seed = 7u32;
+        for _ in 0..2000 {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let x = (seed >> 8) as f32 / 16_777_216.0 * 8.0 - 4.0;
+            let y = (seed.rotate_left(11) >> 8) as f32 / 16_777_216.0 * 6.0 - 3.0;
+            let z = (seed.rotate_left(22) >> 8) as f32 / 16_777_216.0 * 3.0;
+            let q = Aabb {
+                min: Vec3::new(x, y, z),
+                max: Vec3::new(x + 0.6, y + 0.6, z + 1.8),
+            };
+            let full: Vec<Aabb> = all.iter().copied().filter(|b| b.overlaps(&q)).collect();
+            let mut fast = Vec::new();
+            w.for_each_candidate(&q, 0.0, |b, _| {
+                if b.overlaps(&q) {
+                    fast.push(*b);
+                }
+                true
+            });
+            assert_eq!(full, fast);
+        }
     }
 
     #[test]

@@ -18,7 +18,8 @@ fn main() {
         .unwrap_or_else(|| root.join("Shared/Definitions/conformance/player_vectors.txt"));
     let map =
         MapDef::load(&map_path).unwrap_or_else(|e| panic!("loading {}: {e}", map_path.display()));
-    let world = CollisionWorld::from_map(&map);
+    let mut world = CollisionWorld::from_map(&map);
+    conformance::punch_test_holes(&mut world);
     let starts: Vec<_> = map.spawns.iter().map(|s| s.pos).collect();
     let weapons = WeaponSet::load(root.join("Shared/Definitions/weapons.json")).expect("weapons");
     let text = conformance::generate(&world, &starts, &weapons, 900);

@@ -74,7 +74,8 @@ fn can_climb_the_stairs_to_the_upper_floor() {
 #[test]
 fn conformance_vectors_are_up_to_date() {
     let map = arena();
-    let world = CollisionWorld::from_map(&map);
+    let mut world = CollisionWorld::from_map(&map);
+    conformance::punch_test_holes(&mut world);
     let starts: Vec<_> = map.spawns.iter().map(|s| s.pos).collect();
     let weapons = WeaponSet::load(concat!(
         env!("CARGO_MANIFEST_DIR"),

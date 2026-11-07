@@ -10,7 +10,13 @@ pub mod msg_type {
     pub const HIT_CONFIRM: u8 = 4;
     pub const DAMAGED: u8 = 5;
     pub const KILL: u8 = 6;
+    pub const CELLS_DESTROYED: u8 = 7;
+    pub const EXPLOSION: u8 = 8;
 }
+
+/// Maximum cell ids per CellsDestroyed message (fits the 400-byte per-packet
+/// reliable budget the server uses).
+pub const MAX_CELLS_PER_MESSAGE: usize = 90;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -61,6 +67,11 @@ pub enum Message {
         health: u8,
         from_mm: [i32; 3],
     },
+    /// S -> all. Destructible cells that were destroyed (also sent in full
+    /// to joining players). Clients remove them from collision and visuals.
+    CellsDestroyed { cells: Vec<u32> },
+    /// S -> all. An explosion happened (effects only; damage is server-side).
+    Explosion { pos_mm: [i32; 3], radius_cm: u16 },
     /// S -> all. Kill feed.
     Kill {
         killer: u16,
@@ -79,6 +90,8 @@ impl Message {
             Message::HitConfirm { .. } => msg_type::HIT_CONFIRM,
             Message::Damaged { .. } => msg_type::DAMAGED,
             Message::Kill { .. } => msg_type::KILL,
+            Message::CellsDestroyed { .. } => msg_type::CELLS_DESTROYED,
+            Message::Explosion { .. } => msg_type::EXPLOSION,
         }
     }
 
@@ -125,6 +138,19 @@ impl Message {
                 for v in from_mm {
                     w.i32(*v);
                 }
+            }
+            Message::CellsDestroyed { cells } => {
+                let n = cells.len().min(MAX_CELLS_PER_MESSAGE);
+                w.u8(n as u8);
+                for c in &cells[..n] {
+                    w.u32(*c);
+                }
+            }
+            Message::Explosion { pos_mm, radius_cm } => {
+                for v in pos_mm {
+                    w.i32(*v);
+                }
+                w.u16(*radius_cm);
             }
             Message::Kill {
                 killer,
@@ -180,6 +206,21 @@ impl Message {
                 weapon: r.u8()?,
                 headshot: r.u8()? != 0,
             },
+            msg_type::CELLS_DESTROYED => {
+                let n = r.u8()? as usize;
+                if n > MAX_CELLS_PER_MESSAGE {
+                    return Err(DecodeError::Invalid("too many cells"));
+                }
+                let mut cells = Vec::with_capacity(n);
+                for _ in 0..n {
+                    cells.push(r.u32()?);
+                }
+                Message::CellsDestroyed { cells }
+            }
+            msg_type::EXPLOSION => Message::Explosion {
+                pos_mm: [r.i32()?, r.i32()?, r.i32()?],
+                radius_cm: r.u16()?,
+            },
             _ => return Err(DecodeError::Invalid("unknown message type")),
         })
     }
@@ -221,6 +262,13 @@ mod tests {
                 victim: 4,
                 weapon: 1,
                 headshot: false,
+            },
+            Message::CellsDestroyed {
+                cells: vec![0, 7, 65_000, 1_000_000],
+            },
+            Message::Explosion {
+                pos_mm: [1, -2, 3],
+                radius_cm: 300,
             },
         ] {
             assert_eq!(

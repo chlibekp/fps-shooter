@@ -9,6 +9,7 @@
 pub mod combat;
 pub mod config;
 pub mod connection;
+pub mod destruction;
 pub mod game;
 pub mod server;
 pub mod stats;

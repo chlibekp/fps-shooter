@@ -49,7 +49,7 @@ namespace tfps
 
 	struct ClientEvent
 	{
-		enum class EType : uint8_t { Connected, PlayerJoined, PlayerLeft, PlayerConnState, Disconnected, HitConfirm, Damaged, Kill } Type = EType::Connected;
+		enum class EType : uint8_t { Connected, PlayerJoined, PlayerLeft, PlayerConnState, Disconnected, HitConfirm, Damaged, Kill, Explosion } Type = EType::Connected;
 		uint16_t PlayerId = 0;
 		uint8_t Team = 0;
 		std::string Name;
@@ -64,7 +64,8 @@ namespace tfps
 		uint8_t WeaponId = 0;
 		bool bHeadshot = false;
 		bool bKilled = false;
-		Vec3 From;
+		Vec3 From;          // Damaged: attacker position; Explosion: centre
+		float Radius = 0;   // Explosion
 	};
 
 	/** A shot to visualise (muzzle flash, tracer, impact). */
@@ -129,6 +130,8 @@ namespace tfps
 		bool PollEvent(ClientEvent& Out);
 		/** Shots to visualise since the last call (local predicted and remote). */
 		bool PollShot(FxShot& Out);
+		/** Cells destroyed since the last call (remove visuals, spawn debris). */
+		bool PollDestroyedCell(uint32_t& OutCell);
 
 		EClientPhase Phase() const { return CurPhase; }
 		bool IsConnected() const { return CurPhase == EClientPhase::Connected; }
@@ -195,6 +198,7 @@ namespace tfps
 		WeaponState AuthWeapon;
 		ShotBuffer ShotScratch;
 		std::deque<FxShot> Shots;
+		std::deque<uint32_t> DestroyedCells;
 		std::vector<ShotEvent> ShotEventBuf;
 
 		EClientPhase CurPhase = EClientPhase::Requesting;

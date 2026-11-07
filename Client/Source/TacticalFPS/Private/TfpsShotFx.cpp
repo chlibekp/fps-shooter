@@ -44,6 +44,26 @@ ATfpsShotFx::ATfpsShotFx()
 	MuzzleLight->SetAttenuationRadius(450.0f);
 	MuzzleLight->SetLightColor(FLinearColor(1.0f, 0.75f, 0.45f));
 	MuzzleLight->SetCastShadows(false);
+	BlastLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("BlastLight"));
+	BlastLight->SetupAttachment(GetRootComponent());
+	BlastLight->SetIntensity(0.0f);
+	BlastLight->SetAttenuationRadius(1500.0f);
+	BlastLight->SetLightColor(FLinearColor(1.0f, 0.6f, 0.3f));
+	BlastSphere = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BlastSphere"));
+	BlastSphere->SetupAttachment(GetRootComponent());
+	BlastSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	BlastSphere->SetCastShadow(false);
+	BlastSphere->SetVisibility(false);
+}
+
+void ATfpsShotFx::SpawnExplosion(const FVector& AtCm, float RadiusCm)
+{
+	BlastLight->SetWorldLocation(AtCm);
+	BlastLight->SetIntensity(120000.0f);
+	BlastSphere->SetWorldLocation(AtCm);
+	BlastSphere->SetVisibility(true);
+	BlastRadiusCm = RadiusCm;
+	BlastLife = 0.45f;
 }
 
 void ATfpsShotFx::BeginPlay()
@@ -73,6 +93,8 @@ void ATfpsShotFx::BeginPlay()
 			Pool.Add(P);
 		}
 	};
+	BlastSphere->SetStaticMesh(FTfpsPlaceholderAssets::Sphere());
+	BlastSphere->SetMaterial(0, FTfpsPlaceholderAssets::MakeTinted(this, FLinearColor(3.0f, 1.4f, 0.4f)));
 	MakePool(Tracers, TracerPool, FTfpsPlaceholderAssets::Cylinder());
 	MakePool(Impacts, ImpactPool, FTfpsPlaceholderAssets::Cube());
 	for (FPooled& T : Tracers)
@@ -155,6 +177,11 @@ void ATfpsShotFx::Tick(float DeltaSeconds)
 			}
 		}
 		Net->GetPendingShots().Reset();
+		for (const TPair<FVector, float>& E : Net->GetPendingExplosions())
+		{
+			SpawnExplosion(E.Key * TfpsMetersToUnreal, E.Value * TfpsMetersToUnreal);
+		}
+		Net->GetPendingExplosions().Reset();
 	}
 	auto Age = [DeltaSeconds](TArray<FPooled>& Pool)
 	{
@@ -172,6 +199,19 @@ void ATfpsShotFx::Tick(float DeltaSeconds)
 	};
 	Age(Tracers);
 	Age(Impacts);
+	if (BlastLife > 0.0f)
+	{
+		BlastLife -= DeltaSeconds;
+		const float T = 1.0f - FMath::Max(BlastLife, 0.0f) / 0.45f; // 0 -> 1
+		// Fireball grows to ~60% of the damage radius, then vanishes; light fades.
+		BlastSphere->SetWorldScale3D(FVector(FMath::Max(0.01f, BlastRadiusCm * 0.012f * FMath::Sqrt(T))));
+		BlastLight->SetIntensity(120000.0f * (1.0f - T));
+		if (BlastLife <= 0.0f)
+		{
+			BlastSphere->SetVisibility(false);
+			BlastLight->SetIntensity(0.0f);
+		}
+	}
 	if (MuzzleLife > 0.0f)
 	{
 		MuzzleLife -= DeltaSeconds;

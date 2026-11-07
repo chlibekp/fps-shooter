@@ -67,6 +67,10 @@ public:
 	const FDamageIndicator& GetDamageIndicator() const { return DamageIndicator; }
 	/** Shots to visualise this frame (drained by ATfpsShotFx). */
 	TArray<tfps::FxShot>& GetPendingShots() { return PendingShots; }
+	/** Destroyed cell ids since last drained (ATfpsArenaBuilder removes them and spawns debris). */
+	TArray<uint32>& GetPendingDestroyedCells() { return PendingDestroyedCells; }
+	/** Explosions to visualise: centre (meters) and radius (meters). */
+	TArray<TPair<FVector, float>>& GetPendingExplosions() { return PendingExplosions; }
 	FString PlayerName(uint16 PlayerId) const;
 	bool DeterminismSelfTestPassed() const { return bDeterminismOk; }
 	const TArray<FString>& GetRecentEvents() const { return RecentEvents; }
@@ -95,6 +99,8 @@ private:
 	FHitMarker HitMarker;
 	FDamageIndicator DamageIndicator;
 	TArray<tfps::FxShot> PendingShots;
+	TArray<uint32> PendingDestroyedCells;
+	TArray<TPair<FVector, float>> PendingExplosions;
 	bool bDeterminismOk = true;
 	int32 MapRevision = 0;
 	uint64 LastPumpFrame = 0;

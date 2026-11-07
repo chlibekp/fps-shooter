@@ -2,7 +2,7 @@
   "version": 1,
   "weapons": [
     {
-      "id": 1, "name": "AR-7 Carbine", "class": "rifle", "fire_mode": "auto",
+      "id": 1, "name": "AR-7 Carbine", "class": "rifle", "fire_mode": "auto", "penetration": 1.6,
       "rpm": 780, "mag_size": 30, "reserve": 150, "pellets": 1,
       "damage": 36, "damage_min": 26, "falloff_start": 25, "falloff_end": 45, "range": 150,
       "head_mult": 3.0, "limb_mult": 0.75,
@@ -18,7 +18,7 @@
       }
     },
     {
-      "id": 2, "name": "K-9 SMG", "class": "smg", "fire_mode": "auto",
+      "id": 2, "name": "K-9 SMG", "class": "smg", "fire_mode": "auto", "penetration": 1.0,
       "rpm": 920, "mag_size": 30, "reserve": 180, "pellets": 1,
       "damage": 27, "damage_min": 17, "falloff_start": 12, "falloff_end": 25, "range": 80,
       "head_mult": 3.0, "limb_mult": 0.75,
@@ -33,7 +33,7 @@
       }
     },
     {
-      "id": 3, "name": "M-308 Marksman", "class": "dmr", "fire_mode": "semi",
+      "id": 3, "name": "M-308 Marksman", "class": "dmr", "fire_mode": "semi", "penetration": 2.4,
       "rpm": 300, "mag_size": 10, "reserve": 50, "pellets": 1,
       "damage": 64, "damage_min": 55, "falloff_start": 40, "falloff_end": 80, "range": 250,
       "head_mult": 2.5, "limb_mult": 0.8,
@@ -48,7 +48,7 @@
       }
     },
     {
-      "id": 4, "name": "P-9 Pistol", "class": "pistol", "fire_mode": "semi",
+      "id": 4, "name": "P-9 Pistol", "class": "pistol", "fire_mode": "semi", "penetration": 0.8,
       "rpm": 420, "mag_size": 15, "reserve": 60, "pellets": 1,
       "damage": 32, "damage_min": 22, "falloff_start": 12, "falloff_end": 30, "range": 60,
       "head_mult": 3.0, "limb_mult": 0.75,
@@ -63,7 +63,7 @@
       }
     },
     {
-      "id": 5, "name": "SG-12 Breacher", "class": "shotgun", "fire_mode": "semi",
+      "id": 5, "name": "SG-12 Breacher", "class": "shotgun", "fire_mode": "semi", "penetration": 0.5,
       "rpm": 75, "mag_size": 7, "reserve": 28, "pellets": 8,
       "damage": 18, "damage_min": 6, "falloff_start": 6, "falloff_end": 16, "range": 35,
       "head_mult": 1.5, "limb_mult": 0.8,

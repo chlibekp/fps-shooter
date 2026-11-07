@@ -227,6 +227,13 @@ fn vectors() -> String {
                 health: 64,
                 from_mm: [20_000, -6_000, 1_650],
             },
+            Message::CellsDestroyed {
+                cells: vec![3, 4, 1_000],
+            },
+            Message::Explosion {
+                pos_mm: [-1_500, 2_000, 900],
+                radius_cm: 350,
+            },
             Message::Kill {
                 killer: 2,
                 victim: 5,

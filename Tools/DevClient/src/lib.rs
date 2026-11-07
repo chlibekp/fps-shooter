@@ -111,6 +111,11 @@ pub enum ClientEvent {
         weapon: u8,
         headshot: bool,
     },
+    /// An explosion (effects only), position in millimetres.
+    Explosion {
+        pos_mm: [i32; 3],
+        radius_cm: u16,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -213,6 +218,8 @@ pub struct Client {
     shot_buf: ShotBuffer,
     /// Shots this client fired (predicted), and shot events of others.
     pub local_shots: u64,
+    /// Cells destroyed in this client's collision world (from the server).
+    pub destroyed_cells: u64,
     pub remote_shot_events: Vec<ShotEvent>,
     shot_decode: Vec<ShotEvent>,
     have_authoritative: bool,
@@ -293,6 +300,7 @@ impl Client {
             loadout: weapons.default_loadout,
             shot_buf: ShotBuffer::default(),
             local_shots: 0,
+            destroyed_cells: 0,
             remote_shot_events: Vec::new(),
             shot_decode: Vec::new(),
             have_authoritative: false,
@@ -337,6 +345,11 @@ impl Client {
     /// Sets the input that will be sampled at the next simulation ticks.
     pub fn set_input(&mut self, input: MoveInput) {
         self.current_input = input;
+    }
+
+    /// This client's collision world (with the destruction it was told about).
+    pub fn world(&self) -> &CollisionWorld {
+        &self.world
     }
 
     /// The input currently being sampled.
@@ -755,6 +768,17 @@ impl Client {
                     amount,
                     health,
                 });
+            }
+            Message::CellsDestroyed { cells } => {
+                for c in cells {
+                    if self.world.destroy_cell(c) {
+                        self.destroyed_cells += 1;
+                    }
+                }
+            }
+            Message::Explosion { pos_mm, radius_cm } => {
+                self.events
+                    .push_back(ClientEvent::Explosion { pos_mm, radius_cm });
             }
             Message::Kill {
                 killer,

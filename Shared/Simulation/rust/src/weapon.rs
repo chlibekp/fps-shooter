@@ -60,6 +60,8 @@ pub struct WeaponDef {
     pub falloff_start: f32,
     pub falloff_end: f32,
     pub range: f32,
+    /// Material penetration budget (see server combat: thickness x resistance).
+    pub penetration: f32,
     pub head_mult: f32,
     pub limb_mult: f32,
     pub reload_time: f32,
@@ -78,6 +80,16 @@ pub struct WeaponDef {
 }
 
 impl WeaponDef {
+    /// Per-pellet scale for damage to destructible cells (a shotgun blast
+    /// should not count as 8 full bullets against a wall).
+    pub fn pellets_damage_scale(&self) -> f32 {
+        if self.pellets > 1 {
+            2.0 / self.pellets as f32
+        } else {
+            1.0
+        }
+    }
+
     /// Damage of one pellet/bullet at `distance` meters (before body-part multipliers).
     pub fn damage_at(&self, distance: f32) -> f32 {
         if distance <= self.falloff_start {
@@ -182,6 +194,7 @@ impl WeaponSet {
                 w.falloff_start,
                 w.falloff_end,
                 w.range,
+                w.penetration,
                 w.head_mult,
                 w.limb_mult,
                 w.reload_time,

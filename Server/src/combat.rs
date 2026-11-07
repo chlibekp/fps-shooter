@@ -211,6 +211,11 @@ fn ray_capsule(o: Vec3, d: Vec3, a: Vec3, b: Vec3, r: f32) -> Option<f32> {
 
 /// Ray vs AABB (slab method); entry distance.
 fn ray_aabb(o: Vec3, d: Vec3, b: &Aabb) -> Option<f32> {
+    ray_aabb_interval(o, d, b).map(|(t0, _)| t0)
+}
+
+/// Ray vs AABB (slab method): entry and exit distance (entry clamped to 0).
+pub fn ray_aabb_interval(o: Vec3, d: Vec3, b: &Aabb) -> Option<(f32, f32)> {
     let mut tmin = 0.0f32;
     let mut tmax = f32::INFINITY;
     for axis in 0..3 {
@@ -235,7 +240,7 @@ fn ray_aabb(o: Vec3, d: Vec3, b: &Aabb) -> Option<f32> {
             }
         }
     }
-    Some(tmin)
+    Some((tmin, tmax))
 }
 
 /// Nearest map surface along a ray within `max_t`: (distance, material).

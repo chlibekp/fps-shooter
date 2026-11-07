@@ -46,6 +46,7 @@ template <typename T> struct TArray : std::vector<T>
 	void RemoveAt(int32 I) { this->erase(this->begin() + I); }
 	template <typename P> int32 RemoveAll(P Pred) { auto It = std::remove_if(this->begin(), this->end(), Pred); int32 N = static_cast<int32>(this->end() - It); this->erase(It, this->end()); return N; }
 	void Reset() { this->clear(); }
+	bool IsValidIndex(int32 I) const { return I >= 0 && I < Num(); }
 };
 struct FString
 {
@@ -69,10 +70,17 @@ struct FName { FName() = default; FName(const TCHAR*) {} };
 static const FName NAME_None; static const FName NAME_DGram;
 template <typename T> struct TSharedRef : std::shared_ptr<T> { using std::shared_ptr<T>::shared_ptr; };
 template <typename T> struct TSharedPtr : std::shared_ptr<T> { TSharedPtr() = default; TSharedPtr(const TSharedRef<T>& R) : std::shared_ptr<T>(R) {} bool IsValid() const { return this->get() != nullptr; } };
+template <typename A, typename B> struct TPair { A Key; B Value; TPair() = default; TPair(const A& InA, const B& InB) : Key(InA), Value(InB) {} };
 template <typename K, typename V> struct TMap
 {
 	std::map<K, V> M;
 	V& FindOrAdd(const K& Key) { return M[Key]; }
+	V* Find(const K& Key) { auto It = M.find(Key); return It == M.end() ? nullptr : &It->second; }
+	const V* Find(const K& Key) const { auto It = M.find(Key); return It == M.end() ? nullptr : &It->second; }
+	void Add(const K& Key, const V& Value) { M[Key] = Value; }
+	void Remove(const K& Key) { M.erase(Key); }
+	void Reset() { M.clear(); }
+	int32 Num() const { return static_cast<int32>(M.size()); }
 	struct It
 	{
 		std::map<K, V>* Map; typename std::map<K, V>::iterator I; bool bRemoved = false;
@@ -103,6 +111,7 @@ struct FVector
 	FVector operator-(const FVector& O) const { return {X - O.X, Y - O.Y, Z - O.Z}; }
 	FVector operator*(double S) const { return {X * S, Y * S, Z * S}; }
 	FVector operator/(double S) const { return {X / S, Y / S, Z / S}; }
+	FVector operator*(const FVector& O) const { return {X * O.X, Y * O.Y, Z * O.Z}; }
 	FVector& operator+=(const FVector& O) { X += O.X; Y += O.Y; Z += O.Z; return *this; }
 	FVector& operator*=(double S) { X *= S; Y *= S; Z *= S; return *this; }
 	FVector& operator-=(const FVector& O) { X -= O.X; Y -= O.Y; Z -= O.Z; return *this; }
@@ -122,7 +131,12 @@ struct FRotator
 inline const FRotator FRotator::ZeroRotator{};
 inline FRotator FVector::Rotation() const { return FRotator(0, std::atan2(Y, X) * 57.29578, 0); }
 struct FRotationMatrix { static FRotationMatrix MakeFromZ(const FVector&) { return FRotationMatrix(); } FRotator Rotator() const { return FRotator(); } };
-struct FTransform { static const FTransform Identity; FTransform() = default; FTransform(const FRotator&, const FVector&, const FVector&) {} };
+struct FTransform
+{
+	static const FTransform Identity;
+	FTransform() = default; FTransform(const FRotator&, const FVector&, const FVector&) {}
+	FVector GetLocation() const { return FVector(); } FVector GetScale3D() const { return FVector(1.0); }
+};
 inline const FTransform FTransform::Identity{};
 struct FLinearColor { float R, G, B, A; FLinearColor(float r, float g, float b, float a = 1) : R(r), G(g), B(b), A(a) {} static const FLinearColor Gray; };
 inline const FLinearColor FLinearColor::Gray{0.5f, 0.5f, 0.5f};
@@ -135,6 +149,8 @@ struct FMath
 	static float FInterpTo(float C, float T, float Dt, float S) { return C + (T - C) * std::fmin(1.f, Dt * S); }
 	static float ClampAngle(float A, float Mn, float Mx) { return A < Mn ? Mn : (A > Mx ? Mx : A); }
 	static int32 RandRange(int32 A, int32 B) { return (A + B) / 2; }
+	static float FRandRange(float A, float B) { return (A + B) * 0.5f; }
+	static float Sqrt(float V) { return std::sqrt(V); }
 	template <typename T> static T Clamp(T V, T Lo, T Hi) { return V < Lo ? Lo : (V > Hi ? Hi : V); }
 	template <typename T> static T Min(T A, T B) { return A < B ? A : B; }
 	static float RadiansToDegrees(float R) { return R * 57.29578f; }
@@ -209,9 +225,21 @@ public:
 	FVector GetComponentLocation() const { return FVector(); }
 	void SetMobility(EComponentMobility::Type) {}
 };
-class UPrimitiveComponent : public USceneComponent { public: void SetCollisionEnabled(ECollisionEnabled::Type) {} void SetCastShadow(bool) {} void SetMaterial(int32, UMaterialInterface*) {} };
+class UPrimitiveComponent : public USceneComponent
+{
+public:
+	void SetCollisionEnabled(ECollisionEnabled::Type) {} void SetCastShadow(bool) {} void SetMaterial(int32, UMaterialInterface*) {}
+	UMaterialInterface* GetMaterial(int32) const { return nullptr; }
+	void SetSimulatePhysics(bool) {} void SetPhysicsLinearVelocity(const FVector&) {} void SetCollisionProfileName(const FName&) {}
+};
 class UStaticMeshComponent : public UPrimitiveComponent { public: bool SetStaticMesh(UStaticMesh*) { return true; } };
-class UInstancedStaticMeshComponent : public UStaticMeshComponent { public: int32 AddInstance(const FTransform&, bool bWorldSpace = false) { (void)bWorldSpace; return 0; } };
+class UInstancedStaticMeshComponent : public UStaticMeshComponent
+{
+public:
+	int32 AddInstance(const FTransform&, bool bWorldSpace = false) { (void)bWorldSpace; return 0; }
+	bool GetInstanceTransform(int32, FTransform&, bool bWorldSpace = false) const { (void)bWorldSpace; return true; }
+	bool UpdateInstanceTransform(int32, const FTransform&, bool bWorldSpace = false, bool bMarkRenderStateDirty = false, bool bTeleport = false) { (void)bWorldSpace; (void)bMarkRenderStateDirty; (void)bTeleport; return true; }
+};
 class UCameraComponent : public USceneComponent { public: bool bUsePawnControlRotation = true; void SetFieldOfView(float) {} };
 class UTextRenderComponent : public UPrimitiveComponent
 {

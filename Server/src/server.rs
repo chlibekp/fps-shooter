@@ -14,7 +14,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tfps_protocol::input::InputBundle;
-use tfps_protocol::messages::{ConnState, Message};
+use tfps_protocol::messages::{ConnState, Message, MAX_CELLS_PER_MESSAGE};
 use tfps_protocol::packet::{
     self, BodyKind, Challenge, ChallengeResponse, ConnectAccepted, ConnectRejected, ConnectRequest,
     DataHeader, Disconnect, DisconnectReason, PacketType, RejectReason,
@@ -350,6 +350,14 @@ impl ServerCore {
         .encode(&mut conn.accepted_packet);
         self.send(addr, &conn.accepted_packet);
 
+        // Current destruction state of the map.
+        let destroyed: Vec<u32> = self.game.collision.destroyed_cells().collect();
+        for chunk in destroyed.chunks(MAX_CELLS_PER_MESSAGE) {
+            let m = Message::CellsDestroyed {
+                cells: chunk.to_vec(),
+            };
+            let _ = conn.rel_tx.queue(m.msg_type(), m.encode_payload());
+        }
         // Tell the new client about everyone (including itself).
         for p in self.game.players() {
             let m = Message::PlayerJoined {
@@ -583,6 +591,27 @@ impl ServerCore {
                 self.recent_shots.pop_front();
             }
             self.recent_shots.push_back((*tick, *ev));
+        }
+        // Destruction: replicate events, never debris.
+        let destroyed: Vec<u32> = self.game.destroyed_this_tick().to_vec();
+        for chunk in destroyed.chunks(MAX_CELLS_PER_MESSAGE) {
+            self.broadcast_except(
+                u16::MAX,
+                &Message::CellsDestroyed {
+                    cells: chunk.to_vec(),
+                },
+            );
+        }
+        let explosions = self.game.explosions.clone();
+        for (c, r) in explosions {
+            let pos_mm = [quantize_mm(c.x), quantize_mm(c.y), quantize_mm(c.z)];
+            self.broadcast_except(
+                u16::MAX,
+                &Message::Explosion {
+                    pos_mm,
+                    radius_cm: (r * 100.0).round() as u16,
+                },
+            );
         }
         let events = std::mem::take(&mut self.game.events);
         for ev in &events {

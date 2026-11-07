@@ -33,12 +33,19 @@ private:
 
 	void SpawnTracer(const FVector& From, const FVector& To);
 	void SpawnImpact(const FVector& At, uint8 Surface);
+	void SpawnExplosion(const FVector& AtCm, float RadiusCm);
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> MeshRefs;
 
 	UPROPERTY()
 	TObjectPtr<UPointLightComponent> MuzzleLight;
+
+	UPROPERTY()
+	TObjectPtr<UPointLightComponent> BlastLight;
+
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> BlastSphere;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> SurfaceMaterials;
@@ -51,4 +58,6 @@ private:
 	int32 NextTracer = 0;
 	int32 NextImpact = 0;
 	float MuzzleLife = 0.0f;
+	float BlastLife = 0.0f;
+	float BlastRadiusCm = 0.0f;
 };

@@ -389,41 +389,76 @@ impl CollisionWorld {
             if !s.bounds.overlaps(&q) {
                 continue;
             }
-            let Some(g) = s.grid else {
+            if s.grid.is_none() {
                 if !f(&s.bounds, u32::MAX) {
                     return;
                 }
                 continue;
-            };
-            // Conservative index range per axis (+-1 against rounding).
-            let range = |axis: usize| {
-                let mn = s.bounds.min.get(axis);
-                let size = s.bounds.max.get(axis) - mn;
-                let n = g.n[axis] as f32;
-                let lo = ((q.min.get(axis) - mn) / size * n).floor() as i64 - 1;
-                let hi = ((q.max.get(axis) - mn) / size * n).floor() as i64 + 1;
-                (
-                    lo.max(0) as u32,
-                    (hi.min(g.n[axis] as i64 - 1)).max(0) as u32,
-                )
-            };
-            let (x0, x1) = range(0);
-            let (y0, y1) = range(1);
-            let (z0, z1) = range(2);
-            for iz in z0..=z1 {
-                for iy in y0..=y1 {
-                    for ix in x0..=x1 {
-                        let id = g.first + ix + g.n[0] * (iy + g.n[1] * iz);
-                        if self.is_destroyed(id) {
-                            continue;
-                        }
-                        let cb = Self::cell_bounds(&s.bounds, g.n, ix, iy, iz);
-                        if !f(&cb, id) {
-                            return;
-                        }
+            }
+            if !self.for_each_cell_in(s, &q, &mut f) {
+                return;
+            }
+        }
+    }
+
+    /// Calls `f(cell_box, id)` for intact cells of grid solid `s` that may
+    /// overlap `q`, ascending. Returns false if `f` asked to stop.
+    fn for_each_cell_in(
+        &self,
+        s: &WorldSolid,
+        q: &Aabb,
+        f: &mut impl FnMut(&Aabb, u32) -> bool,
+    ) -> bool {
+        let Some(g) = s.grid else { return true };
+        // Conservative index range per axis (+-1 against rounding).
+        let range = |axis: usize| {
+            let mn = s.bounds.min.get(axis);
+            let size = s.bounds.max.get(axis) - mn;
+            let n = g.n[axis] as f32;
+            let lo = ((q.min.get(axis) - mn) / size * n).floor() as i64 - 1;
+            let hi = ((q.max.get(axis) - mn) / size * n).floor() as i64 + 1;
+            (
+                lo.max(0) as u32,
+                (hi.min(g.n[axis] as i64 - 1)).max(0) as u32,
+            )
+        };
+        let (x0, x1) = range(0);
+        let (y0, y1) = range(1);
+        let (z0, z1) = range(2);
+        for iz in z0..=z1 {
+            for iy in y0..=y1 {
+                for ix in x0..=x1 {
+                    let id = g.first + ix + g.n[0] * (iy + g.n[1] * iz);
+                    if self.is_destroyed(id) {
+                        continue;
+                    }
+                    let cb = Self::cell_bounds(&s.bounds, g.n, ix, iy, iz);
+                    if !f(&cb, id) {
+                        return false;
                     }
                 }
             }
+        }
+        true
+    }
+
+    /// Intact cells of solid `si` that may overlap `q` (server-side queries).
+    pub fn for_each_cell_of_solid(
+        &self,
+        si: usize,
+        q: &Aabb,
+        mut f: impl FnMut(&Aabb, u32) -> bool,
+    ) {
+        if let Some(s) = self.solids.get(si) {
+            self.for_each_cell_in(s, q, &mut f);
+        }
+    }
+
+    /// All cell ids of solid `si` (for shattering).
+    pub fn cells_of_solid(&self, si: usize) -> std::ops::Range<u32> {
+        match self.solids.get(si).and_then(|s| s.grid) {
+            Some(g) => g.first..g.first + g.count(),
+            None => 0..0,
         }
     }
 

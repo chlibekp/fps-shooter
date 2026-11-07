@@ -184,7 +184,7 @@ TFPS_TEST(MapJsonHashMatchesRust)
 	{
 		TFPS_EXPECT(std::strtoull(Expected, nullptr, 16) == Map.GeometryHash());
 	}
-	TFPS_EXPECT(Map.Solids.size() == 87);
+	TFPS_EXPECT(Map.Solids.size() == 105);
 	TFPS_EXPECT(Map.Spawns.size() == 6);
 }
 

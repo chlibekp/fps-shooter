@@ -12,11 +12,14 @@ import os
 solids = []
 
 
-def box(x0, y0, z0, x1, y1, z1, material, tag):
+def box(x0, y0, z0, x1, y1, z1, material, tag, destructible=None):
     lo = [min(x0, x1), min(y0, y1), min(z0, z1)]
     hi = [max(x0, x1), max(y0, y1), max(z0, z1)]
-    solids.append({"min": [round(v, 4) for v in lo], "max": [round(v, 4) for v in hi],
-                   "material": material, "tag": tag})
+    s = {"min": [round(v, 4) for v in lo], "max": [round(v, 4) for v in hi],
+         "material": material, "tag": tag}
+    if destructible is not None:
+        s["destructible"] = destructible
+    solids.append(s)
 
 
 def wall_x(y0, y1, x_from, x_to, z0, z1, material, tag, openings=()):
@@ -83,10 +86,15 @@ SX0, SX1, SY0, SY1 = 0.8, 4.8, 2.6, 4.7
 tread = (SX1 - SX0) / STEPS
 for i in range(STEPS):
     top = G + (SLAB - G) * (i + 1) / STEPS
-    box(SX0 + tread * i, SY0, G, SX1, SY1, top, "wood", "stairs")
+    box(SX0 + tread * i, SY0, G, SX1, SY1, top, "wood", "stairs", destructible=False)
 
-# Upper floor slab with a hole above the stairs
-box(-6, -5, F1, SX0, 5, SLAB, "concrete", "slab")
+# Upper floor slab with a hole above the stairs and a breakable wooden hatch
+HX0, HX1, HY0, HY1 = -3.0, -1.0, -2.0, 0.0
+box(-6, -5, F1, HX0, 5, SLAB, "concrete", "slab")
+box(HX1, -5, F1, SX0, 5, SLAB, "concrete", "slab")
+box(HX0, -5, F1, HX1, HY0, SLAB, "concrete", "slab")
+box(HX0, HY1, F1, HX1, 5, SLAB, "concrete", "slab")
+box(HX0, HY0, F1, HX1, HY1, SLAB, "wood", "floor_hatch")
 box(SX1, -5, F1, 6, 5, SLAB, "concrete", "slab")
 box(SX0, -5, F1, SX1, SY0, SLAB, "concrete", "slab")
 box(SX0, SY1, F1, SX1, 5, SLAB, "concrete", "slab")
@@ -100,6 +108,30 @@ wall_x(5 - T, 5, -6, 6, SLAB, F2, "wood", "wall_n2", [(-3, -1, SLAB + 0.9, SLAB 
 wall_y(-6, -6 + T, -5 + T, 5 - T, SLAB, F2, "wood", "wall_w2", [(-1, 1, SLAB + 0.9, SLAB + 2.0)])
 wall_y(6 - T, 6, -5 + T, 5 - T, SLAB, F2, "wood", "wall_e2", [(-3, -1, SLAB + 0.9, SLAB + 2.0)])
 box(-6, -5, F2, 6, 5, ROOF, "concrete", "roof")
+
+# --- Breakables: glass panes, doors, barricade --------------------------------
+PANE = 0.02
+def pane_x(y_mid, xa, xb, z0, z1, tag="window_glass"):
+    box(xa, y_mid - PANE / 2, z0, xb, y_mid + PANE / 2, z1, "glass", tag)
+def pane_y(x_mid, ya, yb, z0, z1, tag="window_glass"):
+    box(x_mid - PANE / 2, ya, z0, x_mid + PANE / 2, yb, z1, "glass", tag)
+
+# Ground floor windows
+pane_x(-5 + T / 2, 3, 5, WIN_SILL, WIN_HEAD)
+pane_x(5 - T / 2, -4, -2, WIN_SILL, WIN_HEAD)
+pane_y(6 - T / 2, -1.5, 0.5, WIN_SILL, WIN_HEAD)
+# Upper floor windows
+for (xa, xb) in [(-4, -2), (2, 4)]:
+    pane_x(-5 + T / 2, xa, xb, SLAB + 0.9, SLAB + 2.0)
+pane_x(5 - T / 2, -3, -1, SLAB + 0.9, SLAB + 2.0)
+pane_y(-6 + T / 2, -1, 1, SLAB + 0.9, SLAB + 2.0)
+pane_y(6 - T / 2, -3, -1, SLAB + 0.9, SLAB + 2.0)
+# Wooden doors (closed; breakable): west entrance and the interior partition
+box(-6 + T / 2 - 0.025, -1, G, -6 + T / 2 + 0.025, 1, DOOR, "wood", "door")
+box(-0.025, -3.2, G, 0.025, -2.2, DOOR, "wood", "door")
+# Barricade of planks across the north doorway (gaps between planks)
+for k, z in enumerate([0.35, 0.9, 1.45, 2.0]):
+    box(2.0, 5 - T / 2 - 0.03, z, 3.6, 5 - T / 2 + 0.03, z + 0.22, "wood", "barricade")
 
 # --- Yard cover --------------------------------------------------------------
 # Shipping container (metal) with an open end facing west

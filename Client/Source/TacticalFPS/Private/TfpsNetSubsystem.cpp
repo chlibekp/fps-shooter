@@ -111,6 +111,11 @@ void UTfpsNetSubsystem::Pump()
 			PendingShots.Add(Shot);
 		}
 	}
+	uint32_t Cell = 0;
+	while (Core && Core->PollDestroyedCell(Cell))
+	{
+		PendingDestroyedCells.Add(Cell);
+	}
 	const double Now = FPlatformTime::Seconds();
 	KillFeed.RemoveAll([Now](const FKillFeedEntry& E) { return Now - E.Time > 6.0; });
 }
@@ -182,6 +187,12 @@ void UTfpsNetSubsystem::HandleEvents()
 			DamageIndicator.Time = FPlatformTime::Seconds();
 			DamageIndicator.FromMeters = FVector(Event.From.X, Event.From.Y, Event.From.Z);
 			DamageIndicator.Amount = Event.Amount;
+			break;
+		case tfps::ClientEvent::EType::Explosion:
+			if (PendingExplosions.Num() < 32)
+			{
+				PendingExplosions.Add(TPair<FVector, float>(FVector(Event.From.X, Event.From.Y, Event.From.Z), Event.Radius));
+			}
 			break;
 		case tfps::ClientEvent::EType::Kill:
 		{

@@ -623,3 +623,65 @@ fn combat_over_the_network_hits_kills_and_respawns() {
         b.health
     );
 }
+
+#[test]
+fn destruction_is_replicated_and_late_joiners_get_it() {
+    // Open field with a drywall wall between the spawns.
+    let map = || {
+        MapDef::from_json(
+            r#"{"name":"walls","solids":[{"min":[-30,-30,-1],"max":[30,30,0],"material":"dirt"},
+                {"min":[0,-4,0],"max":[0.1,4,3],"material":"drywall"}],
+                "spawns":[{"pos":[-7.5,0,0],"team":0},{"pos":[7.5,0,0],"yaw":180,"team":1}]}"#,
+        )
+        .unwrap()
+    };
+    let srv = tfps_server::start_with_data(test_cfg(), map(), weapons()).unwrap();
+    let mut a = Client::connect(
+        ClientConfig::new(srv.local_addr, "Breacher"),
+        &map(),
+        &weapons(),
+    )
+    .unwrap();
+    connect_all(&mut [&mut a]);
+    run(&mut [&mut a], Duration::from_millis(300));
+    // Spray into the wall (aim slightly to the side so no player is involved).
+    let (yaw_q, pitch_q) = aim(
+        a.predicted.eye_position(0),
+        tfps_sim::Vec3::new(0.0, 1.0, 1.4),
+    );
+    a.set_input(MoveInput {
+        buttons: buttons::FIRE,
+        yaw_q,
+        pitch_q,
+        slot: 0,
+    });
+    run(&mut [&mut a], Duration::from_millis(1500));
+    a.set_input(MoveInput {
+        buttons: 0,
+        yaw_q,
+        pitch_q,
+        slot: 0,
+    });
+    run(&mut [&mut a], Duration::from_millis(400));
+    assert!(a.destroyed_cells > 0, "spraying drywall must break cells");
+    let destroyed: Vec<u32> = a.world().destroyed_cells().collect();
+
+    // A player joining now receives the same destruction state.
+    let mut b = Client::connect(
+        ClientConfig::new(srv.local_addr, "Late"),
+        &map(),
+        &weapons(),
+    )
+    .unwrap();
+    connect_all(&mut [&mut a, &mut b]);
+    run(&mut [&mut a, &mut b], Duration::from_millis(500));
+    let b_destroyed: Vec<u32> = b.world().destroyed_cells().collect();
+    assert_eq!(destroyed, b_destroyed);
+    // The hole is real for movement prediction too: a probe box in the hole is free.
+    let hole = b.world().cell_info(destroyed[0]).unwrap().1;
+    let probe = tfps_sim::Aabb {
+        min: tfps_sim::Vec3::new(hole.min.x + 0.01, hole.min.y + 0.01, hole.min.z + 0.01),
+        max: tfps_sim::Vec3::new(hole.max.x - 0.01, hole.max.y - 0.01, hole.max.z - 0.01),
+    };
+    assert!(!b.world().overlaps_any(&probe));
+}

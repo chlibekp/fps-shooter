@@ -106,7 +106,9 @@ impl ReliableSender {
                 }
             }
             let size = 5 + p.payload.len();
-            if used + size > budget {
+            // Always allow one message per packet so an oversize message can
+            // never stall the channel.
+            if used + size > budget && count > 0 {
                 break;
             }
             w.u16(p.seq);

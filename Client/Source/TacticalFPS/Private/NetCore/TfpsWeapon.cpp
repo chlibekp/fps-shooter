@@ -78,7 +78,7 @@ namespace tfps
 			H.Write(B, 3);
 			const uint8_t M[4] = {static_cast<uint8_t>(W.MagSize), static_cast<uint8_t>(W.MagSize >> 8), static_cast<uint8_t>(W.Reserve), static_cast<uint8_t>(W.Reserve >> 8)};
 			H.Write(M, 4);
-			const float Vals[] = {W.Rpm, W.Damage, W.DamageMin, W.FalloffStart, W.FalloffEnd, W.Range, W.HeadMult, W.LimbMult, W.ReloadTime,
+			const float Vals[] = {W.Rpm, W.Damage, W.DamageMin, W.FalloffStart, W.FalloffEnd, W.Range, W.Penetration, W.HeadMult, W.LimbMult, W.ReloadTime,
 				W.ReloadEmptyTime, W.AdsTime, W.EquipTime, W.SpreadHip, W.SpreadAds, W.SpreadMove, W.SpreadJump, W.SpreadCrouchMult, W.SpreadProneMult};
 			for (float V : Vals) { H.WriteF32(V); }
 			const RecoilDef& R = W.Recoil;
@@ -121,7 +121,7 @@ namespace tfps
 			W.Reserve = static_cast<uint16_t>(JsonNumber(J, "reserve", 0));
 			W.Pellets = static_cast<uint8_t>(JsonNumber(J, "pellets", 1));
 			W.Damage = JF(J, "damage"); W.DamageMin = JF(J, "damage_min");
-			W.FalloffStart = JF(J, "falloff_start"); W.FalloffEnd = JF(J, "falloff_end"); W.Range = JF(J, "range");
+			W.FalloffStart = JF(J, "falloff_start"); W.FalloffEnd = JF(J, "falloff_end"); W.Range = JF(J, "range"); W.Penetration = JF(J, "penetration");
 			W.HeadMult = JF(J, "head_mult"); W.LimbMult = JF(J, "limb_mult");
 			W.ReloadTime = JF(J, "reload_time"); W.ReloadEmptyTime = JF(J, "reload_empty_time");
 			W.AdsTime = JF(J, "ads_time"); W.EquipTime = JF(J, "equip_time");

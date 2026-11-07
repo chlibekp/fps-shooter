@@ -43,6 +43,14 @@ namespace tfps
 		SessionReconnectToken = Config.ReconnectToken;
 	}
 
+	bool ClientCore::PollDestroyedCell(uint32_t& OutCell)
+	{
+		if (DestroyedCells.empty()) { return false; }
+		OutCell = DestroyedCells.front();
+		DestroyedCells.pop_front();
+		return true;
+	}
+
 	bool ClientCore::PollShot(FxShot& Out)
 	{
 		if (Shots.empty()) { return false; }
@@ -395,6 +403,17 @@ namespace tfps
 			E.Amount = M.Amount;
 			E.Health = M.Health;
 			E.From = Vec3(DequantizeMm(M.FromMm[0]), DequantizeMm(M.FromMm[1]), DequantizeMm(M.FromMm[2]));
+			break;
+		case MsgType::CellsDestroyed:
+			for (uint32_t Cell : M.Cells)
+			{
+				if (Collision.DestroyCell(Cell)) { DestroyedCells.push_back(Cell); }
+			}
+			return; // no event: visuals poll PollDestroyedCell
+		case MsgType::Explosion:
+			E.Type = ClientEvent::EType::Explosion;
+			E.From = Vec3(DequantizeMm(M.FromMm[0]), DequantizeMm(M.FromMm[1]), DequantizeMm(M.FromMm[2]));
+			E.Radius = static_cast<float>(M.RadiusCm) * 0.01f;
 			break;
 		case MsgType::Kill:
 			E.Type = ClientEvent::EType::Kill;

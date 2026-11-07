@@ -432,6 +432,18 @@ namespace tfps
 			Health = R.U8();
 			FromMm[0] = R.I32(); FromMm[1] = R.I32(); FromMm[2] = R.I32();
 			break;
+		case MsgType::CellsDestroyed:
+		{
+			const uint8_t N = R.U8();
+			if (N > kMaxCellsPerMessage) { return false; }
+			Cells.clear();
+			for (uint8_t I = 0; I < N && R.Ok(); ++I) { Cells.push_back(R.U32()); }
+			break;
+		}
+		case MsgType::Explosion:
+			FromMm[0] = R.I32(); FromMm[1] = R.I32(); FromMm[2] = R.I32();
+			RadiusCm = R.U16();
+			break;
 		case MsgType::Kill:
 			OtherId = R.U16();   // killer
 			PlayerId = R.U16();  // victim
@@ -456,6 +468,14 @@ namespace tfps
 		case MsgType::HitConfirm: W.U16(OtherId); W.U8(Amount); W.U8(static_cast<uint8_t>((bHeadshot ? 1 : 0) | (bKilled ? 2 : 0))); break;
 		case MsgType::Damaged: W.U16(OtherId); W.U8(Amount); W.U8(Health); W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); break;
 		case MsgType::Kill: W.U16(OtherId); W.U16(PlayerId); W.U8(WeaponId); W.U8(bHeadshot ? 1 : 0); break;
+		case MsgType::CellsDestroyed:
+		{
+			const size_t N = Cells.size() < kMaxCellsPerMessage ? Cells.size() : kMaxCellsPerMessage;
+			W.U8(static_cast<uint8_t>(N));
+			for (size_t I = 0; I < N; ++I) { W.U32(Cells[I]); }
+			break;
+		}
+		case MsgType::Explosion: W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); W.U16(RadiusCm); break;
 		default: break;
 		}
 		return V;

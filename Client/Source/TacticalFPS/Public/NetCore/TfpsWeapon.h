@@ -37,7 +37,7 @@ namespace tfps
 		uint16_t MagSize = 30;
 		uint16_t Reserve = 90;
 		uint8_t Pellets = 1;
-		float Damage = 30, DamageMin = 20, FalloffStart = 20, FalloffEnd = 40, Range = 100;
+		float Damage = 30, DamageMin = 20, FalloffStart = 20, FalloffEnd = 40, Range = 100, Penetration = 1;
 		float HeadMult = 3, LimbMult = 0.75f;
 		float ReloadTime = 2, ReloadEmptyTime = 2.5f, AdsTime = 0.25f, EquipTime = 0.5f;
 		float SpreadHip = 2, SpreadAds = 0.1f, SpreadMove = 0.5f, SpreadJump = 4, SpreadCrouchMult = 1, SpreadProneMult = 1;

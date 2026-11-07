@@ -406,7 +406,8 @@
     0.3462
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -420,7 +421,8 @@
     0.5923
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -434,7 +436,8 @@
     0.8385
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -448,7 +451,8 @@
     1.0846
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -462,7 +466,8 @@
     1.3308
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -476,7 +481,8 @@
     1.5769
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -490,7 +496,8 @@
     1.8231
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -504,7 +511,8 @@
     2.0692
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -518,7 +526,8 @@
     2.3154
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -532,7 +541,8 @@
     2.5615
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -546,7 +556,8 @@
     2.8077
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -560,7 +571,8 @@
     3.0538
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
@@ -574,11 +586,26 @@
     3.3
    ],
    "material": "wood",
-   "tag": "stairs"
+   "tag": "stairs",
+   "destructible": false
   },
   {
    "min": [
     -6,
+    -5,
+    3.0
+   ],
+   "max": [
+    -3.0,
+    5,
+    3.3
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    -1.0,
     -5,
     3.0
    ],
@@ -589,6 +616,48 @@
    ],
    "material": "concrete",
    "tag": "slab"
+  },
+  {
+   "min": [
+    -3.0,
+    -5,
+    3.0
+   ],
+   "max": [
+    -1.0,
+    -2.0,
+    3.3
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    -3.0,
+    0.0,
+    3.0
+   ],
+   "max": [
+    -1.0,
+    5,
+    3.3
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    -3.0,
+    -2.0,
+    3.0
+   ],
+   "max": [
+    -1.0,
+    0.0,
+    3.3
+   ],
+   "material": "wood",
+   "tag": "floor_hatch"
   },
   {
    "min": [
@@ -925,6 +994,202 @@
    ],
    "material": "concrete",
    "tag": "roof"
+  },
+  {
+   "min": [
+    3,
+    -4.86,
+    1.0
+   ],
+   "max": [
+    5,
+    -4.84,
+    2.0
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    -4,
+    4.84,
+    1.0
+   ],
+   "max": [
+    -2,
+    4.86,
+    2.0
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    5.84,
+    -1.5,
+    1.0
+   ],
+   "max": [
+    5.86,
+    0.5,
+    2.0
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    -4,
+    -4.86,
+    4.2
+   ],
+   "max": [
+    -2,
+    -4.84,
+    5.3
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    2,
+    -4.86,
+    4.2
+   ],
+   "max": [
+    4,
+    -4.84,
+    5.3
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    -3,
+    4.84,
+    4.2
+   ],
+   "max": [
+    -1,
+    4.86,
+    5.3
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    -5.86,
+    -1,
+    4.2
+   ],
+   "max": [
+    -5.84,
+    1,
+    5.3
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    5.84,
+    -3,
+    4.2
+   ],
+   "max": [
+    5.86,
+    -1,
+    5.3
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    -5.875,
+    -1,
+    0.1
+   ],
+   "max": [
+    -5.825,
+    1,
+    2.2
+   ],
+   "material": "wood",
+   "tag": "door"
+  },
+  {
+   "min": [
+    -0.025,
+    -3.2,
+    0.1
+   ],
+   "max": [
+    0.025,
+    -2.2,
+    2.2
+   ],
+   "material": "wood",
+   "tag": "door"
+  },
+  {
+   "min": [
+    2.0,
+    4.82,
+    0.35
+   ],
+   "max": [
+    3.6,
+    4.88,
+    0.57
+   ],
+   "material": "wood",
+   "tag": "barricade"
+  },
+  {
+   "min": [
+    2.0,
+    4.82,
+    0.9
+   ],
+   "max": [
+    3.6,
+    4.88,
+    1.12
+   ],
+   "material": "wood",
+   "tag": "barricade"
+  },
+  {
+   "min": [
+    2.0,
+    4.82,
+    1.45
+   ],
+   "max": [
+    3.6,
+    4.88,
+    1.67
+   ],
+   "material": "wood",
+   "tag": "barricade"
+  },
+  {
+   "min": [
+    2.0,
+    4.82,
+    2.0
+   ],
+   "max": [
+    3.6,
+    4.88,
+    2.22
+   ],
+   "material": "wood",
+   "tag": "barricade"
   },
   {
    "min": [

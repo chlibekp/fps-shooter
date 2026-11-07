@@ -151,6 +151,12 @@ TFPS_TEST(GoldenDataPacketsMatchRust)
 	TFPS_EXPECT(M.Type == MsgType::Damaged && M.OtherId == 2 && M.Amount == 36 && M.Health == 64 && M.FromMm[0] == 20000 && M.FromMm[2] == 1650);
 	TFPS_EXPECT(M.EncodePayload() == Payload);
 	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::CellsDestroyed && M.Cells.size() == 3 && M.Cells[2] == 1000);
+	TFPS_EXPECT(M.EncodePayload() == Payload);
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::Explosion && M.FromMm[0] == -1500 && M.RadiusCm == 350);
+	TFPS_EXPECT(M.EncodePayload() == Payload);
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
 	TFPS_EXPECT(M.Type == MsgType::Kill && M.OtherId == 2 && M.PlayerId == 5 && M.WeaponId == 1 && M.bHeadshot);
 	TFPS_EXPECT(M.EncodePayload() == Payload);
 	TFPS_EXPECT(!Rx.Pop(Type, Payload));

@@ -4,6 +4,7 @@
 //! advances the simulation by exactly one fixed step.
 
 use crate::combat::{self, BodyPart, Hitboxes, LagHistory};
+use crate::destruction::{self, Destruction, Obstacle};
 use tfps_protocol::snapshot::{
     entity_flags, quantize_lean, quantize_mm, quantize_unit, surface, EntityState, ShotEvent,
 };
@@ -294,11 +295,16 @@ pub struct GameWorld {
     shot_buf: ShotBuffer,
     entity_buf: Vec<EntityState>,
     pending_shots: Vec<(u16, u32, Shot)>,
+    destruction: Destruction,
+    trace_buf: Vec<Obstacle>,
+    /// Explosions this tick (centre, radius), for effects.
+    pub explosions: Vec<(Vec3, f32)>,
 }
 
 impl GameWorld {
     pub fn new(map: MapDef, weapons: WeaponSet, rules: MatchRules, tick_rate: u16) -> Self {
         let collision = CollisionWorld::from_map(&map);
+        let destruction = Destruction::new(&collision);
         // One second of history (enough for any accepted rewind).
         let history = LagHistory::new(tick_rate as usize + 8);
         Self {
@@ -317,6 +323,9 @@ impl GameWorld {
             shot_buf: ShotBuffer::default(),
             entity_buf: Vec::with_capacity(64),
             pending_shots: Vec::with_capacity(64),
+            destruction,
+            trace_buf: Vec::with_capacity(64),
+            explosions: Vec::new(),
         }
     }
 
@@ -462,6 +471,8 @@ impl GameWorld {
         self.tick = self.tick.wrapping_add(1);
         self.shot_events.clear();
         self.events.clear();
+        self.explosions.clear();
+        self.destruction.destroyed_this_tick.clear();
         self.pending_shots.clear();
         let dt = self.dt;
         let kill_z = self.map.kill_z;
@@ -538,11 +549,10 @@ impl GameWorld {
         };
         let dir = combat::direction(shot.yaw_deg, shot.pitch_deg);
         let origin = shot.origin;
-        let world_hit = combat::raycast_world(&self.map, origin, dir, def.range);
-        let max_t = world_hit.map(|(t, _)| t).unwrap_or(def.range);
         let t_rewind = self.rewind_tick(render_time);
 
-        let mut best: Option<(f32, BodyPart, u16)> = None;
+        // Every player the ray would hit (against rewound state), nearest first.
+        let mut player_hits: Vec<(f32, BodyPart, u16)> = Vec::new();
         for p in &self.players {
             if p.id == shooter_id
                 || !p.alive
@@ -556,16 +566,52 @@ impl GameWorld {
             if past.flags & entity_flags::ALIVE == 0 {
                 continue;
             }
-            if let Some((t, part)) = Hitboxes::from_entity(&past).raycast(origin, dir, max_t) {
-                if best.is_none_or(|(bt, _, _)| t < bt) {
-                    best = Some((t, part, p.id));
-                }
+            if let Some((t, part)) = Hitboxes::from_entity(&past).raycast(origin, dir, def.range) {
+                player_hits.push((t, part, p.id));
             }
         }
+        player_hits.sort_by(|a, b| a.0.total_cmp(&b.0));
 
-        let (end_t, surface_kind) = match (best, world_hit) {
-            (Some((t, _, _)), _) => (t, surface::PLAYER),
-            (None, Some((t, m))) => (t, m as u8),
+        // Walk the obstacles (current destruction state) in order: damage the
+        // cells crossed, penetrate while the bullet has power left.
+        let mut obs = std::mem::take(&mut self.trace_buf);
+        destruction::trace(&self.collision, origin, dir, def.range, &mut obs);
+        let mut power = def.penetration;
+        let mut dmg_mult = 1.0f32;
+        let mut blocked_at: Option<(f32, u8)> = None;
+        let mut victim: Option<(f32, BodyPart, u16, f32)> = None;
+        for ob in &obs {
+            if let Some(&(t, part, id)) = player_hits.first() {
+                if t < ob.t_in {
+                    victim = Some((t, part, id, dmg_mult));
+                    break;
+                }
+            }
+            let pr = destruction::props(ob.material);
+            if let Some(cell) = ob.cell {
+                let amount =
+                    def.damage_at(ob.t_in) * dmg_mult * pr.bullet_mult * def.pellets_damage_scale();
+                self.destruction
+                    .damage_cell(&mut self.collision, cell, amount);
+            }
+            let cost = (ob.t_out - ob.t_in) * pr.resistance;
+            if !cost.is_finite() || cost > power {
+                blocked_at = Some((ob.t_in, ob.material as u8));
+                break;
+            }
+            power -= cost;
+            dmg_mult *= (1.0 - 0.6 * cost / def.penetration).max(0.2);
+        }
+        if victim.is_none() && blocked_at.is_none() {
+            if let Some(&(t, part, id)) = player_hits.first() {
+                victim = Some((t, part, id, dmg_mult));
+            }
+        }
+        self.trace_buf = obs;
+
+        let (end_t, surface_kind) = match (victim, blocked_at) {
+            (Some((t, _, _, _)), _) => (t, surface::PLAYER),
+            (None, Some((t, m))) => (t, m),
             (None, None) => (def.range, surface::NONE),
         };
         let end = combat::point_along(origin, dir, end_t);
@@ -579,7 +625,7 @@ impl GameWorld {
             },
         ));
 
-        let Some((t, part, victim_id)) = best else {
+        let Some((t, part, victim_id, mult_through)) = victim else {
             return;
         };
         let mult = match part {
@@ -587,12 +633,35 @@ impl GameWorld {
             BodyPart::Torso => 1.0,
             BodyPart::Limb => def.limb_mult,
         };
-        let raw = def.damage_at(t) * mult * self.rules.damage_multiplier;
+        let raw = def.damage_at(t) * mult * mult_through * self.rules.damage_multiplier;
+        self.apply_damage(
+            victim_id,
+            Some(shooter_id),
+            raw,
+            part == BodyPart::Head,
+            def.id,
+            shooter_pos,
+        );
+    }
+
+    /// Applies damage and emits Hit/Kill events. `attacker` None = world.
+    fn apply_damage(
+        &mut self,
+        victim_id: u16,
+        attacker: Option<u16>,
+        raw: f32,
+        headshot: bool,
+        weapon: u8,
+        from: Vec3,
+    ) {
         let damage = raw.round().clamp(1.0, 255.0) as u8;
         let respawn_delay = self.rules.respawn_delay;
         let Some(victim) = self.player_mut(victim_id) else {
             return;
         };
+        if !victim.alive {
+            return;
+        }
         let killed = damage >= victim.health;
         victim.health = victim.health.saturating_sub(damage);
         if killed {
@@ -602,26 +671,89 @@ impl GameWorld {
             victim.deaths += 1;
             victim.state.vel = Vec3::ZERO;
         }
-        let headshot = part == BodyPart::Head;
+        let shooter = attacker.unwrap_or(victim_id);
         self.events.push(GameEvent::Hit {
-            shooter: shooter_id,
+            shooter,
             victim: victim_id,
             damage,
             headshot,
             killed,
-            shooter_pos,
+            shooter_pos: from,
         });
         if killed {
-            if let Some(s) = self.player_mut(shooter_id) {
-                s.kills += 1;
+            if let Some(a) = attacker.filter(|a| *a != victim_id) {
+                if let Some(s) = self.player_mut(a) {
+                    s.kills += 1;
+                }
             }
             self.events.push(GameEvent::Kill {
-                killer: shooter_id,
+                killer: shooter,
                 victim: victim_id,
-                weapon: def.id,
+                weapon,
                 headshot,
             });
         }
+    }
+
+    /// Explosion at `center` (frag grenade, breaching charge...): damages
+    /// players with linear falloff (halved per destructible layer in between,
+    /// blocked by indestructible geometry) and breaks destructible cells.
+    pub fn explode(
+        &mut self,
+        center: Vec3,
+        radius: f32,
+        damage: f32,
+        cell_damage: f32,
+        source: Option<u16>,
+        weapon: u8,
+    ) {
+        let mut targets: Vec<(u16, f32)> = Vec::new();
+        let mut obs = std::mem::take(&mut self.trace_buf);
+        for p in &self.players {
+            if !p.alive {
+                continue;
+            }
+            let chest = Vec3::new(
+                p.state.pos.x,
+                p.state.pos.y,
+                p.state.pos.z + p.state.height() * 0.55,
+            );
+            let d = chest.distance(&center);
+            if d >= radius {
+                continue;
+            }
+            let mut amount = damage * (1.0 - d / radius);
+            if d > 1e-3 {
+                let dir = Vec3::new(
+                    (chest.x - center.x) / d,
+                    (chest.y - center.y) / d,
+                    (chest.z - center.z) / d,
+                );
+                destruction::trace(&self.collision, center, dir, d, &mut obs);
+                for ob in obs.iter().filter(|o| o.t_in > 1e-3) {
+                    if ob.cell.is_none() {
+                        amount = 0.0;
+                        break;
+                    }
+                    amount *= 0.5;
+                }
+            }
+            if amount >= 1.0 {
+                targets.push((p.id, amount * self.rules.damage_multiplier));
+            }
+        }
+        self.trace_buf = obs;
+        for (id, amount) in targets {
+            self.apply_damage(id, source, amount, false, weapon, center);
+        }
+        self.destruction
+            .explode_cells(&mut self.collision, center, radius, cell_damage);
+        self.explosions.push((center, radius));
+    }
+
+    /// Cells destroyed during the last tick (to replicate).
+    pub fn destroyed_this_tick(&self) -> &[u32] {
+        &self.destruction.destroyed_this_tick
     }
 
     /// Fills `out` with the replicated state of all players (sorted by id).
@@ -922,5 +1054,78 @@ mod tests {
         a.w.collect_entities(&mut ents);
         assert_eq!(ents.len(), 2);
         assert_eq!(ents[0].weapon, 1);
+    }
+
+    #[test]
+    fn bullets_penetrate_drywall_with_reduced_damage() {
+        let drywall = r#",{"min":[10,-5,0],"max":[10.1,5,3],"material":"drywall"}"#;
+        let mut a = Arena::new(drywall, MatchRules::default());
+        a.step(aim_at(buttons::AIM, 20.0, 0.0, 1.2), cmd(0), 32);
+        a.step(
+            aim_at(buttons::AIM | buttons::FIRE, 20.0, 0.0, 1.2),
+            cmd(0),
+            1,
+        );
+        let hp = a.hp(2);
+        assert!(
+            hp < 100 && hp > 64,
+            "damage through drywall must be reduced: hp {hp}"
+        );
+        // The drywall cell was damaged (45 hp, rifle does 36 at 10 m): a second
+        // shot along the same line destroys it and reports the cell.
+        a.step(aim_at(buttons::AIM, 20.0, 0.0, 1.2), cmd(0), 16);
+        a.step(
+            aim_at(buttons::AIM | buttons::FIRE, 20.0, 0.0, 1.2),
+            cmd(0),
+            1,
+        );
+        assert!(
+            !a.w.destroyed_this_tick().is_empty(),
+            "drywall cell should break"
+        );
+    }
+
+    #[test]
+    fn concrete_stops_bullets_and_is_not_destroyed() {
+        let concrete = r#",{"min":[10,-5,0],"max":[10.2,5,3],"material":"concrete"}"#;
+        let mut a = Arena::new(concrete, MatchRules::default());
+        a.step(aim_at(buttons::AIM, 20.0, 0.0, 1.2), cmd(0), 32);
+        for _ in 0..20 {
+            a.step(
+                aim_at(buttons::AIM | buttons::FIRE, 20.0, 0.0, 1.2),
+                cmd(0),
+                6,
+            );
+            assert!(a.w.destroyed_this_tick().is_empty());
+        }
+        assert_eq!(a.hp(2), 100);
+    }
+
+    #[test]
+    fn explosions_damage_players_and_breach_walls() {
+        let wall = r#",{"min":[18,-3,0],"max":[18.2,3,3],"material":"wood"},{"min":[3,-3,0],"max":[3.3,3,3],"material":"concrete"}"#;
+        let mut a = Arena::new(wall, MatchRules::default());
+        // Blast next to the target (x=20) on the other side of a wooden wall.
+        a.w.explode(Vec3::new(18.0, 0.0, 1.0), 3.0, 150.0, 400.0, Some(1), 0);
+        assert!(
+            !a.w.destroyed_this_tick().is_empty(),
+            "wood wall must be breached"
+        );
+        let hp = a.hp(2);
+        assert!(hp < 100, "target near the blast must be hurt");
+        assert!(a.w.events.iter().any(|e| matches!(
+            e,
+            GameEvent::Hit {
+                shooter: 1,
+                victim: 2,
+                ..
+            }
+        )));
+        // The shooter at x=0 is behind concrete and out of range: unhurt.
+        assert_eq!(a.hp(1), 100);
+        // Point-blank second blast kills; kill credited to the source.
+        a.w.explode(Vec3::new(20.0, 0.0, 1.0), 3.0, 150.0, 400.0, Some(1), 0);
+        assert!(!a.w.player(2).unwrap().alive);
+        assert_eq!(a.w.player(1).unwrap().kills, 1);
     }
 }

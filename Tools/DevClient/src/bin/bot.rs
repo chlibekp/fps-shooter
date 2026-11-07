@@ -86,6 +86,12 @@ fn input_for(pattern: Pattern, t: f32, idx: usize, rng: &mut u64) -> MoveInput {
             if (r >> 5) & 7 == 0 {
                 b |= buttons::CROUCH;
             }
+            if (r >> 8) & 1 == 0 {
+                b |= buttons::FIRE | buttons::AIM;
+            }
+            if (r >> 9) & 7 == 0 {
+                b |= buttons::RELOAD;
+            }
             MoveInput {
                 buttons: b,
                 yaw_q: (r >> 16) as u16,
@@ -195,8 +201,10 @@ fn main() -> anyhow::Result<()> {
     for bot in &mut bots {
         let s = bot.stats;
         println!(
-            "[{}] summary: cmds={} snapshots={} (delta {}) up={:.1} kbit/s down={:.1} kbit/s corrections={} max_corr={:.3}m",
+            "[{}] summary: shots={} remote_shot_events={} cmds={} snapshots={} (delta {}) up={:.1} kbit/s down={:.1} kbit/s corrections={} max_corr={:.3}m",
             bot.cfg.name,
+            bot.local_shots,
+            bot.remote_shot_events.len(),
             bot.command_seq(),
             s.snapshots_received,
             s.delta_snapshots,

@@ -31,23 +31,38 @@ fn bench(c: &mut Criterion) {
     for n in [2u16, 10, 32] {
         let mut w = world(n);
         let mut seq = 1u32;
+        let (mut shots, mut ticks) = (0u64, 0u64);
         c.bench_function(&format!("world_tick_{n}_players_firing"), |b| {
             b.iter(|| {
                 for id in 1..=n {
                     let yaw = (seq.wrapping_mul(97) + id as u32 * 4000) as u16;
+                    let p = w.player(id).unwrap();
+                    let trigger = if p.weapon.slots[0].chambered {
+                        buttons::FIRE
+                    } else {
+                        buttons::RELOAD
+                    };
                     let input = MoveInput {
-                        buttons: buttons::FORWARD | buttons::FIRE | buttons::RELOAD,
+                        buttons: buttons::FORWARD | trigger,
                         yaw_q: yaw,
                         pitch_q: 0,
                         slot: 0,
                     };
                     let rt = w.tick.saturating_sub(4) * 256;
-                    w.player_mut(id).unwrap().cmds.push(seq, input, rt);
+                    let pm = w.player_mut(id).unwrap();
+                    pm.weapon.slots[0].reserve = 150; // endless ammo for the benchmark
+                    pm.cmds.push(seq, input, rt);
                 }
                 seq += 1;
                 w.tick();
+                shots += w.shot_events.len() as u64;
+                ticks += 1;
             })
         });
+        eprintln!(
+            "  {n} players: {:.2} shots resolved per tick",
+            shots as f64 / ticks.max(1) as f64
+        );
         let mut ents: Vec<EntityState> = Vec::new();
         let mut base: Vec<EntityState> = Vec::new();
         let mut buf = Vec::with_capacity(1200);

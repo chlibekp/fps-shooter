@@ -1,4 +1,4 @@
-//! Deterministic player movement.
+//! Deterministic player movement (v2: stand / crouch / prone, lean, ADS).
 //!
 //! **This file has a line-by-line C++ mirror** in
 //! `Client/Source/TacticalFPS/Private/NetCore/TfpsMovement.cpp`. Any change
@@ -6,9 +6,10 @@
 //! must be re-run so the C++ conformance test checks the new behaviour.
 //!
 //! The collision model is an axis-aligned player box swept one axis at a time
-//! against axis-aligned world solids, with step-up and ground snapping. It is
-//! intentionally simple and fully deterministic. Prone, leaning, vaulting and
-//! window climbing are added in later phases on top of this state machine.
+//! against axis-aligned world solids, with step-up and ground snapping.
+//! Prone uses a low square box (a simplification: the body's length is not
+//! part of world collision). Leaning moves only the head/eye and is clamped so
+//! the head never enters geometry. Vaulting and window climbing come later.
 
 use crate::map::{Aabb, CollisionWorld};
 use crate::math::{yaw_sin_cos, Vec3};
@@ -19,15 +20,17 @@ pub mod buttons {
     pub const LEFT: u16 = 1 << 2;
     pub const RIGHT: u16 = 1 << 3;
     pub const JUMP: u16 = 1 << 4;
+    /// Desired stance is crouch (the client may implement hold or toggle).
     pub const CROUCH: u16 = 1 << 5;
     pub const SPRINT: u16 = 1 << 6;
     /// Slow, quiet walk.
     pub const WALK: u16 = 1 << 7;
-    // Reserved for later phases (accepted on the wire, ignored by movement v1):
     pub const LEAN_LEFT: u16 = 1 << 8;
     pub const LEAN_RIGHT: u16 = 1 << 9;
+    /// Aim down sights.
     pub const AIM: u16 = 1 << 10;
     pub const FIRE: u16 = 1 << 11;
+    /// Desired stance is prone (takes precedence over CROUCH).
     pub const PRONE: u16 = 1 << 12;
     pub const RELOAD: u16 = 1 << 13;
     pub const USE: u16 = 1 << 14;
@@ -39,13 +42,27 @@ pub mod buttons {
 pub const HALF_WIDTH: f32 = 0.3;
 pub const STAND_HEIGHT: f32 = 1.8;
 pub const CROUCH_HEIGHT: f32 = 1.2;
+pub const PRONE_HEIGHT: f32 = 0.6;
 pub const STAND_EYE: f32 = 1.65;
 pub const CROUCH_EYE: f32 = 1.05;
+pub const PRONE_EYE: f32 = 0.35;
 
 pub const RUN_SPEED: f32 = 3.4;
 pub const SPRINT_SPEED: f32 = 5.2;
 pub const WALK_SPEED: f32 = 1.7;
 pub const CROUCH_SPEED: f32 = 1.6;
+pub const PRONE_SPEED: f32 = 0.8;
+/// Movement speed multiplier at full ADS.
+pub const ADS_SPEED_MULT: f32 = 0.6;
+/// Seconds to go prone or get up from prone (no movement, no firing).
+pub const PRONE_TRANSITION: f32 = 0.8;
+
+/// Head/eye sideways offset at full lean (m) and lean speed (full range per s).
+pub const LEAN_OFFSET: f32 = 0.35;
+pub const LEAN_DROP: f32 = 0.06;
+pub const LEAN_RATE: f32 = 5.0;
+/// Half size of the box used to keep the leaning head out of walls.
+pub const HEAD_HALF: f32 = 0.14;
 
 pub const GROUND_ACCEL: f32 = 28.0;
 pub const GROUND_DECEL: f32 = 34.0;
@@ -69,8 +86,17 @@ pub struct MoveInput {
     pub buttons: u16,
     /// 0..65535 = 0..360 degrees.
     pub yaw_q: u16,
-    /// +-32767 = +-90 degrees. Not used by movement, carried for aiming.
+    /// +-32767 = +-90 degrees.
     pub pitch_q: i16,
+    /// Requested weapon slot (0 = primary, 1 = secondary).
+    pub slot: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stance {
+    Stand,
+    Crouch,
+    Prone,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -80,8 +106,26 @@ pub struct MoveState {
     pub vel: Vec3,
     pub on_ground: bool,
     pub crouched: bool,
+    pub prone: bool,
     /// Seconds until jumping is allowed again.
     pub jump_timer: f32,
+    /// Remaining prone transition time (movement and firing locked).
+    pub stance_timer: f32,
+    /// -1 (full left) .. 1 (full right).
+    pub lean: f32,
+    /// 0 (hip) .. 1 (fully aimed down sights). Driven by the weapon simulation.
+    pub aim: f32,
+}
+
+#[inline]
+pub fn stance_height(crouched: bool, prone: bool) -> f32 {
+    if prone {
+        PRONE_HEIGHT
+    } else if crouched {
+        CROUCH_HEIGHT
+    } else {
+        STAND_HEIGHT
+    }
 }
 
 impl MoveState {
@@ -92,16 +136,24 @@ impl MoveState {
         }
     }
 
-    pub fn height(&self) -> f32 {
-        if self.crouched {
-            CROUCH_HEIGHT
+    pub fn stance(&self) -> Stance {
+        if self.prone {
+            Stance::Prone
+        } else if self.crouched {
+            Stance::Crouch
         } else {
-            STAND_HEIGHT
+            Stance::Stand
         }
     }
 
+    pub fn height(&self) -> f32 {
+        stance_height(self.crouched, self.prone)
+    }
+
     pub fn eye_height(&self) -> f32 {
-        if self.crouched {
+        if self.prone {
+            PRONE_EYE
+        } else if self.crouched {
             CROUCH_EYE
         } else {
             STAND_EYE
@@ -109,20 +161,39 @@ impl MoveState {
     }
 
     pub fn bounds(&self) -> Aabb {
-        player_box(self.pos, self.crouched)
+        player_box(self.pos, self.height())
+    }
+
+    /// Eye position including lean, for a view yaw.
+    pub fn eye_position(&self, yaw_q: u16) -> Vec3 {
+        let (s, c) = yaw_sin_cos(yaw_q);
+        let off = self.lean * LEAN_OFFSET;
+        let drop = if self.lean < 0.0 {
+            -self.lean
+        } else {
+            self.lean
+        } * LEAN_DROP;
+        Vec3::new(
+            self.pos.x - s * off,
+            self.pos.y + c * off,
+            self.pos.z + self.eye_height() - drop,
+        )
     }
 }
 
 #[inline]
-pub fn player_box(pos: Vec3, crouched: bool) -> Aabb {
-    let h = if crouched {
-        CROUCH_HEIGHT
-    } else {
-        STAND_HEIGHT
-    };
+pub fn player_box(pos: Vec3, height: f32) -> Aabb {
     Aabb {
         min: Vec3::new(pos.x - HALF_WIDTH, pos.y - HALF_WIDTH, pos.z),
-        max: Vec3::new(pos.x + HALF_WIDTH, pos.y + HALF_WIDTH, pos.z + h),
+        max: Vec3::new(pos.x + HALF_WIDTH, pos.y + HALF_WIDTH, pos.z + height),
+    }
+}
+
+#[inline]
+fn head_box(eye: Vec3) -> Aabb {
+    Aabb {
+        min: Vec3::new(eye.x - HEAD_HALF, eye.y - HEAD_HALF, eye.z - HEAD_HALF),
+        max: Vec3::new(eye.x + HEAD_HALF, eye.y + HEAD_HALF, eye.z + HEAD_HALF),
     }
 }
 
@@ -142,16 +213,106 @@ fn approach(vx: &mut f32, vy: &mut f32, tx: f32, ty: f32, max_delta: f32) {
     }
 }
 
-/// Advances one fixed simulation step.
-pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &CollisionWorld) {
-    let b = input.buttons;
+/// Moves `v` toward `target` by at most `step`.
+#[inline]
+pub fn approach_scalar(v: f32, target: f32, step: f32) -> f32 {
+    if v < target {
+        let n = v + step;
+        if n > target {
+            target
+        } else {
+            n
+        }
+    } else {
+        let n = v - step;
+        if n < target {
+            target
+        } else {
+            n
+        }
+    }
+}
 
-    // 1. Stance. Standing up requires head room.
-    if b & buttons::CROUCH != 0 {
+/// True if the input asks to sprint and nothing forbids it (used by the
+/// weapon simulation to block ADS and firing while sprinting).
+pub fn sprint_intent(state: &MoveState, input: &MoveInput) -> bool {
+    let b = input.buttons;
+    b & buttons::SPRINT != 0
+        && b & buttons::WALK == 0
+        && b & buttons::FORWARD != 0
+        && b & buttons::BACK == 0
+        && b & buttons::FIRE == 0
+        && !state.crouched
+        && !state.prone
+        && state.aim <= 0.0
+}
+
+fn update_stance(state: &mut MoveState, b: u16, dt: f32, world: &CollisionWorld) {
+    if state.stance_timer > 0.0 {
+        state.stance_timer -= dt;
+        if state.stance_timer < 0.0 {
+            state.stance_timer = 0.0;
+        }
+        return;
+    }
+    let want_prone = b & buttons::PRONE != 0;
+    let want_crouch = b & buttons::CROUCH != 0;
+    if want_prone {
+        if !state.prone && state.on_ground {
+            state.prone = true;
+            state.crouched = false;
+            state.stance_timer = PRONE_TRANSITION;
+        }
+    } else if state.prone {
+        // Getting up: to crouch or stand, if there is room.
+        let h = stance_height(want_crouch, false);
+        if !world.overlaps_any(&player_box(state.pos, h)) {
+            state.prone = false;
+            state.crouched = want_crouch;
+            state.stance_timer = PRONE_TRANSITION;
+        }
+    } else if want_crouch {
         state.crouched = true;
-    } else if state.crouched && !world.overlaps_any(&player_box(state.pos, false)) {
+    } else if state.crouched && !world.overlaps_any(&player_box(state.pos, STAND_HEIGHT)) {
         state.crouched = false;
     }
+}
+
+fn update_lean(
+    state: &mut MoveState,
+    input: &MoveInput,
+    sprinting: bool,
+    dt: f32,
+    world: &CollisionWorld,
+) {
+    let b = input.buttons;
+    let mut target = 0.0f32;
+    if !sprinting && !state.prone && state.stance_timer <= 0.0 {
+        if b & buttons::LEAN_RIGHT != 0 {
+            target += 1.0;
+        }
+        if b & buttons::LEAN_LEFT != 0 {
+            target -= 1.0;
+        }
+    }
+    state.lean = approach_scalar(state.lean, target, LEAN_RATE * dt);
+    // Keep the head out of walls: pull the lean back in 0.1 steps.
+    let mut i = 0;
+    while i < 10
+        && state.lean != 0.0
+        && world.overlaps_any(&head_box(state.eye_position(input.yaw_q)))
+    {
+        state.lean = approach_scalar(state.lean, 0.0, 0.1);
+        i += 1;
+    }
+}
+
+/// Advances one fixed simulation step. Returns true if the player sprinted.
+pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &CollisionWorld) -> bool {
+    let b = input.buttons;
+
+    // 1. Stance.
+    update_stance(state, b, dt, world);
 
     // 2. Wish direction from yaw (forward = (cos, sin), right = (-sin, cos)).
     let (s, c) = yaw_sin_cos(input.yaw_q);
@@ -179,9 +340,12 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
         wy *= inv;
     }
 
-    let sprinting =
-        b & buttons::SPRINT != 0 && b & buttons::WALK == 0 && fwd > 0.0 && !state.crouched;
-    let speed = if state.crouched {
+    let sprinting = sprint_intent(state, input);
+    let mut speed = if state.stance_timer > 0.0 {
+        0.0
+    } else if state.prone {
+        PRONE_SPEED
+    } else if state.crouched {
         CROUCH_SPEED
     } else if b & buttons::WALK != 0 {
         WALK_SPEED
@@ -190,6 +354,7 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
     } else {
         RUN_SPEED
     };
+    speed *= 1.0 - (1.0 - ADS_SPEED_MULT) * state.aim;
     let tx = wx * speed;
     let ty = wy * speed;
 
@@ -201,7 +366,12 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
             GROUND_DECEL
         };
         approach(&mut state.vel.x, &mut state.vel.y, tx, ty, accel * dt);
-        if b & buttons::JUMP != 0 && state.jump_timer <= 0.0 && !state.crouched {
+        if b & buttons::JUMP != 0
+            && state.jump_timer <= 0.0
+            && !state.crouched
+            && !state.prone
+            && state.stance_timer <= 0.0
+        {
             state.vel.z = JUMP_SPEED;
             state.on_ground = false;
             state.jump_timer = JUMP_COOLDOWN;
@@ -238,13 +408,17 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
         ground_snap(state, world);
     }
 
-    // 7. Timers.
+    // 7. Lean (after moving, so the head check uses the final position).
+    update_lean(state, input, sprinting, dt, world);
+
+    // 8. Timers.
     if state.jump_timer > 0.0 {
         state.jump_timer -= dt;
         if state.jump_timer < 0.0 {
             state.jump_timer = 0.0;
         }
     }
+    sprinting
 }
 
 /// Moves along one axis in sub-steps. Returns true if blocked.
@@ -281,14 +455,15 @@ fn resolve_axis(
     world: &CollisionWorld,
 ) -> bool {
     let mut blocked = false;
-    let mut pb = player_box(state.pos, state.crouched);
+    let h = state.height();
+    let mut pb = player_box(state.pos, h);
     for wb in &world.boxes {
         if !pb.overlaps(wb) {
             continue;
         }
         if axis == 2 {
             if step > 0.0 {
-                state.pos.z = wb.min.z - state.height() - SKIN;
+                state.pos.z = wb.min.z - h - SKIN;
             } else {
                 state.pos.z = wb.max.z;
             }
@@ -298,9 +473,9 @@ fn resolve_axis(
                 if rise > 0.0 && rise <= STEP_HEIGHT {
                     let mut cand = state.pos;
                     cand.z = wb.max.z;
-                    if !world.overlaps_any(&player_box(cand, state.crouched)) {
+                    if !world.overlaps_any(&player_box(cand, h)) {
                         state.pos = cand;
-                        pb = player_box(state.pos, state.crouched);
+                        pb = player_box(state.pos, h);
                         continue;
                     }
                 }
@@ -312,29 +487,32 @@ fn resolve_axis(
             }
         }
         blocked = true;
-        pb = player_box(state.pos, state.crouched);
+        pb = player_box(state.pos, h);
     }
     blocked
 }
 
 fn ground_snap(state: &mut MoveState, world: &CollisionWorld) {
-    let pb = player_box(state.pos, state.crouched);
+    let h = state.height();
+    let pb = player_box(state.pos, h);
     let probe = Aabb {
         min: Vec3::new(pb.min.x, pb.min.y, state.pos.z - STEP_HEIGHT),
         max: Vec3::new(pb.max.x, pb.max.y, state.pos.z),
     };
-    let mut best = f32::NEG_INFINITY;
+    let mut found = false;
+    let mut best = 0.0f32;
     for wb in &world.boxes {
-        if wb.overlaps(&probe) && wb.max.z <= state.pos.z && wb.max.z > best {
+        if wb.overlaps(&probe) && wb.max.z <= state.pos.z && (!found || wb.max.z > best) {
             best = wb.max.z;
+            found = true;
         }
     }
-    if best == f32::NEG_INFINITY {
+    if !found {
         return;
     }
     let mut cand = state.pos;
     cand.z = best;
-    if !world.overlaps_any(&player_box(cand, state.crouched)) {
+    if !world.overlaps_any(&player_box(cand, h)) {
         state.pos.z = best;
         state.vel.z = 0.0;
         state.on_ground = true;
@@ -381,6 +559,7 @@ mod tests {
             buttons: buttons::FORWARD,
             yaw_q: 0,
             pitch_q: 0,
+            slot: 0,
         };
         run(&mut s, inp, 64, &w);
         assert!((s.vel.x - RUN_SPEED).abs() < 1e-4, "{:?}", s.vel);
@@ -396,6 +575,7 @@ mod tests {
             buttons: buttons::FORWARD | buttons::SPRINT,
             yaw_q: quantize_yaw_deg(90.0),
             pitch_q: 0,
+            slot: 0,
         };
         run(&mut s, inp, 128, &w);
         assert!((s.vel.y - SPRINT_SPEED).abs() < 1e-3, "{:?}", s.vel);
@@ -410,6 +590,7 @@ mod tests {
             buttons: buttons::FORWARD | buttons::RIGHT,
             yaw_q: 0,
             pitch_q: 0,
+            slot: 0,
         };
         run(&mut s, inp, 128, &w);
         let sp = (s.vel.x * s.vel.x + s.vel.y * s.vel.y).sqrt();
@@ -428,6 +609,7 @@ mod tests {
             buttons: buttons::FORWARD | buttons::SPRINT,
             yaw_q: 0,
             pitch_q: 0,
+            slot: 0,
         };
         run(&mut s, inp, 200, &w);
         assert!(
@@ -450,6 +632,7 @@ mod tests {
             buttons: buttons::FORWARD,
             yaw_q: 0,
             pitch_q: 0,
+            slot: 0,
         };
         run(&mut s, inp, 40, &w);
         assert!(s.pos.x > 1.0 && s.pos.z == 0.3 && s.on_ground, "{s:?}");
@@ -478,6 +661,7 @@ mod tests {
             buttons: buttons::JUMP,
             yaw_q: 0,
             pitch_q: 0,
+            slot: 0,
         };
         let mut apex = 0.0f32;
         let mut jumps = 0;
@@ -508,6 +692,7 @@ mod tests {
             buttons: buttons::FORWARD | buttons::CROUCH,
             yaw_q: 0,
             pitch_q: 0,
+            slot: 0,
         };
         run(&mut s, crouch_fwd, 128, &w);
         assert!(s.crouched);

@@ -340,6 +340,7 @@ mod tests {
             buttons: b,
             yaw_q: 0,
             pitch_q: 0,
+            slot: 0,
         }
     }
 

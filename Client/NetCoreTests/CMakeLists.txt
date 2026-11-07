@@ -38,7 +38,7 @@ else()
   endif()
 endif()
 
-add_executable(tfps_netcore_tests src/TestMain.cpp src/MovementConformanceTest.cpp src/ProtocolTests.cpp src/LiveServerTest.cpp)
+add_executable(tfps_netcore_tests src/TestMain.cpp src/SimConformanceTest.cpp src/ProtocolTests.cpp src/LiveServerTest.cpp)
 target_link_libraries(tfps_netcore_tests PRIVATE tfps_netcore)
 target_compile_definitions(tfps_netcore_tests PRIVATE TFPS_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../..")
 

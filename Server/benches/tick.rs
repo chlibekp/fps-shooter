@@ -33,6 +33,7 @@ fn bench(c: &mut Criterion) {
                             buttons: buttons::FORWARD | buttons::SPRINT,
                             yaw_q: yaw,
                             pitch_q: 0,
+                            slot: 0,
                         },
                     );
                 }

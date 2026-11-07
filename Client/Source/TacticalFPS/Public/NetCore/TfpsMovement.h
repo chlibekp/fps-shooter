@@ -38,12 +38,21 @@ namespace tfps
 		constexpr float HalfWidth = 0.3f;
 		constexpr float StandHeight = 1.8f;
 		constexpr float CrouchHeight = 1.2f;
+		constexpr float ProneHeight = 0.6f;
 		constexpr float StandEye = 1.65f;
 		constexpr float CrouchEye = 1.05f;
+		constexpr float ProneEye = 0.35f;
 		constexpr float RunSpeed = 3.4f;
 		constexpr float SprintSpeed = 5.2f;
 		constexpr float WalkSpeed = 1.7f;
 		constexpr float CrouchSpeed = 1.6f;
+		constexpr float ProneSpeed = 0.8f;
+		constexpr float AdsSpeedMult = 0.6f;
+		constexpr float ProneTransition = 0.8f;
+		constexpr float LeanOffset = 0.35f;
+		constexpr float LeanDrop = 0.06f;
+		constexpr float LeanRate = 5.0f;
+		constexpr float HeadHalf = 0.14f;
 		constexpr float GroundAccel = 28.0f;
 		constexpr float GroundDecel = 34.0f;
 		constexpr float AirAccel = 2.0f;
@@ -59,8 +68,12 @@ namespace tfps
 		uint16_t Buttons = 0;
 		uint16_t YawQ = 0;
 		int16_t PitchQ = 0;
-		bool operator==(const MoveInput& O) const { return Buttons == O.Buttons && YawQ == O.YawQ && PitchQ == O.PitchQ; }
+		/** Requested weapon slot (0 = primary, 1 = secondary). */
+		uint8_t Slot = 0;
+		bool operator==(const MoveInput& O) const { return Buttons == O.Buttons && YawQ == O.YawQ && PitchQ == O.PitchQ && Slot == O.Slot; }
 	};
+
+	float StanceHeight(bool bCrouched, bool bProne);
 
 	struct MoveState
 	{
@@ -68,20 +81,36 @@ namespace tfps
 		Vec3 Vel;
 		bool bOnGround = false;
 		bool bCrouched = false;
+		bool bProne = false;
 		float JumpTimer = 0.0f;
+		/** Remaining prone transition time (movement and firing locked). */
+		float StanceTimer = 0.0f;
+		/** -1 (full left) .. 1 (full right). */
+		float Lean = 0.0f;
+		/** 0 (hip) .. 1 (fully aimed down sights). */
+		float Aim = 0.0f;
 
-		float Height() const { return bCrouched ? MoveTuning::CrouchHeight : MoveTuning::StandHeight; }
-		float EyeHeight() const { return bCrouched ? MoveTuning::CrouchEye : MoveTuning::StandEye; }
+		float Height() const { return StanceHeight(bCrouched, bProne); }
+		float EyeHeight() const { return bProne ? MoveTuning::ProneEye : (bCrouched ? MoveTuning::CrouchEye : MoveTuning::StandEye); }
+		/** Eye position including lean, for a view yaw. */
+		Vec3 EyePosition(uint16_t YawQ) const;
 		bool operator==(const MoveState& O) const
 		{
-			return Pos == O.Pos && Vel == O.Vel && bOnGround == O.bOnGround && bCrouched == O.bCrouched && JumpTimer == O.JumpTimer;
+			return Pos == O.Pos && Vel == O.Vel && bOnGround == O.bOnGround && bCrouched == O.bCrouched && bProne == O.bProne
+				&& JumpTimer == O.JumpTimer && StanceTimer == O.StanceTimer && Lean == O.Lean && Aim == O.Aim;
 		}
 	};
 
-	Aabb PlayerBox(const Vec3& Pos, bool bCrouched);
+	Aabb PlayerBox(const Vec3& Pos, float Height);
 
-	/** Advances one fixed simulation step. */
-	void Simulate(MoveState& State, const MoveInput& Input, float Dt, const CollisionWorld& World);
+	/** Moves V toward Target by at most Step. */
+	float ApproachScalar(float V, float Target, float Step);
+
+	/** True if the input asks to sprint and nothing forbids it. */
+	bool SprintIntent(const MoveState& State, const MoveInput& Input);
+
+	/** Advances one fixed movement step. Returns true if the player sprinted. */
+	bool Simulate(MoveState& State, const MoveInput& Input, float Dt, const CollisionWorld& World);
 
 	/** 1 / TickRate, computed identically to Rust's tick_dt. */
 	float TickDt(uint16_t TickRate);

@@ -110,6 +110,7 @@ fn milestone_two_clients_see_each_other_move() {
         buttons: buttons::FORWARD,
         yaw_q: 16384,
         pitch_q: 0,
+        slot: 0,
     });
     run(&mut [&mut a, &mut b], Duration::from_secs(1));
     a.set_input(MoveInput::default());
@@ -173,6 +174,7 @@ fn movement_survives_heavy_packet_loss() {
         buttons: buttons::FORWARD | buttons::SPRINT,
         yaw_q: 16384,
         pitch_q: 0,
+        slot: 0,
     });
     run(&mut [&mut a, &mut b], Duration::from_millis(1500));
     a.set_input(MoveInput::default());
@@ -202,6 +204,7 @@ fn reconnect_restores_player_slot_and_position() {
         buttons: buttons::FORWARD,
         yaw_q: 0,
         pitch_q: 0,
+        slot: 0,
     });
     run(&mut [&mut a, &mut b], Duration::from_millis(800));
     a.set_input(MoveInput::default());
@@ -298,6 +301,7 @@ fn speed_hack_flooding_commands_gains_nothing() {
         buttons: buttons::FORWARD | buttons::SPRINT,
         yaw_q: 32768,
         pitch_q: 0,
+        slot: 0,
     };
     let mut seq: u32 = 0;
     let mut pseq: u16 = 0;
@@ -460,6 +464,7 @@ fn runs_at_128_ticks_per_second() {
         buttons: buttons::FORWARD | buttons::LEFT,
         yaw_q: 0,
         pitch_q: 0,
+        slot: 0,
     });
     run(&mut [&mut a, &mut b], Duration::from_secs(2));
     let rate = (srv.stats.snapshot().ticks - t0) as f64 / start.elapsed().as_secs_f64();

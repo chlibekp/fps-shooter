@@ -1,24 +1,28 @@
-//! Generates movement conformance vectors that the C++ implementation must
-//! reproduce bit-exactly.
+//! Generates player-simulation conformance vectors (movement + weapons) that
+//! the C++ implementation must reproduce bit-exactly.
 //!
 //! Text format (one record per line, all floats as raw IEEE-754 bits in hex):
 //!
 //! ```text
-//! tfps-movement-vectors 1
+//! tfps-player-vectors 2
 //! box <minx> <miny> <minz> <maxx> <maxy> <maxz>
-//! seq <name> <dt>
-//! start <state>
-//! step <buttons> <yaw_q> <pitch_q> <state after step>
+//! seq <name> <dt> <primary_id> <secondary_id>
+//! start <move> <weapon>
+//! step <buttons> <yaw_q> <pitch_q> <slot> <move> <weapon> <n_shots> {<shot>}
 //! end
 //! ```
-//! `<state>` = `px py pz vx vy vz on_ground crouched jump_timer`.
+//! `<move>` = `px py pz vx vy vz on_ground crouched prone jump_timer stance_timer lean aim`
+//! `<weapon>` = `active {ammo chambered reserve}x2 cooldown reload_timer reload_empty
+//!  equip_timer burst_left trigger_prev shots_fired recoil_pitch recoil_yaw recover_timer shot_counter`
+//! `<shot>` = `ox oy oz yaw pitch weapon_id pellet shot_counter`
 
 use crate::map::CollisionWorld;
 use crate::math::Vec3;
 use crate::movement::{buttons, simulate, MoveInput, MoveState};
+use crate::weapon::{simulate_player, ShotBuffer, WeaponDef, WeaponSet, WeaponState};
 use std::fmt::Write;
 
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 struct XorShift(u64);
 impl XorShift {
@@ -32,79 +36,156 @@ impl XorShift {
     }
 }
 
-fn fmt_state(out: &mut String, s: &MoveState) {
+fn f(out: &mut String, v: f32) {
+    let _ = write!(out, " {:08x}", v.to_bits());
+}
+
+fn fmt_move(out: &mut String, s: &MoveState) {
     for v in [s.pos.x, s.pos.y, s.pos.z, s.vel.x, s.vel.y, s.vel.z] {
-        let _ = write!(out, " {:08x}", v.to_bits());
+        f(out, v);
     }
     let _ = write!(
         out,
-        " {} {} {:08x}",
-        s.on_ground as u8,
-        s.crouched as u8,
-        s.jump_timer.to_bits()
+        " {} {} {}",
+        s.on_ground as u8, s.crouched as u8, s.prone as u8
     );
+    for v in [s.jump_timer, s.stance_timer, s.lean, s.aim] {
+        f(out, v);
+    }
 }
 
-/// Builds the vector file for `world`, starting sequences at `starts`.
-pub fn generate(world: &CollisionWorld, starts: &[Vec3], steps_per_seq: usize) -> String {
+fn fmt_weapon(out: &mut String, w: &WeaponState) {
+    let _ = write!(out, " {}", w.active);
+    for sl in &w.slots {
+        let _ = write!(out, " {} {} {}", sl.ammo, sl.chambered as u8, sl.reserve);
+    }
+    f(out, w.cooldown);
+    f(out, w.reload_timer);
+    let _ = write!(out, " {}", w.reload_empty as u8);
+    f(out, w.equip_timer);
+    let _ = write!(
+        out,
+        " {} {} {}",
+        w.burst_left, w.trigger_prev as u8, w.shots_fired
+    );
+    f(out, w.recoil_pitch);
+    f(out, w.recoil_yaw);
+    f(out, w.recover_timer);
+    let _ = write!(out, " {}", w.shot_counter);
+}
+
+/// Builds the vector file for `world`, starting sequences at `starts`, cycling
+/// through every weapon of `weapons` as the primary.
+pub fn generate(
+    world: &CollisionWorld,
+    starts: &[Vec3],
+    weapons: &WeaponSet,
+    steps_per_seq: usize,
+) -> String {
     let mut out = String::new();
-    let _ = writeln!(out, "tfps-movement-vectors {FORMAT_VERSION}");
+    let _ = writeln!(out, "tfps-player-vectors {FORMAT_VERSION}");
     for b in &world.boxes {
         let _ = write!(out, "box");
         for v in [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] {
-            let _ = write!(out, " {:08x}", v.to_bits());
+            f(&mut out, v);
         }
         out.push('\n');
     }
     let rates: [u16; 3] = [60, 64, 128];
     let mut seq_idx = 0u64;
+    let mut shots = ShotBuffer::default();
     for (si, start) in starts.iter().enumerate() {
         for &rate in &rates {
             seq_idx += 1;
+            let primary = &weapons.weapons[(seq_idx as usize) % weapons.weapons.len()];
+            let secondary = weapons.get(weapons.default_loadout[1]).expect("secondary");
+            let loadout: [&WeaponDef; 2] = [primary, secondary];
             let dt = crate::tick_dt(rate);
             let mut rng =
                 XorShift(0x9E37_79B9_7F4A_7C15 ^ (seq_idx.wrapping_mul(0x1234_5678_9ABC_DEF1)));
-            let mut state = MoveState::at(*start);
-            let _ = write!(out, "seq s{si}_r{rate} {:08x}\nstart", dt.to_bits());
-            fmt_state(&mut out, &state);
+            let mut ms = MoveState::at(*start);
+            let mut ws = WeaponState::new(&loadout);
+            let _ = write!(
+                out,
+                "seq s{si}_r{rate} {:08x} {} {}\nstart",
+                dt.to_bits(),
+                primary.id,
+                secondary.id
+            );
+            fmt_move(&mut out, &ms);
+            fmt_weapon(&mut out, &ws);
             out.push('\n');
             let mut input = MoveInput::default();
             let mut hold = 0u32;
             for _ in 0..steps_per_seq {
                 if hold == 0 {
                     let r = rng.next();
-                    let mut b = 0u16;
-                    let move_bits = (r & 0xF) as u16; // forward/back/left/right
-                    b |= move_bits;
+                    let mut b = (r & 0xF) as u16; // forward/back/left/right
+                    let bit = |shift: u32, mask: u64| (r >> shift) & mask == 0;
                     if r & 0x30 == 0x30 {
                         b |= buttons::SPRINT;
                     }
-                    if (r >> 6) & 0x7 == 0 {
+                    if bit(6, 7) {
                         b |= buttons::JUMP;
                     }
-                    if (r >> 9) & 0x7 == 0 {
+                    if bit(9, 7) {
                         b |= buttons::CROUCH;
                     }
-                    if (r >> 12) & 0xF == 0 {
+                    if bit(12, 15) {
                         b |= buttons::WALK;
                     }
+                    if bit(16, 1) {
+                        b |= buttons::FIRE;
+                    }
+                    if bit(18, 3) {
+                        b |= buttons::AIM;
+                    }
+                    if bit(20, 7) {
+                        b |= buttons::LEAN_LEFT;
+                    }
+                    if bit(23, 7) {
+                        b |= buttons::LEAN_RIGHT;
+                    }
+                    if bit(26, 31) {
+                        b |= buttons::PRONE;
+                    }
+                    if bit(30, 15) {
+                        b |= buttons::RELOAD;
+                    }
+                    if bit(34, 31) {
+                        input.slot ^= 1;
+                    }
                     input.buttons = b;
-                    hold = 5 + ((r >> 16) & 0x1F) as u32;
+                    hold = 3 + ((r >> 40) & 0x1F) as u32;
                 }
                 hold -= 1;
-                // Continuous mouse look.
                 let r = rng.next();
                 input.yaw_q = input
                     .yaw_q
                     .wrapping_add(((r & 0x3FF) as u16).wrapping_sub(0x1FF));
                 input.pitch_q = ((r >> 10) & 0x7FFF) as i16 - 16383;
-                simulate(&mut state, &input, dt, world);
+                shots.clear();
+                simulate_player(&mut ms, &mut ws, &input, dt, world, &loadout, &mut shots);
                 let _ = write!(
                     out,
-                    "step {} {} {}",
-                    input.buttons, input.yaw_q, input.pitch_q
+                    "step {} {} {} {}",
+                    input.buttons, input.yaw_q, input.pitch_q, input.slot
                 );
-                fmt_state(&mut out, &state);
+                fmt_move(&mut out, &ms);
+                fmt_weapon(&mut out, &ws);
+                let _ = write!(out, " {}", shots.len);
+                for sh in shots.as_slice() {
+                    for v in [
+                        sh.origin.x,
+                        sh.origin.y,
+                        sh.origin.z,
+                        sh.yaw_deg,
+                        sh.pitch_deg,
+                    ] {
+                        f(&mut out, v);
+                    }
+                    let _ = write!(out, " {} {} {}", sh.weapon_id, sh.pellet, sh.shot_counter);
+                }
                 out.push('\n');
             }
             out.push_str("end\n");
@@ -157,6 +238,7 @@ pub fn determinism_selftest_hash() -> u64 {
             buttons: b,
             yaw_q: (i.wrapping_mul(371) & 0xFFFF) as u16,
             pitch_q: 0,
+            slot: 0,
         };
         simulate(&mut s, &input, dt, &world);
         for v in [

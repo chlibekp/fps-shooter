@@ -96,16 +96,19 @@ fn vectors() -> String {
             buttons: 0x0041,
             yaw_q: 16384,
             pitch_q: -1200,
+            slot: 0,
         };
         bundle.cmds[1] = MoveInput {
             buttons: 0x0001,
             yaw_q: 16000,
             pitch_q: -1100,
+            slot: 0,
         };
         bundle.cmds[2] = MoveInput {
             buttons: 0x0000,
             yaw_q: 15000,
             pitch_q: 32767,
+            slot: 0,
         };
         bundle.encode(&mut w);
     }
@@ -118,6 +121,7 @@ fn vectors() -> String {
         on_ground: true,
         crouched: false,
         jump_timer: 0.4375,
+        ..Default::default()
     };
     let base = vec![
         EntityState {

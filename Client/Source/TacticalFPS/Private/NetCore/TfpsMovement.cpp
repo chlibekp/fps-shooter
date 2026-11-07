@@ -1,4 +1,5 @@
 // Copyright TacticalFPS project. Engine-independent NetCore.
+// Line-by-line mirror of Shared/Simulation/rust/src/movement.rs (v2).
 #include "NetCore/TfpsMovement.h"
 #include "NetCore/TfpsFloatDeterminism.h"
 
@@ -11,6 +12,14 @@ namespace tfps
 		constexpr float MoveSkin = 0.0001f;
 		constexpr float MoveMaxSubstep = 0.1f;
 		constexpr int MoveMaxSubsteps = 32;
+
+		Aabb MoveHeadBox(const Vec3& Eye)
+		{
+			Aabb B;
+			B.Min = Vec3(Eye.X - MoveTuning::HeadHalf, Eye.Y - MoveTuning::HeadHalf, Eye.Z - MoveTuning::HeadHalf);
+			B.Max = Vec3(Eye.X + MoveTuning::HeadHalf, Eye.Y + MoveTuning::HeadHalf, Eye.Z + MoveTuning::HeadHalf);
+			return B;
+		}
 
 		void MoveApproach(float& VX, float& VY, float TX, float TY, float MaxDelta)
 		{
@@ -30,10 +39,68 @@ namespace tfps
 			}
 		}
 
+		void MoveUpdateStance(MoveState& State, uint16_t B, float Dt, const CollisionWorld& World)
+		{
+			if (State.StanceTimer > 0.0f)
+			{
+				State.StanceTimer -= Dt;
+				if (State.StanceTimer < 0.0f) { State.StanceTimer = 0.0f; }
+				return;
+			}
+			const bool bWantProne = (B & Buttons::Prone) != 0;
+			const bool bWantCrouch = (B & Buttons::Crouch) != 0;
+			if (bWantProne)
+			{
+				if (!State.bProne && State.bOnGround)
+				{
+					State.bProne = true;
+					State.bCrouched = false;
+					State.StanceTimer = MoveTuning::ProneTransition;
+				}
+			}
+			else if (State.bProne)
+			{
+				const float H = StanceHeight(bWantCrouch, false);
+				if (!World.OverlapsAny(PlayerBox(State.Pos, H)))
+				{
+					State.bProne = false;
+					State.bCrouched = bWantCrouch;
+					State.StanceTimer = MoveTuning::ProneTransition;
+				}
+			}
+			else if (bWantCrouch)
+			{
+				State.bCrouched = true;
+			}
+			else if (State.bCrouched && !World.OverlapsAny(PlayerBox(State.Pos, MoveTuning::StandHeight)))
+			{
+				State.bCrouched = false;
+			}
+		}
+
+		void MoveUpdateLean(MoveState& State, const MoveInput& Input, bool bSprinting, float Dt, const CollisionWorld& World)
+		{
+			const uint16_t B = Input.Buttons;
+			float Target = 0.0f;
+			if (!bSprinting && !State.bProne && State.StanceTimer <= 0.0f)
+			{
+				if ((B & Buttons::LeanRight) != 0) { Target += 1.0f; }
+				if ((B & Buttons::LeanLeft) != 0) { Target -= 1.0f; }
+			}
+			State.Lean = ApproachScalar(State.Lean, Target, MoveTuning::LeanRate * Dt);
+			int I = 0;
+			while (I < 10 && State.Lean != 0.0f && World.OverlapsAny(MoveHeadBox(State.EyePosition(Input.YawQ))))
+			{
+				State.Lean = ApproachScalar(State.Lean, 0.0f, 0.1f);
+				++I;
+			}
+		}
+
 		bool MoveResolveAxis(MoveState& State, int Axis, float Step, bool bAllowStep, const CollisionWorld& World)
 		{
 			bool bBlocked = false;
-			Aabb PB = PlayerBox(State.Pos, State.bCrouched);
+			const float H = State.Height();
+			Aabb PB = PlayerBox(State.Pos, H);
 			for (const Aabb& WB : World.Boxes)
 			{
 				if (!PB.Overlaps(WB))
@@ -44,7 +111,7 @@ namespace tfps
 				{
 					if (Step > 0.0f)
 					{
-						State.Pos.Z = WB.Min.Z - State.Height() - MoveSkin;
+						State.Pos.Z = WB.Min.Z - H - MoveSkin;
 					}
 					else
 					{
@@ -60,10 +127,10 @@ namespace tfps
 						{
 							Vec3 Cand = State.Pos;
 							Cand.Z = WB.Max.Z;
-							if (!World.OverlapsAny(PlayerBox(Cand, State.bCrouched)))
+							if (!World.OverlapsAny(PlayerBox(Cand, H)))
 							{
 								State.Pos = Cand;
-								PB = PlayerBox(State.Pos, State.bCrouched);
+								PB = PlayerBox(State.Pos, H);
 								continue;
 							}
 						}
@@ -78,7 +145,7 @@ namespace tfps
 					}
 				}
 				bBlocked = true;
-				PB = PlayerBox(State.Pos, State.bCrouched);
+				PB = PlayerBox(State.Pos, H);
 			}
 			return bBlocked;
 		}
@@ -106,7 +173,8 @@ namespace tfps
 
 		void MoveGroundSnap(MoveState& State, const CollisionWorld& World)
 		{
-			const Aabb PB = PlayerBox(State.Pos, State.bCrouched);
+			const float H = State.Height();
+			const Aabb PB = PlayerBox(State.Pos, H);
 			Aabb Probe;
 			Probe.Min = Vec3(PB.Min.X, PB.Min.Y, State.Pos.Z - MoveTuning::StepHeight);
 			Probe.Max = Vec3(PB.Max.X, PB.Max.Y, State.Pos.Z);
@@ -126,7 +194,7 @@ namespace tfps
 			}
 			Vec3 Cand = State.Pos;
 			Cand.Z = Best;
-			if (!World.OverlapsAny(PlayerBox(Cand, State.bCrouched)))
+			if (!World.OverlapsAny(PlayerBox(Cand, H)))
 			{
 				State.Pos.Z = Best;
 				State.Vel.Z = 0.0f;
@@ -135,13 +203,45 @@ namespace tfps
 		}
 	}
 
-	Aabb PlayerBox(const Vec3& Pos, bool bCrouched)
+	float StanceHeight(bool bCrouched, bool bProne)
 	{
-		const float H = bCrouched ? MoveTuning::CrouchHeight : MoveTuning::StandHeight;
+		return bProne ? MoveTuning::ProneHeight : (bCrouched ? MoveTuning::CrouchHeight : MoveTuning::StandHeight);
+	}
+
+	Vec3 MoveState::EyePosition(uint16_t YawQ) const
+	{
+		float S = 0.0f;
+		float C = 0.0f;
+		YawSinCos(YawQ, S, C);
+		const float Off = Lean * MoveTuning::LeanOffset;
+		const float Drop = (Lean < 0.0f ? -Lean : Lean) * MoveTuning::LeanDrop;
+		return Vec3(Pos.X - S * Off, Pos.Y + C * Off, Pos.Z + EyeHeight() - Drop);
+	}
+
+	Aabb PlayerBox(const Vec3& Pos, float Height)
+	{
 		Aabb B;
 		B.Min = Vec3(Pos.X - MoveTuning::HalfWidth, Pos.Y - MoveTuning::HalfWidth, Pos.Z);
-		B.Max = Vec3(Pos.X + MoveTuning::HalfWidth, Pos.Y + MoveTuning::HalfWidth, Pos.Z + H);
+		B.Max = Vec3(Pos.X + MoveTuning::HalfWidth, Pos.Y + MoveTuning::HalfWidth, Pos.Z + Height);
 		return B;
+	}
+
+	float ApproachScalar(float V, float Target, float Step)
+	{
+		if (V < Target)
+		{
+			const float N = V + Step;
+			return N > Target ? Target : N;
+		}
+		const float N = V - Step;
+		return N < Target ? Target : N;
+	}
+
+	bool SprintIntent(const MoveState& State, const MoveInput& Input)
+	{
+		const uint16_t B = Input.Buttons;
+		return (B & Buttons::Sprint) != 0 && (B & Buttons::Walk) == 0 && (B & Buttons::Forward) != 0 && (B & Buttons::Back) == 0
+			&& (B & Buttons::Fire) == 0 && !State.bCrouched && !State.bProne && State.Aim <= 0.0f;
 	}
 
 	float TickDt(uint16_t TickRate)
@@ -149,19 +249,12 @@ namespace tfps
 		return 1.0f / static_cast<float>(TickRate);
 	}
 
-	void Simulate(MoveState& State, const MoveInput& Input, float Dt, const CollisionWorld& World)
+	bool Simulate(MoveState& State, const MoveInput& Input, float Dt, const CollisionWorld& World)
 	{
 		const uint16_t B = Input.Buttons;
 
 		// 1. Stance.
-		if ((B & Buttons::Crouch) != 0)
-		{
-			State.bCrouched = true;
-		}
-		else if (State.bCrouched && !World.OverlapsAny(PlayerBox(State.Pos, false)))
-		{
-			State.bCrouched = false;
-		}
+		MoveUpdateStance(State, B, Dt, World);
 
 		// 2. Wish direction.
 		float S = 0.0f;
@@ -184,12 +277,15 @@ namespace tfps
 			WY *= Inv;
 		}
 
-		const bool bSprinting = (B & Buttons::Sprint) != 0 && (B & Buttons::Walk) == 0 && Fwd > 0.0f && !State.bCrouched;
+		const bool bSprinting = SprintIntent(State, Input);
 		float Speed;
-		if (State.bCrouched) { Speed = MoveTuning::CrouchSpeed; }
+		if (State.StanceTimer > 0.0f) { Speed = 0.0f; }
+		else if (State.bProne) { Speed = MoveTuning::ProneSpeed; }
+		else if (State.bCrouched) { Speed = MoveTuning::CrouchSpeed; }
 		else if ((B & Buttons::Walk) != 0) { Speed = MoveTuning::WalkSpeed; }
 		else if (bSprinting) { Speed = MoveTuning::SprintSpeed; }
 		else { Speed = MoveTuning::RunSpeed; }
+		Speed *= 1.0f - (1.0f - MoveTuning::AdsSpeedMult) * State.Aim;
 		const float TX = WX * Speed;
 		const float TY = WY * Speed;
 
@@ -198,7 +294,7 @@ namespace tfps
 		{
 			const float Accel = bHasInput ? MoveTuning::GroundAccel : MoveTuning::GroundDecel;
 			MoveApproach(State.Vel.X, State.Vel.Y, TX, TY, Accel * Dt);
-			if ((B & Buttons::Jump) != 0 && State.JumpTimer <= 0.0f && !State.bCrouched)
+			if ((B & Buttons::Jump) != 0 && State.JumpTimer <= 0.0f && !State.bCrouched && !State.bProne && State.StanceTimer <= 0.0f)
 			{
 				State.Vel.Z = MoveTuning::JumpSpeed;
 				State.bOnGround = false;
@@ -238,7 +334,10 @@ namespace tfps
 			MoveGroundSnap(State, World);
 		}
 
-		// 7. Timers.
+		// 7. Lean.
+		MoveUpdateLean(State, Input, bSprinting, Dt, World);
+
+		// 8. Timers.
 		if (State.JumpTimer > 0.0f)
 		{
 			State.JumpTimer -= Dt;
@@ -247,6 +346,7 @@ namespace tfps
 				State.JumpTimer = 0.0f;
 			}
 		}
+		return bSprinting;
 	}
 }
 

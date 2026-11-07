@@ -52,6 +52,7 @@ fn input_for(pattern: Pattern, t: f32, idx: usize, rng: &mut u64) -> MoveInput {
                 buttons: buttons::FORWARD,
                 yaw_q: math::quantize_yaw_deg(yaw),
                 pitch_q: 0,
+                slot: 0,
             }
         }
         Pattern::Strafe => {
@@ -64,6 +65,7 @@ fn input_for(pattern: Pattern, t: f32, idx: usize, rng: &mut u64) -> MoveInput {
                 buttons: b,
                 yaw_q: math::quantize_yaw_deg(idx as f32 * 45.0),
                 pitch_q: 0,
+                slot: 0,
             }
         }
         Pattern::Random => {
@@ -86,6 +88,7 @@ fn input_for(pattern: Pattern, t: f32, idx: usize, rng: &mut u64) -> MoveInput {
                 buttons: b,
                 yaw_q: (r >> 16) as u16,
                 pitch_q: 0,
+                slot: 0,
             }
         }
     }

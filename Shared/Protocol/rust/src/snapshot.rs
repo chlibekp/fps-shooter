@@ -287,6 +287,7 @@ mod tests {
                 on_ground: true,
                 crouched: false,
                 jump_timer: 0.25,
+                ..Default::default()
             },
             local_health: 77,
         };

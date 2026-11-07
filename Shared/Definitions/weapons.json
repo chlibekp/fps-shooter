@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "weapons": [
+    {
+      "id": 1, "name": "AR-7 Carbine", "class": "rifle", "fire_mode": "auto",
+      "rpm": 780, "mag_size": 30, "reserve": 150, "pellets": 1,
+      "damage": 36, "damage_min": 26, "falloff_start": 25, "falloff_end": 45, "range": 150,
+      "head_mult": 3.0, "limb_mult": 0.75,
+      "reload_time": 2.4, "reload_empty_time": 3.0, "ads_time": 0.28, "equip_time": 0.55,
+      "spread_hip": 2.6, "spread_ads": 0.12, "spread_move": 0.55, "spread_jump": 4.0,
+      "spread_crouch_mult": 0.8, "spread_prone_mult": 0.6,
+      "recoil": {
+        "pattern": [[0.55, 0.0], [0.62, 0.05], [0.68, 0.10], [0.70, 0.12], [0.66, -0.05], [0.60, -0.18],
+                    [0.55, -0.22], [0.50, -0.12], [0.45, 0.10], [0.42, 0.22], [0.40, 0.18], [0.38, 0.0]],
+        "random_yaw": 0.12, "random_pitch": 0.05,
+        "ads_mult": 0.75, "crouch_mult": 0.85, "prone_mult": 0.6,
+        "recovery_rate": 9.0, "recovery_delay": 0.12, "max_pitch": 14.0
+      }
+    },
+    {
+      "id": 2, "name": "K-9 SMG", "class": "smg", "fire_mode": "auto",
+      "rpm": 920, "mag_size": 30, "reserve": 180, "pellets": 1,
+      "damage": 27, "damage_min": 17, "falloff_start": 12, "falloff_end": 25, "range": 80,
+      "head_mult": 3.0, "limb_mult": 0.75,
+      "reload_time": 2.0, "reload_empty_time": 2.6, "ads_time": 0.22, "equip_time": 0.45,
+      "spread_hip": 2.2, "spread_ads": 0.25, "spread_move": 0.35, "spread_jump": 3.5,
+      "spread_crouch_mult": 0.85, "spread_prone_mult": 0.7,
+      "recoil": {
+        "pattern": [[0.35, 0.0], [0.42, 0.08], [0.48, -0.06], [0.50, 0.12], [0.46, -0.15], [0.42, 0.10]],
+        "random_yaw": 0.18, "random_pitch": 0.06,
+        "ads_mult": 0.8, "crouch_mult": 0.85, "prone_mult": 0.65,
+        "recovery_rate": 11.0, "recovery_delay": 0.10, "max_pitch": 12.0
+      }
+    },
+    {
+      "id": 3, "name": "M-308 Marksman", "class": "dmr", "fire_mode": "semi",
+      "rpm": 300, "mag_size": 10, "reserve": 50, "pellets": 1,
+      "damage": 64, "damage_min": 55, "falloff_start": 40, "falloff_end": 80, "range": 250,
+      "head_mult": 2.5, "limb_mult": 0.8,
+      "reload_time": 2.7, "reload_empty_time": 3.4, "ads_time": 0.35, "equip_time": 0.7,
+      "spread_hip": 3.2, "spread_ads": 0.03, "spread_move": 0.9, "spread_jump": 6.0,
+      "spread_crouch_mult": 0.8, "spread_prone_mult": 0.5,
+      "recoil": {
+        "pattern": [[2.4, 0.15]],
+        "random_yaw": 0.35, "random_pitch": 0.2,
+        "ads_mult": 0.8, "crouch_mult": 0.85, "prone_mult": 0.55,
+        "recovery_rate": 14.0, "recovery_delay": 0.05, "max_pitch": 10.0
+      }
+    },
+    {
+      "id": 4, "name": "P-9 Pistol", "class": "pistol", "fire_mode": "semi",
+      "rpm": 420, "mag_size": 15, "reserve": 60, "pellets": 1,
+      "damage": 32, "damage_min": 22, "falloff_start": 12, "falloff_end": 30, "range": 60,
+      "head_mult": 3.0, "limb_mult": 0.75,
+      "reload_time": 1.6, "reload_empty_time": 2.0, "ads_time": 0.18, "equip_time": 0.35,
+      "spread_hip": 1.8, "spread_ads": 0.2, "spread_move": 0.3, "spread_jump": 3.0,
+      "spread_crouch_mult": 0.9, "spread_prone_mult": 0.8,
+      "recoil": {
+        "pattern": [[1.1, 0.05]],
+        "random_yaw": 0.25, "random_pitch": 0.15,
+        "ads_mult": 0.85, "crouch_mult": 0.9, "prone_mult": 0.8,
+        "recovery_rate": 12.0, "recovery_delay": 0.06, "max_pitch": 8.0
+      }
+    },
+    {
+      "id": 5, "name": "SG-12 Breacher", "class": "shotgun", "fire_mode": "semi",
+      "rpm": 75, "mag_size": 7, "reserve": 28, "pellets": 8,
+      "damage": 18, "damage_min": 6, "falloff_start": 6, "falloff_end": 16, "range": 35,
+      "head_mult": 1.5, "limb_mult": 0.8,
+      "reload_time": 3.2, "reload_empty_time": 3.8, "ads_time": 0.3, "equip_time": 0.6,
+      "spread_hip": 4.5, "spread_ads": 3.6, "spread_move": 0.4, "spread_jump": 2.0,
+      "spread_crouch_mult": 0.95, "spread_prone_mult": 0.9,
+      "recoil": {
+        "pattern": [[4.0, 0.3]],
+        "random_yaw": 0.6, "random_pitch": 0.4,
+        "ads_mult": 0.9, "crouch_mult": 0.9, "prone_mult": 0.8,
+        "recovery_rate": 10.0, "recovery_delay": 0.15, "max_pitch": 12.0
+      }
+    }
+  ],
+  "default_loadout": [1, 4]
+}

@@ -65,6 +65,7 @@ impl InputBundle {
                 buttons: r.u16()?,
                 yaw_q: r.u16()?,
                 pitch_q: r.i16()?,
+                slot: 0,
             };
         }
         Ok(b)
@@ -93,11 +94,13 @@ mod tests {
             buttons: 1,
             yaw_q: 2,
             pitch_q: -3,
+            slot: 0,
         };
         b.cmds[2] = MoveInput {
             buttons: 9,
             yaw_q: 65535,
             pitch_q: 32767,
+            slot: 0,
         };
         let mut v = Vec::new();
         b.encode(&mut Writer::new(&mut v));

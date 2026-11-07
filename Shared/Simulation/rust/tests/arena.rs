@@ -1,5 +1,6 @@
 use tfps_sim::{
     buttons, conformance, simulate, tick_dt, CollisionWorld, MapDef, MoveInput, MoveState, Vec3,
+    WeaponSet,
 };
 
 fn arena() -> MapDef {
@@ -62,6 +63,7 @@ fn can_climb_the_stairs_to_the_upper_floor() {
         buttons: buttons::FORWARD,
         yaw_q: 0,
         pitch_q: 0,
+        slot: 0,
     };
     for _ in 0..128 * 2 {
         simulate(&mut s, &fwd, dt, &world);
@@ -74,14 +76,19 @@ fn conformance_vectors_are_up_to_date() {
     let map = arena();
     let world = CollisionWorld::from_map(&map);
     let starts: Vec<_> = map.spawns.iter().map(|s| s.pos).collect();
-    let expected = conformance::generate(&world, &starts, 900);
+    let weapons = WeaponSet::load(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../Definitions/weapons.json"
+    ))
+    .unwrap();
+    let expected = conformance::generate(&world, &starts, &weapons, 900);
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../Definitions/conformance/movement_vectors.txt"
+        "/../../Definitions/conformance/player_vectors.txt"
     );
     let on_disk = std::fs::read_to_string(path).unwrap_or_default();
     assert!(
         on_disk == expected,
-        "movement_vectors.txt is stale: run `cargo run -p tfps-sim --bin gen_vectors`"
+        "player_vectors.txt is stale: run `cargo run -p tfps-sim --bin gen_vectors`"
     );
 }

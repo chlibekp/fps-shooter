@@ -8,10 +8,12 @@ pub mod conformance;
 pub mod map;
 pub mod math;
 pub mod movement;
+pub mod weapon;
 
 pub use map::{Aabb, CollisionWorld, MapDef, Material};
 pub use math::Vec3;
 pub use movement::{buttons, simulate, MoveInput, MoveState};
+pub use weapon::{simulate_player, Shot, ShotBuffer, WeaponDef, WeaponSet, WeaponState};
 
 /// Fixed simulation timestep for a tick rate. Computed identically in C++.
 pub fn tick_dt(tick_rate: u16) -> f32 {

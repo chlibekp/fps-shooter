@@ -1,0 +1,519 @@
+// Copyright TacticalFPS project. Engine-independent NetCore.
+#include "NetCore/TfpsProtocol.h"
+
+#include <cmath>
+
+namespace tfps
+{
+	namespace
+	{
+		constexpr size_t kAckWindow = 256;
+		constexpr size_t kRecvWindow = 256;
+
+		constexpr uint8_t kMaskPX = 1u << 0;
+		constexpr uint8_t kMaskPY = 1u << 1;
+		constexpr uint8_t kMaskPZ = 1u << 2;
+		constexpr uint8_t kMaskYaw = 1u << 3;
+		constexpr uint8_t kMaskPitch = 1u << 4;
+		constexpr uint8_t kMaskFlags = 1u << 5;
+		constexpr uint8_t kMaskHealth = 1u << 6;
+		constexpr uint8_t kMaskFull = 1u << 7;
+		constexpr uint8_t kMaskAll = 0x7F;
+
+		const EntityState* FindEntity(const std::vector<EntityState>& List, uint16_t Id)
+		{
+			size_t Lo = 0;
+			size_t Hi = List.size();
+			while (Lo < Hi)
+			{
+				const size_t Mid = (Lo + Hi) / 2;
+				if (List[Mid].Id == Id) { return &List[Mid]; }
+				if (List[Mid].Id < Id) { Lo = Mid + 1; } else { Hi = Mid; }
+			}
+			return nullptr;
+		}
+
+		uint8_t ChangeMask(const EntityState& Cur, const EntityState& Base)
+		{
+			uint8_t M = 0;
+			if (Cur.PosMm[0] != Base.PosMm[0]) { M |= kMaskPX; }
+			if (Cur.PosMm[1] != Base.PosMm[1]) { M |= kMaskPY; }
+			if (Cur.PosMm[2] != Base.PosMm[2]) { M |= kMaskPZ; }
+			if (Cur.YawQ != Base.YawQ) { M |= kMaskYaw; }
+			if (Cur.PitchQ != Base.PitchQ) { M |= kMaskPitch; }
+			if (Cur.Flags != Base.Flags) { M |= kMaskFlags; }
+			if (Cur.Health != Base.Health) { M |= kMaskHealth; }
+			return M;
+		}
+	}
+
+	ERejectReason RejectReasonFromU8(uint8_t V)
+	{
+		switch (V)
+		{
+		case 1: return ERejectReason::ServerFull;
+		case 2: return ERejectReason::VersionMismatch;
+		case 3: return ERejectReason::InvalidChallenge;
+		case 4: return ERejectReason::InvalidName;
+		case 5: return ERejectReason::Unauthorized;
+		default: return ERejectReason::Unknown;
+		}
+	}
+
+	const char* RejectReasonName(ERejectReason R)
+	{
+		switch (R)
+		{
+		case ERejectReason::ServerFull: return "server full";
+		case ERejectReason::VersionMismatch: return "protocol version mismatch";
+		case ERejectReason::InvalidChallenge: return "invalid challenge";
+		case ERejectReason::InvalidName: return "invalid name";
+		case ERejectReason::Unauthorized: return "not authorized to join";
+		default: return "unknown";
+		}
+	}
+
+	EDisconnectReason DisconnectReasonFromU8(uint8_t V)
+	{
+		switch (V)
+		{
+		case 1: return EDisconnectReason::ClientQuit;
+		case 2: return EDisconnectReason::Timeout;
+		case 3: return EDisconnectReason::Kicked;
+		case 4: return EDisconnectReason::ServerShutdown;
+		case 5: return EDisconnectReason::ProtocolError;
+		default: return EDisconnectReason::Unknown;
+		}
+	}
+
+	const char* DisconnectReasonName(EDisconnectReason R)
+	{
+		switch (R)
+		{
+		case EDisconnectReason::ClientQuit: return "quit";
+		case EDisconnectReason::Timeout: return "timed out";
+		case EDisconnectReason::Kicked: return "kicked";
+		case EDisconnectReason::ServerShutdown: return "server shut down";
+		case EDisconnectReason::ProtocolError: return "protocol error";
+		default: return "unknown";
+		}
+	}
+
+	// ---- Envelope -------------------------------------------------------------
+
+	void WriteHeader(ByteWriter& W, EPacketType Type)
+	{
+		W.U16(kMagic);
+		W.U16(kProtocolVersion);
+		W.U8(static_cast<uint8_t>(Type));
+	}
+
+	bool ReadHeader(ByteReader& R, PacketHeader& Out)
+	{
+		if (R.U16() != kMagic) { return false; }
+		Out.Version = R.U16();
+		const uint8_t T = R.U8();
+		if (!R.Ok() || T < 1 || T > 7) { return false; }
+		Out.Type = static_cast<EPacketType>(T);
+		return true;
+	}
+
+	void ConnectRequest::Encode(std::vector<uint8_t>& Out) const
+	{
+		ByteWriter W(Out);
+		WriteHeader(W, EPacketType::ConnectRequest);
+		W.U64(ClientNonce);
+		W.PadTo(kHandshakePacketSize);
+	}
+
+	void Challenge::Encode(std::vector<uint8_t>& Out) const
+	{
+		ByteWriter W(Out);
+		WriteHeader(W, EPacketType::Challenge);
+		W.U64(ClientNonce);
+		W.U64(Cookie);
+	}
+
+	bool Challenge::Decode(ByteReader& R)
+	{
+		ClientNonce = R.U64();
+		Cookie = R.U64();
+		return R.Ok();
+	}
+
+	void ChallengeResponse::Encode(std::vector<uint8_t>& Out) const
+	{
+		ByteWriter W(Out);
+		WriteHeader(W, EPacketType::ChallengeResponse);
+		W.U64(ClientNonce);
+		W.U64(Cookie);
+		W.U64(ReconnectToken);
+		W.U64(JoinToken);
+		W.Str8(Name, kMaxNameLen);
+		W.PadTo(kHandshakePacketSize);
+	}
+
+	void ConnectAccepted::Encode(std::vector<uint8_t>& Out) const
+	{
+		ByteWriter W(Out);
+		WriteHeader(W, EPacketType::ConnectAccepted);
+		W.U64(ClientNonce);
+		W.U64(SessionKey);
+		W.U16(PlayerId);
+		W.U16(TickRate);
+		W.U8(SnapshotInterval);
+		W.U32(ServerTick);
+		W.U64(ReconnectToken);
+		W.U64(MapHash);
+		W.Str8(MapName, kMaxMapNameLen);
+	}
+
+	bool ConnectAccepted::Decode(ByteReader& R)
+	{
+		ClientNonce = R.U64();
+		SessionKey = R.U64();
+		PlayerId = R.U16();
+		TickRate = R.U16();
+		SnapshotInterval = R.U8();
+		ServerTick = R.U32();
+		ReconnectToken = R.U64();
+		MapHash = R.U64();
+		MapName = R.Str8(kMaxMapNameLen);
+		return R.Ok() && TickRate >= 1;
+	}
+
+	bool ConnectRejected::Decode(ByteReader& R)
+	{
+		ClientNonce = R.U64();
+		Reason = RejectReasonFromU8(R.U8());
+		return R.Ok();
+	}
+
+	void DisconnectPacket::Encode(std::vector<uint8_t>& Out) const
+	{
+		ByteWriter W(Out);
+		WriteHeader(W, EPacketType::Disconnect);
+		W.U64(SessionKey);
+		W.U8(static_cast<uint8_t>(Reason));
+	}
+
+	bool DisconnectPacket::Decode(ByteReader& R)
+	{
+		SessionKey = R.U64();
+		Reason = DisconnectReasonFromU8(R.U8());
+		return R.Ok();
+	}
+
+	void DataHeader::Encode(ByteWriter& W) const
+	{
+		WriteHeader(W, EPacketType::Data);
+		W.U64(SessionKey);
+		W.U16(Seq);
+		W.U16(Ack);
+		W.U32(AckBits);
+	}
+
+	bool DataHeader::Decode(ByteReader& R)
+	{
+		SessionKey = R.U64();
+		Seq = R.U16();
+		Ack = R.U16();
+		AckBits = R.U32();
+		return R.Ok();
+	}
+
+	// ---- Acks -------------------------------------------------------------------
+
+	AckState::AckState() : Sent(kAckWindow) {}
+
+	void AckState::NextOutgoing(double Now, uint16_t& OutSeq, uint16_t& OutAck, uint32_t& OutAckBits)
+	{
+		const uint16_t S = NextSeq;
+		NextSeq = static_cast<uint16_t>(NextSeq + 1);
+		FSent& Rec = Sent[S % kAckWindow];
+		Rec.Seq = S;
+		Rec.bValid = true;
+		Rec.bAcked = false;
+		Rec.SentAt = Now;
+		OutSeq = S;
+		OutAck = RemoteLatest;
+		OutAckBits = RemoteBits;
+	}
+
+	bool AckState::OnIncoming(uint16_t Seq, uint16_t Ack, uint32_t AckBits, double Now, std::vector<uint16_t>* OutAcked)
+	{
+		if (!bHasRemote)
+		{
+			bHasRemote = true;
+			RemoteLatest = Seq;
+			RemoteBits = 0;
+		}
+		else if (SeqGreater(Seq, RemoteLatest))
+		{
+			const uint32_t Shift = static_cast<uint16_t>(Seq - RemoteLatest);
+			if (Shift >= 32)
+			{
+				RemoteBits = (Shift == 32) ? (1u << 31) : 0u;
+			}
+			else
+			{
+				RemoteBits = (RemoteBits << Shift) | (1u << (Shift - 1));
+			}
+			RemoteLatest = Seq;
+		}
+		else
+		{
+			const uint32_t Back = static_cast<uint16_t>(RemoteLatest - Seq);
+			if (Back == 0 || Back > 32) { return false; }
+			const uint32_t Bit = 1u << (Back - 1);
+			if ((RemoteBits & Bit) != 0) { return false; }
+			RemoteBits |= Bit;
+		}
+		// (0, 0) means "peer has received nothing yet" (see PROTOCOL.md).
+		if (Ack == 0 && AckBits == 0) { return true; }
+		AckOne(Ack, Now, OutAcked);
+		for (uint16_t I = 0; I < 32; ++I)
+		{
+			if ((AckBits & (1u << I)) != 0)
+			{
+				AckOne(static_cast<uint16_t>(Ack - (I + 1)), Now, OutAcked);
+			}
+		}
+		return true;
+	}
+
+	void AckState::AckOne(uint16_t Seq, double Now, std::vector<uint16_t>* OutAcked)
+	{
+		FSent& Rec = Sent[Seq % kAckWindow];
+		if (!Rec.bValid || Rec.Seq != Seq || Rec.bAcked) { return; }
+		Rec.bAcked = true;
+		const double Sample = Now - Rec.SentAt > 0.0 ? Now - Rec.SentAt : 0.0;
+		if (!bRttInit) { Rtt = Sample; bRttInit = true; }
+		else { Rtt = (Rtt * 7.0 + Sample) / 8.0; }
+		if (OutAcked != nullptr) { OutAcked->push_back(Seq); }
+	}
+
+	// ---- Reliable -----------------------------------------------------------
+
+	ReliableReceiver::ReliableReceiver() : Buffer(kRecvWindow) {}
+
+	bool ReliableReceiver::Read(ByteReader& R)
+	{
+		const uint8_t Count = R.U8();
+		for (uint8_t I = 0; I < Count && R.Ok(); ++I)
+		{
+			const uint16_t Seq = R.U16();
+			const uint8_t Type = R.U8();
+			const uint16_t Len = R.U16();
+			if (!R.Ok() || Len > kMaxReliablePayload || R.Remaining() < Len) { R.Fail(); return false; }
+			std::vector<uint8_t> Payload(R.Cursor(), R.Cursor() + Len);
+			R.Skip(Len);
+			if (Seq == NextExpected)
+			{
+				Ready.emplace_back(Type, std::move(Payload));
+				NextExpected = static_cast<uint16_t>(NextExpected + 1);
+				while (true)
+				{
+					auto& Slot = Buffer[NextExpected % kRecvWindow];
+					if (!Slot.first) { break; }
+					Ready.push_back(std::move(Slot.second));
+					Slot.first = false;
+					NextExpected = static_cast<uint16_t>(NextExpected + 1);
+				}
+			}
+			else if (SeqGreater(Seq, NextExpected) && static_cast<uint16_t>(Seq - NextExpected) < kRecvWindow)
+			{
+				auto& Slot = Buffer[Seq % kRecvWindow];
+				if (!Slot.first)
+				{
+					Slot.first = true;
+					Slot.second = std::make_pair(Type, std::move(Payload));
+				}
+			}
+		}
+		return R.Ok();
+	}
+
+	bool ReliableReceiver::Pop(uint8_t& OutType, std::vector<uint8_t>& OutPayload)
+	{
+		if (Ready.empty()) { return false; }
+		OutType = Ready.front().first;
+		OutPayload = std::move(Ready.front().second);
+		Ready.pop_front();
+		return true;
+	}
+
+	bool ServerMessage::Decode(uint8_t InType, const std::vector<uint8_t>& Payload)
+	{
+		ByteReader R(Payload.data(), Payload.size());
+		Type = InType;
+		switch (InType)
+		{
+		case MsgType::PlayerJoined:
+			PlayerId = R.U16();
+			Team = R.U8();
+			Name = R.Str8(kMaxNameLen);
+			break;
+		case MsgType::PlayerLeft:
+			PlayerId = R.U16();
+			Reason = R.U8();
+			break;
+		case MsgType::PlayerConnState:
+		{
+			PlayerId = R.U16();
+			const uint8_t S = R.U8();
+			if (S > 2) { return false; }
+			State = static_cast<EConnState>(S);
+			break;
+		}
+		default:
+			return false;
+		}
+		return R.Ok();
+	}
+
+	std::vector<uint8_t> ServerMessage::EncodePayload() const
+	{
+		std::vector<uint8_t> V;
+		ByteWriter W(V);
+		W.U16(PlayerId);
+		if (Type == MsgType::PlayerJoined) { W.U8(Team); W.Str8(Name, kMaxNameLen); }
+		else if (Type == MsgType::PlayerLeft) { W.U8(Reason); }
+		else { W.U8(static_cast<uint8_t>(State)); }
+		return V;
+	}
+
+	// ---- Input ----------------------------------------------------------------
+
+	void InputBundle::Encode(ByteWriter& W) const
+	{
+		W.U32(AckSnapshotTick);
+		W.U32(NewestSeq);
+		W.U8(Count);
+		for (uint8_t I = 0; I < Count; ++I)
+		{
+			W.U16(Cmds[I].Buttons);
+			W.U16(Cmds[I].YawQ);
+			W.I16(Cmds[I].PitchQ);
+		}
+	}
+
+	bool InputBundle::Decode(ByteReader& R)
+	{
+		AckSnapshotTick = R.U32();
+		NewestSeq = R.U32();
+		Count = R.U8();
+		if (!R.Ok() || Count == 0 || Count > kMaxInputRedundancy || Count > NewestSeq) { R.Fail(); return false; }
+		for (uint8_t I = 0; I < Count; ++I)
+		{
+			Cmds[I].Buttons = R.U16();
+			Cmds[I].YawQ = R.U16();
+			Cmds[I].PitchQ = R.I16();
+		}
+		return R.Ok();
+	}
+
+	// ---- Snapshot -------------------------------------------------------------
+
+	int32_t QuantizeMm(float V)
+	{
+		return static_cast<int32_t>(std::lround(V * 1000.0f));
+	}
+
+	float DequantizeMm(int32_t V)
+	{
+		return static_cast<float>(V) * 0.001f;
+	}
+
+	Vec3 EntityState::Position() const
+	{
+		return Vec3(DequantizeMm(PosMm[0]), DequantizeMm(PosMm[1]), DequantizeMm(PosMm[2]));
+	}
+
+	void EncodeSnapshot(ByteWriter& W, const SnapshotHeader& H, const std::vector<EntityState>& Entities, const std::vector<EntityState>* Baseline)
+	{
+		W.U32(H.ServerTick);
+		W.U32(H.BaselineTick);
+		W.U32(H.LastCmdSeq);
+		W.I8(H.InputBufferDepth);
+		W.F32(H.Local.Pos.X); W.F32(H.Local.Pos.Y); W.F32(H.Local.Pos.Z);
+		W.F32(H.Local.Vel.X); W.F32(H.Local.Vel.Y); W.F32(H.Local.Vel.Z);
+		W.U8(static_cast<uint8_t>((H.Local.bOnGround ? 1 : 0) | (H.Local.bCrouched ? 2 : 0)));
+		W.F32(H.Local.JumpTimer);
+		W.U8(H.LocalHealth);
+		const size_t N = Entities.size() < kMaxEntitiesPerSnapshot ? Entities.size() : kMaxEntitiesPerSnapshot;
+		W.U8(static_cast<uint8_t>(N));
+		for (size_t I = 0; I < N; ++I)
+		{
+			const EntityState& E = Entities[I];
+			const EntityState* Base = Baseline != nullptr ? FindEntity(*Baseline, E.Id) : nullptr;
+			const uint8_t Mask = Base != nullptr ? ChangeMask(E, *Base) : static_cast<uint8_t>(kMaskFull | kMaskAll);
+			W.U16(E.Id);
+			W.U8(Mask);
+			if (Mask & kMaskPX) { W.I32(E.PosMm[0]); }
+			if (Mask & kMaskPY) { W.I32(E.PosMm[1]); }
+			if (Mask & kMaskPZ) { W.I32(E.PosMm[2]); }
+			if (Mask & kMaskYaw) { W.U16(E.YawQ); }
+			if (Mask & kMaskPitch) { W.I16(E.PitchQ); }
+			if (Mask & kMaskFlags) { W.U8(E.Flags); }
+			if (Mask & kMaskHealth) { W.U8(E.Health); }
+		}
+	}
+
+	bool PeekSnapshotBaselineTick(const uint8_t* Data, size_t Len, uint32_t& OutBaseline)
+	{
+		ByteReader R(Data, Len);
+		R.U32();
+		OutBaseline = R.U32();
+		return R.Ok();
+	}
+
+	bool DecodeSnapshot(ByteReader& R, const std::vector<EntityState>* Baseline, SnapshotHeader& H, std::vector<EntityState>& Out)
+	{
+		Out.clear();
+		H.ServerTick = R.U32();
+		H.BaselineTick = R.U32();
+		H.LastCmdSeq = R.U32();
+		H.InputBufferDepth = R.I8();
+		if (H.BaselineTick != 0 && Baseline == nullptr) { return false; }
+		const std::vector<EntityState>* Base = H.BaselineTick != 0 ? Baseline : nullptr;
+		H.Local.Pos.X = R.F32Finite(); H.Local.Pos.Y = R.F32Finite(); H.Local.Pos.Z = R.F32Finite();
+		H.Local.Vel.X = R.F32Finite(); H.Local.Vel.Y = R.F32Finite(); H.Local.Vel.Z = R.F32Finite();
+		const uint8_t MF = R.U8();
+		H.Local.bOnGround = (MF & 1) != 0;
+		H.Local.bCrouched = (MF & 2) != 0;
+		H.Local.JumpTimer = R.F32Finite();
+		H.LocalHealth = R.U8();
+		const uint8_t N = R.U8();
+		if (!R.Ok() || N > kMaxEntitiesPerSnapshot) { return false; }
+		int LastId = -1;
+		for (uint8_t I = 0; I < N; ++I)
+		{
+			const uint16_t Id = R.U16();
+			if (!R.Ok() || static_cast<int>(Id) <= LastId) { return false; }
+			LastId = Id;
+			uint8_t Mask = R.U8();
+			EntityState E;
+			if (Mask & kMaskFull)
+			{
+				E.Id = Id;
+				Mask = kMaskAll;
+			}
+			else
+			{
+				const EntityState* B = Base != nullptr ? FindEntity(*Base, Id) : nullptr;
+				if (B == nullptr) { return false; }
+				E = *B;
+			}
+			if (Mask & kMaskPX) { E.PosMm[0] = R.I32(); }
+			if (Mask & kMaskPY) { E.PosMm[1] = R.I32(); }
+			if (Mask & kMaskPZ) { E.PosMm[2] = R.I32(); }
+			if (Mask & kMaskYaw) { E.YawQ = R.U16(); }
+			if (Mask & kMaskPitch) { E.PitchQ = R.I16(); }
+			if (Mask & kMaskFlags) { E.Flags = R.U8(); }
+			if (Mask & kMaskHealth) { E.Health = R.U8(); }
+			Out.push_back(E);
+		}
+		return R.Ok();
+	}
+}

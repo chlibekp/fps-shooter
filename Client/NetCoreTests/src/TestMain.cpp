@@ -5,6 +5,7 @@ namespace tfpstest
 {
 	std::vector<FTestCase>& Registry() { static std::vector<FTestCase> R; return R; }
 	int GFailures = 0;
+	std::string GServerAddr = "127.0.0.1:7777";
 }
 
 int main(int Argc, char** Argv)
@@ -13,7 +14,7 @@ int main(int Argc, char** Argv)
 	const char* Filter = nullptr;
 	for (int I = 1; I < Argc; ++I)
 	{
-		if (std::strcmp(Argv[I], "--server") == 0 && I + 1 < Argc) { ++I; continue; }
+		if (std::strcmp(Argv[I], "--server") == 0 && I + 1 < Argc) { tfpstest::GServerAddr = Argv[++I]; continue; }
 		Filter = Argv[I];
 	}
 	bool bHaveServer = false;

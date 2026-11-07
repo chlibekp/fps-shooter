@@ -10,6 +10,8 @@ namespace tfpstest
 	struct FTestCase { const char* Name; std::function<void()> Fn; bool bNeedsServer; };
 	std::vector<FTestCase>& Registry();
 	extern int GFailures;
+	/** host:port passed with --server. */
+	extern std::string GServerAddr;
 	struct FRegistrar
 	{
 		FRegistrar(const char* Name, std::function<void()> Fn, bool bNeedsServer = false) { Registry().push_back({Name, std::move(Fn), bNeedsServer}); }

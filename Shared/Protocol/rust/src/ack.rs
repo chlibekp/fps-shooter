@@ -118,7 +118,13 @@ impl AckState {
             self.remote_bits |= bit;
         }
 
-        // Local acks.
+        // Local acks. (ack = 0, ack_bits = 0) means "nothing received yet":
+        // a peer that has not received any packet must not acknowledge
+        // packet 0. An honest lone ack of packet 0 is ignored too, which is
+        // harmless (it is acked again by later bitfields or resent).
+        if ack == 0 && ack_bits == 0 {
+            return true;
+        }
         self.ack_one(ack, now, &mut on_acked);
         for i in 0..32u16 {
             if ack_bits & (1 << i) != 0 {
@@ -198,6 +204,20 @@ mod tests {
             delivered.len(),
             acked.len()
         );
+    }
+
+    /// Regression: a peer that has received nothing must not ack packet 0.
+    #[test]
+    fn no_false_ack_before_first_receive() {
+        let mut a = AckState::new();
+        let mut b = AckState::new();
+        let now = Instant::now();
+        let (seq0, _, _) = a.next_outgoing(now); // lost
+        assert_eq!(seq0, 0);
+        let (bseq, back, bbits) = b.next_outgoing(now);
+        let mut acked = vec![];
+        a.on_incoming(bseq, back, bbits, now, |s| acked.push(s));
+        assert!(acked.is_empty());
     }
 
     #[test]

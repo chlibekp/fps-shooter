@@ -69,6 +69,8 @@ u64 session_key
 u16 seq          sender's packet sequence (wraps)
 u16 ack          newest seq received from the peer
 u32 ack_bits     bit i = packet (ack - 1 - i) received
+                 ack = 0 and ack_bits = 0 together mean "nothing received yet"
+                 (receivers ignore that pair; it must never ack packet 0)
 reliable section
 u8  body_kind    0 none, 1 input (C→S), 2 snapshot (S→C)
 body

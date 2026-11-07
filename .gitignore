@@ -1,0 +1,32 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Unreal Engine
+Client/Binaries/
+Client/Intermediate/
+Client/Saved/
+Client/DerivedDataCache/
+Client/.vs/
+Client/*.sln
+Client/*.xcworkspace
+Client/.idea/
+Client/Content/Definitions/
+Client/Plugins/*/Binaries/
+Client/Plugins/*/Intermediate/
+
+# C++ standalone NetCore build
+/build/
+Client/NetCoreTests/build/
+
+# Packaging output
+/Dist/
+
+# Blender
+*.blend1
+*.blend2
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp

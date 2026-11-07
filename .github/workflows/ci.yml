@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust server & shared crates (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+        if: matrix.os == 'ubuntu-latest'
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+        if: matrix.os == 'ubuntu-latest'
+      - run: cargo test --workspace --release
+
+  netcore:
+    name: C++ NetCore (${{ matrix.os }}, hostile float=${{ matrix.hostile }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        hostile: ['OFF', 'ON']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Rust server (for live tests)
+        run: cargo build --release -p tfps-server
+      - name: Configure
+        run: cmake -S Client/NetCoreTests -B build/netcore -DCMAKE_BUILD_TYPE=Release -DTFPS_HOSTILE_FLOAT=${{ matrix.hostile }}
+      - name: Build
+        run: cmake --build build/netcore --config Release
+      - name: Offline tests (golden vectors, movement conformance, determinism self-test)
+        shell: bash
+        run: |
+          BIN=build/netcore/tfps_netcore_tests
+          [ -f build/netcore/Release/tfps_netcore_tests.exe ] && BIN=build/netcore/Release/tfps_netcore_tests.exe
+          "$BIN"
+      - name: Live tests against the Rust server
+        shell: bash
+        run: |
+          BIN=build/netcore/tfps_netcore_tests
+          [ -f build/netcore/Release/tfps_netcore_tests.exe ] && BIN=build/netcore/Release/tfps_netcore_tests.exe
+          ./target/release/tfps-server --bind 127.0.0.1:17777 --stats-interval 3600 &
+          sleep 1
+          "$BIN" --server 127.0.0.1:17777 Live
+          kill %1 || true
+
+  ue-mock-check:
+    name: Unreal glue code compile check (mock API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: Tools/UeMockCheck/check.sh

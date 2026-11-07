@@ -42,7 +42,7 @@ fn bench(c: &mut Criterion) {
         c.bench_function("world_tick_32_players_grenades", |b| {
             b.iter(|| {
                 for id in 1..=n {
-                    let pressed = seq % 8 == 0;
+                    let pressed = seq.is_multiple_of(8);
                     let input = MoveInput {
                         buttons: buttons::FORWARD | if pressed { buttons::FIRE } else { 0 },
                         yaw_q: (id as u32 * 2000 + seq * 13) as u16,

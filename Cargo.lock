@@ -607,6 +607,7 @@ dependencies = [
  "clap",
  "criterion",
  "rand",
+ "socket2",
  "tfps-devclient",
  "tfps-protocol",
  "tfps-sim",

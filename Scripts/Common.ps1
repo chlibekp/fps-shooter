@@ -15,4 +15,5 @@ function Sync-Definitions {
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
     Copy-Item (Join-Path $RepoRoot "Shared\Definitions\maps\*.json") $dest -Force
     Copy-Item (Join-Path $RepoRoot "Shared\Definitions\weapons.json") (Join-Path $RepoRoot "Client\Content\Definitions") -Force
+    Copy-Item (Join-Path $RepoRoot "Shared\Definitions\gadgets.json") (Join-Path $RepoRoot "Client\Content\Definitions") -Force
 }

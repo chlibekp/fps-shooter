@@ -5,6 +5,7 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Tickable.h"
 #include "NetCore/TfpsClientCore.h"
+#include "NetCore/TfpsGadget.h"
 #include "TfpsSocketTransport.h"
 
 #include <memory>
@@ -57,14 +58,22 @@ public:
 	const tfps::ClientCore* GetCore() const { return Core.get(); }
 	const tfps::MapDef* GetMap() const { return bHasMap ? &Map : nullptr; }
 	const tfps::WeaponSet& GetWeapons() const { return Weapons; }
+	const tfps::GadgetSet& GetGadgets() const { return Gadgets; }
+	/** Display name of a held item / kill-feed weapon id (weapon id, or 0x80 | gadget id). */
+	FString ItemName(uint8 ItemId) const;
 
 	/** Combat feedback for the HUD (consumed as it is drawn). */
 	struct FKillFeedEntry { FString Text; double Time = 0.0; bool bInvolvesMe = false; };
 	struct FHitMarker { double Time = -100.0; bool bHeadshot = false; bool bKill = false; };
 	struct FDamageIndicator { double Time = -100.0; FVector FromMeters = FVector::ZeroVector; int32 Amount = 0; };
+	/** Last flashbang that affected the local player (Intensity 0..1). */
+	struct FFlash { double Time = -100.0; float Intensity = 0.0f; float Duration = 4.0f; };
 	const TArray<FKillFeedEntry>& GetKillFeed() const { return KillFeed; }
 	const FHitMarker& GetHitMarker() const { return HitMarker; }
 	const FDamageIndicator& GetDamageIndicator() const { return DamageIndicator; }
+	const FFlash& GetFlash() const { return Flash; }
+	/** Flashbang detonations to visualise (position in meters), drained by ATfpsGadgetFx. */
+	TArray<FVector>& GetPendingFlashes() { return PendingFlashes; }
 	/** Shots to visualise this frame (drained by ATfpsShotFx). */
 	TArray<tfps::FxShot>& GetPendingShots() { return PendingShots; }
 	/** Destroyed cell ids since last drained (ATfpsArenaBuilder removes them and spawns debris). */
@@ -94,7 +103,10 @@ private:
 	std::unique_ptr<tfps::ClientCore> Core;
 	tfps::MapDef Map;
 	tfps::WeaponSet Weapons;
+	tfps::GadgetSet Gadgets;
 	bool bHasMap = false;
+	FFlash Flash;
+	TArray<FVector> PendingFlashes;
 	TArray<FKillFeedEntry> KillFeed;
 	FHitMarker HitMarker;
 	FDamageIndicator DamageIndicator;

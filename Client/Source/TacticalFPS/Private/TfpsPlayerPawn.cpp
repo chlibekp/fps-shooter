@@ -100,9 +100,10 @@ void ATfpsPlayerPawn::UpdateFromNetwork(const UTfpsNetSubsystem& Net, const FRot
 		WeaponKick = 1.0f;
 	}
 	WeaponKick = FMath::FInterpTo(WeaponKick, 0.0f, DeltaTime, 18.0f);
+	const bool bGadget = tfps::IsGadgetSlot(W.Active);
 	const tfps::WeaponDef* Def = Core->LoadoutWeapon(W.Active);
 	const bool bPistol = Def != nullptr && Def->Class == "pistol";
-	const float Length = bPistol ? 0.22f : 0.62f;
+	const float Length = bGadget ? 0.09f : (bPistol ? 0.22f : 0.62f);
 	const FVector Hip(32.0f, 14.0f, -14.0f);
 	const FVector Ads(26.0f, 0.0f, -6.5f);
 	FVector Offset = FMath::Lerp(Hip, Ads, Cur.Aim);
@@ -111,12 +112,14 @@ void ATfpsPlayerPawn::UpdateFromNetwork(const UTfpsNetSubsystem& Net, const FRot
 	{
 		Offset.Z -= 10.0f; // lowered while reloading
 	}
-	if (W.EquipTimer > 0.0f && Def != nullptr && Def->EquipTime > 0.0f)
+	const float EquipTime = bGadget ? tfps::kGadgetEquipTime : (Def != nullptr ? Def->EquipTime : 0.0f);
+	if (W.EquipTimer > 0.0f && EquipTime > 0.0f)
 	{
-		Offset.Z -= 20.0f * (W.EquipTimer / Def->EquipTime);
+		Offset.Z -= 20.0f * (W.EquipTimer / EquipTime);
 	}
 	ViewWeapon->SetRelativeLocation(Offset);
 	ViewWeapon->SetRelativeRotation(FRotator(WeaponKick * 3.0f, 0.0f, 0.0f));
-	ViewWeapon->SetRelativeScale3D(FVector(Length, 0.05f, 0.08f));
+	// 🔒 placeholder shapes: a small block for a gadget in hand, a bar for a gun.
+	ViewWeapon->SetRelativeScale3D(bGadget ? FVector(Length, 0.07f, 0.09f) : FVector(Length, 0.05f, 0.08f));
 	ViewWeapon->SetVisibility(Core->IsAlive());
 }

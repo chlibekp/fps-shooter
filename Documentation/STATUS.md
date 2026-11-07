@@ -4,7 +4,7 @@ Legend: ✅ implemented and tested · 🟡 partially implemented / implemented b
 not verified end-to-end · ❌ not started · 🔒 placeholder (explicitly marked
 temporary).
 
-Last updated: Phase 3 (Destruction) — server-side and NetCore complete, Unreal presentation mock-checked only.
+Last updated: Phase 4, part 1 (grenades and breaching charges). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
 
 ## Verification environment caveat
 
@@ -109,7 +109,7 @@ result:
 | Area | Status |
 |------|--------|
 | Destruction | ✅ See the Phase 3 table |
-| Gadgets / drones | ❌ Phase 4 |
+| Gadgets / drones | 🟡 Phase 4 in progress. See the Phase 4 table. |
 | Three production maps | ❌ Phase 5. `test_arena` is a graybox. |
 | Blender asset pipeline | ✅ Procedural, headless. 3 props (crate, jersey barrier, container) with LOD1, UCX collision and baked PBR maps. |
 | Props placed in the Unreal level | ❌ Needs editor import (documented in ASSET_PIPELINE.md) |
@@ -124,7 +124,7 @@ result:
 | Deterministic cell subdivision shared by server and client | ✅ | Bit-exact in Rust and C++; part of the map hash |
 | Cells damaged by bullets (per-material multiplier) | ✅ | Shoot holes through drywall and wood. Glass panes shatter. Brick barely chips (explosives only). |
 | Bullet penetration through walls (damage reduced per layer) | ✅ | Concrete and metal stop bullets |
-| Explosions break walls (falloff) and hurt players (through destructible walls, blocked by indestructible ones) | ✅ | `GameWorld::explode`. No gadget uses it yet (Phase 4). |
+| Explosions break walls (falloff) and hurt players (through destructible walls, blocked by indestructible ones) | ✅ | `GameWorld::explode`, used by frag grenades and breaching charges |
 | Destroy windows, doors, barricades, floors | ✅ | Test arena: glass panes, two wooden doors, a plank barricade, a wooden floor hatch |
 | Movement through new holes, client prediction collides with holes | ✅ | Conformance vectors include 1,876 destroyed cells |
 | Replication of destruction events, full state for joiners | ✅ | CellsDestroyed messages; e2e-tested |
@@ -133,6 +133,23 @@ result:
 | Shot-time rewind of destruction for lag compensation | ❌ | Shots use the current destruction state (documented in ARCHITECTURE.md) |
 | Doors that open/close (USE) | ❌ | Doors can only be destroyed for now |
 | Reinforced surfaces | ❌ | Phase 4 gadget (material exists) |
+
+## Gadgets (spec §6) — Phase 4
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Data-driven gadgets and per-team gadget loadouts | ✅ | `Shared/Definitions/gadgets.json`. The C++ parser hash is checked against Rust. |
+| Gadget slots holster the weapon (shared simulation, predicted) | ✅ | Bit-exact; the conformance vectors include gadget steps |
+| Frag grenade: throw or lob, bounce, rest, fuse, explosion | ✅ | Server physics swept against intact cells. The grenade falls when the floor under it breaks. |
+| Flashbang: per-player intensity from distance, line of sight and facing | ✅ | Unit tests and an e2e test. The white-out is drawn by the HUD (🟡, not run). |
+| Smoke grenade: cloud for 14 s | ✅ server / 🟡 🔒 client | Visual is a placeholder sphere. Smoke does not block anything on the server: it is visual concealment only, like other shooters. |
+| Breaching charge: place within reach, arm (1 s), remote detonation, breaches brick | ✅ | Falls off without exploding if the surface under it is destroyed |
+| Gadget limits (count, cooldown, entity cap), restock on respawn, kept across reconnect | ✅ | |
+| Gadget entities replicated in snapshots; Flash message | ✅ | Protocol v4, Rust and C++ golden vectors |
+| Unreal: gadget keys (3/4), HUD gadget panel, flash white-out, gadget visuals | 🟡 🔒 | `ATfpsGadgetFx` uses engine shapes; mock-checked, not run |
+| Drones | ❌ | Next Phase 4 component |
+| Cameras, motion sensors, jammers | ❌ | |
+| Barricades (placeable), wall reinforcement | ❌ | |
 
 ## Frontend / UI (spec §11)
 
@@ -154,6 +171,7 @@ result:
 | Debris cubes and the sphere-and-light explosion | `ATfpsArenaBuilder`, `ATfpsShotFx` | Chaos fracture, Niagara dust and fireballs |
 | Engine `Entry` map as the boot map, with the level built at runtime | `DefaultEngine.ini` | Authored maps (Phase 5) |
 | Canvas debug HUD | `ATfpsHUD` | UMG tactical HUD (Phase 7) |
+| Gadgets drawn as engine spheres/cubes, smoke as a grey sphere, flash as a point light | `ATfpsGadgetFx` | Blender gadget meshes, Niagara smoke (Phase 5/7) |
 
 ## Known issues
 

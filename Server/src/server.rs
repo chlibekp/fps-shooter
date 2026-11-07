@@ -20,7 +20,8 @@ use tfps_protocol::packet::{
     DataHeader, Disconnect, DisconnectReason, PacketType, RejectReason,
 };
 use tfps_protocol::snapshot::{
-    self, quantize_mm, EntityState, ShotEvent, SnapshotHeader, MAX_SHOT_EVENTS,
+    self, quantize_cm, quantize_mm, EntityState, GadgetEntityState, ShotEvent, SnapshotHeader,
+    MAX_SHOT_EVENTS,
 };
 use tfps_protocol::{Writer, MAX_PACKET_SIZE, PROTOCOL_VERSION};
 use tfps_sim::weapon::{WeaponSet, WeaponState};
@@ -42,6 +43,7 @@ struct SavedPlayer {
     state: MoveState,
     weapon: WeaponState,
     health: u8,
+    gadgets: [tfps_sim::gadget::GadgetStock; tfps_sim::weapon::GADGET_SLOTS],
     expires: Instant,
 }
 
@@ -65,6 +67,7 @@ pub struct ServerCore {
     scratch: Vec<EntityState>,
     recent_shots: std::collections::VecDeque<(u32, ShotEvent)>,
     shot_scratch: Vec<ShotEvent>,
+    gadget_scratch: Vec<GadgetEntityState>,
     weapons_hash: u64,
     last_stats_log: Instant,
     last_stats: crate::stats::StatsSnapshot,
@@ -75,6 +78,7 @@ impl ServerCore {
         cfg: ServerConfig,
         map: MapDef,
         weapons: WeaponSet,
+        gadgets: tfps_sim::GadgetSet,
         socket: UdpSocket,
         stats: Arc<Stats>,
     ) -> Self {
@@ -82,9 +86,10 @@ impl ServerCore {
         let weapons_hash = weapons.hash();
         let now = Instant::now();
         Self {
-            game: GameWorld::new(map, weapons, cfg.rules.clone(), cfg.tick_rate),
+            game: GameWorld::new(map, weapons, gadgets, cfg.rules.clone(), cfg.tick_rate),
             recent_shots: std::collections::VecDeque::with_capacity(SHOT_EVENT_HISTORY),
             shot_scratch: Vec::with_capacity(32),
+            gadget_scratch: Vec::with_capacity(24),
             weapons_hash,
             cfg,
             socket,
@@ -315,7 +320,9 @@ impl ServerCore {
             (team, name)
         };
         if !rejoin_existing {
-            let state = restored.as_ref().map(|s| (s.state, s.weapon, s.health));
+            let state = restored
+                .as_ref()
+                .map(|s| (s.state, s.weapon, s.health, s.gadgets));
             self.game.add_player(player_id, team, pname.clone(), state);
         } else if let Some(p) = self.game.player_mut(player_id) {
             // New client process: its command sequence restarts.
@@ -554,6 +561,7 @@ impl ServerCore {
                             state: p.state,
                             weapon: p.weapon,
                             health: p.health,
+                            gadgets: p.gadgets,
                             expires: now + self.cfg.reconnect_window,
                         },
                     );
@@ -649,6 +657,20 @@ impl ServerCore {
                         },
                     );
                 }
+                GameEvent::Flash { pos, ref victims } => {
+                    let pos_mm = [quantize_mm(pos.x), quantize_mm(pos.y), quantize_mm(pos.z)];
+                    for c in self.conns.values_mut() {
+                        let intensity = victims
+                            .iter()
+                            .find(|(id, _)| *id == c.player_id)
+                            .map(|v| v.1)
+                            .unwrap_or(0);
+                        let m = Message::Flash { pos_mm, intensity };
+                        if c.rel_tx.queue(m.msg_type(), m.encode_payload()).is_err() {
+                            c.doomed = Some(DisconnectReason::ProtocolError);
+                        }
+                    }
+                }
                 GameEvent::Kill {
                     killer,
                     victim,
@@ -690,6 +712,19 @@ impl ServerCore {
 
     fn send_snapshots(&mut self, now: Instant) {
         self.game.collect_entities(&mut self.entities);
+        self.gadget_scratch.clear();
+        self.gadget_scratch
+            .extend(self.game.gadgets.iter().map(|g| GadgetEntityState {
+                id: g.id,
+                gadget: g.def,
+                phase: g.phase,
+                owner: g.owner,
+                pos_cm: [
+                    quantize_cm(g.pos.x),
+                    quantize_cm(g.pos.y),
+                    quantize_cm(g.pos.z),
+                ],
+            }));
         let tick = self.game.tick;
         let mut buf = std::mem::take(&mut self.send_buf);
         for c in self.conns.values_mut() {
@@ -724,6 +759,7 @@ impl ServerCore {
                 } else {
                     player.respawn_timer.max(0.0)
                 },
+                gadgets: player.gadgets,
             };
             // Shots by other players since the last snapshot sent to this client.
             self.shot_scratch.clear();
@@ -756,7 +792,14 @@ impl ServerCore {
             .encode(&mut w);
             rel_tx.write(&mut w, seq, now, RELIABLE_RESEND, RELIABLE_BUDGET);
             w.u8(BodyKind::Snapshot as u8);
-            snapshot::encode(&mut w, &header, &self.scratch, baseline, &self.shot_scratch);
+            snapshot::encode(
+                &mut w,
+                &header,
+                &self.scratch,
+                baseline,
+                &self.shot_scratch,
+                &self.gadget_scratch,
+            );
             debug_assert!(buf.len() <= MAX_PACKET_SIZE);
             c.remember(tick, &self.scratch);
             Self::send_raw(&self.socket, &self.stats, c.addr, &buf);

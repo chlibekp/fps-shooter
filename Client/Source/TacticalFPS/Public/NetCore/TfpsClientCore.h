@@ -49,7 +49,7 @@ namespace tfps
 
 	struct ClientEvent
 	{
-		enum class EType : uint8_t { Connected, PlayerJoined, PlayerLeft, PlayerConnState, Disconnected, HitConfirm, Damaged, Kill, Explosion } Type = EType::Connected;
+		enum class EType : uint8_t { Connected, PlayerJoined, PlayerLeft, PlayerConnState, Disconnected, HitConfirm, Damaged, Kill, Explosion, Flash } Type = EType::Connected;
 		uint16_t PlayerId = 0;
 		uint8_t Team = 0;
 		std::string Name;
@@ -64,8 +64,9 @@ namespace tfps
 		uint8_t WeaponId = 0;
 		bool bHeadshot = false;
 		bool bKilled = false;
-		Vec3 From;          // Damaged: attacker position; Explosion: centre
+		Vec3 From;          // Damaged: attacker position; Explosion / Flash: centre
 		float Radius = 0;   // Explosion
+		float Intensity = 0; // Flash: 0..1, how strongly the local player is blinded
 	};
 
 	/** A shot to visualise (muzzle flash, tracer, impact). */
@@ -162,6 +163,10 @@ namespace tfps
 		bool IsAlive() const { return bAlive; }
 		float RespawnIn() const { return RespawnSeconds; }
 		uint8_t Health() const { return LocalHealth; }
+		/** Gadget entities (grenades, placed charges, smoke) in the newest snapshot. */
+		const std::vector<GadgetEntityState>& Gadgets() const { return GadgetEntities; }
+		/** The local player's gadget slot `Slot` (0..kGadgetSlots-1): id and remaining count. */
+		GadgetStock LocalGadget(int Slot) const { return (Slot >= 0 && Slot < kGadgetSlots) ? LocalGadgets[Slot] : GadgetStock{}; }
 		const std::map<uint16_t, RemotePlayer>& Players() const { return RemotePlayers; }
 		const ClientNetStats& Stats() const { return NetStats; }
 		const CollisionWorld& World() const { return Collision; }
@@ -200,6 +205,9 @@ namespace tfps
 		std::deque<FxShot> Shots;
 		std::deque<uint32_t> DestroyedCells;
 		std::vector<ShotEvent> ShotEventBuf;
+		std::vector<GadgetEntityState> GadgetBuf;
+		std::vector<GadgetEntityState> GadgetEntities;
+		GadgetStock LocalGadgets[kGadgetSlots];
 
 		EClientPhase CurPhase = EClientPhase::Requesting;
 		EDisconnectCause Cause = EDisconnectCause::None;

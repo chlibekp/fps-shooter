@@ -7,6 +7,8 @@
 #include <sstream>
 #include "NetCore/TfpsMap.h"
 #include "NetCore/TfpsWeapon.h"
+#include "NetCore/TfpsGadget.h"
+#include <cstdio>
 
 using namespace tfps;
 
@@ -62,7 +64,7 @@ namespace
 TFPS_TEST(GoldenHandshakeBytesMatchRust)
 {
 	auto V = LoadVectors();
-	TFPS_REQUIRE(V.size() == 11);
+	TFPS_REQUIRE(V.size() == 12);
 	std::vector<uint8_t> B;
 	ConnectRequest CR; CR.ClientNonce = 0x0102030405060708ull; CR.Encode(B);
 	TFPS_EXPECT(B == V["connect_request"]);
@@ -159,13 +161,21 @@ TFPS_TEST(GoldenDataPacketsMatchRust)
 	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
 	TFPS_EXPECT(M.Type == MsgType::Kill && M.OtherId == 2 && M.PlayerId == 5 && M.WeaponId == 1 && M.bHeadshot);
 	TFPS_EXPECT(M.EncodePayload() == Payload);
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::Flash && M.FromMm[0] == 3000 && M.FromMm[1] == -4000 && M.FromMm[2] == 120 && M.Intensity == 211);
+	TFPS_EXPECT(M.EncodePayload() == Payload);
 	TFPS_EXPECT(!Rx.Pop(Type, Payload));
 	TFPS_REQUIRE(R.U8() == static_cast<uint8_t>(EBodyKind::Snapshot));
 	SnapshotHeader SH;
 	std::vector<EntityState> Ents;
 	std::vector<ShotEvent> ShotsIn;
-	TFPS_REQUIRE(DecodeSnapshot(R, nullptr, SH, Ents, ShotsIn));
+	std::vector<GadgetEntityState> GadgetsIn;
+	TFPS_REQUIRE(DecodeSnapshot(R, nullptr, SH, Ents, ShotsIn, &GadgetsIn));
 	TFPS_EXPECT(R.Remaining() == 0);
+	TFPS_EXPECT(SH.Gadgets[0].Id == 1 && SH.Gadgets[0].Count == 2 && SH.Gadgets[1].Id == 4 && SH.Gadgets[1].Count == 3);
+	TFPS_REQUIRE(GadgetsIn.size() == 1);
+	TFPS_EXPECT(GadgetsIn[0].Id == 3 && GadgetsIn[0].Gadget == 1 && GadgetsIn[0].Phase == GadgetPhase::Flying && GadgetsIn[0].Owner == 2
+		&& GadgetsIn[0].PosCm[0] == -1234 && GadgetsIn[0].PosCm[1] == 560 && GadgetsIn[0].PosCm[2] == 87);
 	TFPS_EXPECT(SH.ServerTick == 1000 && SH.BaselineTick == 0 && SH.LastCmdSeq == 48 && SH.InputBufferDepth == 2 && SH.LocalHealth == 100);
 	TFPS_EXPECT(SH.Local == GoldenLocal());
 	TFPS_EXPECT(SH.Weapon == GoldenWeapon());
@@ -177,7 +187,7 @@ TFPS_TEST(GoldenDataPacketsMatchRust)
 	// Re-encode the snapshot body and compare with the Rust bytes.
 	std::vector<uint8_t> Body;
 	ByteWriter BW(Body);
-	EncodeSnapshot(BW, SH, Ents, nullptr, ShotsIn);
+	EncodeSnapshot(BW, SH, Ents, nullptr, ShotsIn, &GadgetsIn);
 	const std::vector<uint8_t> RustBody(P.end() - static_cast<long>(Body.size()), P.end());
 	TFPS_EXPECT(Body == RustBody);
 }
@@ -231,7 +241,12 @@ TFPS_TEST(DefinitionHashesMatchRust)
 	};
 	MapDef Map;
 	WeaponSet Weapons;
+	GadgetSet Gadgets;
 	std::string Err;
+	TFPS_REQUIRE(ParseGadgetsJson(ReadText(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/gadgets.json"), Gadgets, Err));
+	TFPS_EXPECT(Gadgets.Gadgets.size() == 4 && Gadgets.Get(4) != nullptr && Gadgets.Get(4)->Kind == EGadgetKind::Breach);
+	std::printf("  gadgets hash %016llx\n", static_cast<unsigned long long>(Gadgets.Hash()));
+	TFPS_EXPECT(Gadgets.Hash() == HexU64(V["gadgets_hash"]));
 	TFPS_REQUIRE(ParseMapJson(ReadText(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/maps/test_arena.json"), Map, Err));
 	TFPS_REQUIRE(ParseWeaponsJson(ReadText(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/weapons.json"), Weapons, Err));
 	TFPS_EXPECT(Map.GeometryHash() == HexU64(V["map_hash_test_arena"]));

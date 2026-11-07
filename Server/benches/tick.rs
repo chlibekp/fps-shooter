@@ -6,15 +6,17 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use tfps_protocol::snapshot::{self, EntityState, SnapshotHeader};
 use tfps_protocol::Writer;
 use tfps_server::game::{GameWorld, MatchRules};
-use tfps_sim::{buttons, MapDef, MoveInput, WeaponSet};
+use tfps_sim::{buttons, GadgetSet, MapDef, MoveInput, WeaponSet};
 
 fn world(players: u16) -> GameWorld {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../Shared/Definitions");
     let map = MapDef::load(format!("{root}/maps/test_arena.json")).unwrap();
     let weapons = WeaponSet::load(format!("{root}/weapons.json")).unwrap();
+    let gadgets = GadgetSet::load(format!("{root}/gadgets.json")).unwrap();
     let mut w = GameWorld::new(
         map,
         weapons,
+        gadgets,
         MatchRules {
             respawn_delay: 0.1,
             ..Default::default()
@@ -85,6 +87,7 @@ fn bench(c: &mut Criterion) {
                         &h,
                         black_box(&others),
                         Some(&base),
+                        &[],
                         &[],
                     );
                 }

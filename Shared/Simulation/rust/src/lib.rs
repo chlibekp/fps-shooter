@@ -5,11 +5,13 @@
 //! decision 4).
 
 pub mod conformance;
+pub mod gadget;
 pub mod map;
 pub mod math;
 pub mod movement;
 pub mod weapon;
 
+pub use gadget::{GadgetDef, GadgetKind, GadgetSet};
 pub use map::{Aabb, CollisionWorld, MapDef, Material};
 pub use math::Vec3;
 pub use movement::{buttons, simulate, MoveInput, MoveState};

@@ -240,6 +240,10 @@ fn vectors() -> String {
                 weapon: 1,
                 headshot: true,
             },
+            Message::Flash {
+                pos_mm: [3_000, -4_000, 120],
+                intensity: 211,
+            },
         ] {
             tx.queue(m.msg_type(), m.encode_payload()).unwrap();
         }
@@ -261,6 +265,10 @@ fn vectors() -> String {
             local_health: 100,
             alive: true,
             respawn_in: 0.0,
+            gadgets: [
+                tfps_sim::gadget::GadgetStock { id: 1, count: 2 },
+                tfps_sim::gadget::GadgetStock { id: 4, count: 3 },
+            ],
         };
         let shots = [ShotEvent {
             shooter: 2,
@@ -268,7 +276,14 @@ fn vectors() -> String {
             end_mm: [-20_000, 1_500, 1_650],
             surface: surface::PLAYER,
         }];
-        snapshot::encode(&mut w, &h, &base, None, &shots);
+        let gadgets = [snapshot::GadgetEntityState {
+            id: 3,
+            gadget: 1,
+            phase: 0,
+            owner: 2,
+            pos_cm: [-1_234, 560, 87],
+        }];
+        snapshot::encode(&mut w, &h, &base, None, &shots, &gadgets);
     }
     add("data_snapshot_full", &b);
 
@@ -302,8 +317,9 @@ fn vectors() -> String {
             local_health: 0,
             alive: false,
             respawn_in: 4.5,
+            gadgets: Default::default(),
         };
-        snapshot::encode(&mut w, &h, &cur, Some(&base), &[]);
+        snapshot::encode(&mut w, &h, &cur, Some(&base), &[], &[]);
     }
     add("snapshot_delta_body", &b);
 
@@ -316,6 +332,8 @@ fn vectors() -> String {
         map.geometry_hash()
     ));
     out.push_str(&format!("weapons_hash {:016x}\n", weapons.hash()));
+    let gadgets = tfps_sim::GadgetSet::load(format!("{root}/gadgets.json")).unwrap();
+    out.push_str(&format!("gadgets_hash {:016x}\n", gadgets.hash()));
     out
 }
 

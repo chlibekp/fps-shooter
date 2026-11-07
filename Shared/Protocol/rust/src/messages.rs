@@ -12,6 +12,7 @@ pub mod msg_type {
     pub const KILL: u8 = 6;
     pub const CELLS_DESTROYED: u8 = 7;
     pub const EXPLOSION: u8 = 8;
+    pub const FLASH: u8 = 9;
 }
 
 /// Maximum cell ids per CellsDestroyed message (fits the 400-byte per-packet
@@ -72,6 +73,9 @@ pub enum Message {
     CellsDestroyed { cells: Vec<u32> },
     /// S -> all. An explosion happened (effects only; damage is server-side).
     Explosion { pos_mm: [i32; 3], radius_cm: u16 },
+    /// S -> all. A flashbang went off at `pos_mm`; `intensity` (0..=255) is
+    /// how strongly the receiving player is blinded (0 = not affected).
+    Flash { pos_mm: [i32; 3], intensity: u8 },
     /// S -> all. Kill feed.
     Kill {
         killer: u16,
@@ -92,6 +96,7 @@ impl Message {
             Message::Kill { .. } => msg_type::KILL,
             Message::CellsDestroyed { .. } => msg_type::CELLS_DESTROYED,
             Message::Explosion { .. } => msg_type::EXPLOSION,
+            Message::Flash { .. } => msg_type::FLASH,
         }
     }
 
@@ -151,6 +156,12 @@ impl Message {
                     w.i32(*v);
                 }
                 w.u16(*radius_cm);
+            }
+            Message::Flash { pos_mm, intensity } => {
+                for v in pos_mm {
+                    w.i32(*v);
+                }
+                w.u8(*intensity);
             }
             Message::Kill {
                 killer,
@@ -221,6 +232,10 @@ impl Message {
                 pos_mm: [r.i32()?, r.i32()?, r.i32()?],
                 radius_cm: r.u16()?,
             },
+            msg_type::FLASH => Message::Flash {
+                pos_mm: [r.i32()?, r.i32()?, r.i32()?],
+                intensity: r.u8()?,
+            },
             _ => return Err(DecodeError::Invalid("unknown message type")),
         })
     }
@@ -269,6 +284,10 @@ mod tests {
             Message::Explosion {
                 pos_mm: [1, -2, 3],
                 radius_cm: 300,
+            },
+            Message::Flash {
+                pos_mm: [4, 5, -6],
+                intensity: 200,
             },
         ] {
             assert_eq!(

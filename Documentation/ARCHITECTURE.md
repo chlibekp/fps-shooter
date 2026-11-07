@@ -189,3 +189,38 @@ shooter's render time. A hole made less than the rewind window ago can let
 a shot through a moment before the shooter saw it. This is accepted for
 now; rewinding destruction would require cell-destruction timestamps in the
 lag-compensation history.
+
+## Decision 12 — Gadgets are server entities; only the holstered weapon is predicted
+
+Gadgets (frag, flash and smoke grenades, breaching charges; drones and
+defender gadgets follow) are data-driven (`Shared/Definitions/gadgets.json`)
+and simulated only by the server (`Server/src/gadgets.rs`). The client does
+not predict them:
+
+* a thrown grenade appears one round trip after the throw. Its flight is
+  short and its effect is delayed by a fuse anyway, so the latency is hardly
+  visible, and a predicted grenade would need projectile physics in both
+  languages and rollback when it bounces differently;
+* placement, arming and detonation are authoritative, so a client cannot
+  place charges out of reach, detonate unarmed charges or throw more than it
+  carries.
+
+What *is* shared is the effect on the weapon: selecting a gadget slot
+holsters the weapon in the deterministic simulation (no aim, reload or
+fire, a 0.4 s switch time), so prediction stays bit-exact while a gadget is
+in hand. The conformance vectors include gadget-slot steps.
+
+Grenades are swept against the current collision world (including
+destroyed cells) with a small radius, bounce with restitution and friction,
+come to rest, and start falling again if the floor under them is destroyed.
+A charge attached to a cell that is destroyed falls off without exploding.
+Explosions reuse `GameWorld::explode` (cells and players, friendly-fire rule
+applies; the thrower is always affected). Flashbangs compute a per-player
+intensity from distance, line of sight (glass lets the flash through) and
+how directly the player is looking at it; each client receives its own
+intensity. The blindness itself is client-side presentation: a client can
+always ignore it, as in any shooter.
+
+Gadget entities are sent complete in every snapshot (≤ 24, 12 bytes each)
+instead of delta-encoded: there are few of them and they change every tick
+while flying.

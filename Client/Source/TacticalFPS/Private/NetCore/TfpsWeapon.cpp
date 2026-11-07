@@ -174,21 +174,56 @@ namespace tfps
 			&& ShotCounter == O.ShotCounter;
 	}
 
+	namespace
+	{
+		/** A tick with a gadget in hand: no aiming, reloading or firing; movement, timers and recoil recovery continue. */
+		bool SimulateHolstered(MoveState& Ms, WeaponState& Ws, const MoveInput& Input, float Dt, const CollisionWorld& World, const WeaponDef& RecoveryDef)
+		{
+			Ms.Aim = ApproachScalar(Ms.Aim, 0.0f, Dt / kGadgetAimTime);
+			const bool bSprinted = Simulate(Ms, Input, Dt, World);
+			if (Ws.EquipTimer > 0.0f)
+			{
+				Ws.EquipTimer -= Dt;
+				if (Ws.EquipTimer < 0.0f) { Ws.EquipTimer = 0.0f; }
+			}
+			Ws.Cooldown -= Dt;
+			if (Ws.Cooldown < 0.0f) { Ws.Cooldown = 0.0f; }
+			Ws.ShotsFired = 0;
+			Ws.bTriggerPrev = (Input.Buttons & Buttons::Fire) != 0;
+			if (Ws.RecoverTimer > 0.0f)
+			{
+				Ws.RecoverTimer -= Dt;
+				if (Ws.RecoverTimer < 0.0f) { Ws.RecoverTimer = 0.0f; }
+			}
+			else
+			{
+				const float Step = RecoveryDef.Recoil.RecoveryRate * Dt;
+				Ws.RecoilPitch = ApproachScalar(Ws.RecoilPitch, 0.0f, Step);
+				Ws.RecoilYaw = ApproachScalar(Ws.RecoilYaw, 0.0f, Step);
+			}
+			return bSprinted;
+		}
+	}
+
 	bool SimulatePlayer(MoveState& Ms, WeaponState& Ws, const MoveInput& Input, float Dt, const CollisionWorld& World,
 		const WeaponDef* const Loadout[kWeaponSlots], ShotBuffer& OutShots)
 	{
 		const uint16_t B = Input.Buttons;
 
-		// 0. Weapon switching.
-		const uint8_t Want = Input.Slot < kWeaponSlots ? Input.Slot : 0;
+		// 0. Weapon / gadget switching.
+		const uint8_t Want = Input.Slot < kWeaponSlots + kGadgetSlots ? Input.Slot : 0;
 		if (Want != Ws.Active)
 		{
 			Ws.Active = Want;
-			Ws.EquipTimer = Loadout[Want]->EquipTime;
+			Ws.EquipTimer = Want < kWeaponSlots ? Loadout[Want]->EquipTime : kGadgetEquipTime;
 			Ws.ReloadTimer = 0.0f;
 			Ws.BurstLeft = 0;
 			Ws.ShotsFired = 0;
 			if (Ws.Cooldown < 0.0f) { Ws.Cooldown = 0.0f; }
+		}
+		if (IsGadgetSlot(Ws.Active))
+		{
+			return SimulateHolstered(Ms, Ws, Input, Dt, World, *Loadout[0]);
 		}
 		const WeaponDef& Def = *Loadout[Ws.Active];
 

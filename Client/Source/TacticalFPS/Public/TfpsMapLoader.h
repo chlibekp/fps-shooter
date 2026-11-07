@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "NetCore/TfpsMap.h"
 #include "NetCore/TfpsWeapon.h"
+#include "NetCore/TfpsGadget.h"
 
 /**
  * Loads a map's gameplay definition (Shared/Definitions/maps/<Name>.json).
@@ -17,4 +18,7 @@ struct FTfpsMapLoader
 
 	/** Loads Shared/Definitions/weapons.json (same search order). */
 	static bool LoadWeapons(tfps::WeaponSet& OutWeapons, FString& OutError);
+
+	/** Loads Shared/Definitions/gadgets.json (same search order). */
+	static bool LoadGadgets(tfps::GadgetSet& OutGadgets, FString& OutError);
 };

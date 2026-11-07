@@ -1,7 +1,8 @@
-# TacticalFPS wire protocol — version 3
+# TacticalFPS wire protocol — version 4
 
 Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
-stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions).
+stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions),
+v4 (Phase 4: gadget slots, gadget entities in snapshots, flashbangs).
 
 Implementations:
 
@@ -24,7 +25,7 @@ both sides.
 | Field | Type | Value |
 |-------|------|-------|
 | magic | u16 | `0x4654` (bytes `54 46`, "TF") |
-| version | u16 | `3` |
+| version | u16 | `4` |
 | type | u8 | packet type |
 
 Packet types: 1 ConnectRequest, 2 Challenge, 3 ChallengeResponse,
@@ -107,6 +108,10 @@ Message types (S→C):
 | 6 | Kill | `u16 killer, u16 victim, u8 weapon_id, u8 headshot` — to everyone (weapon 0 = explosion) |
 | 7 | CellsDestroyed | `u8 count (≤ 90), count × u32 cell_id` — to everyone; the complete set is also sent to a client right after it connects |
 | 8 | Explosion | `i32 pos_mm[3], u16 radius_cm` — to everyone (effects only) |
+| 9 | Flash | `i32 pos_mm[3], u8 intensity` — to everyone; `intensity` (0..255) is how strongly *the receiving player* is blinded (0 = only the bang is visible) |
+
+Kill `weapon_id`: a weapon id, `0` for an untraced explosion, or
+`0x80 | gadget id` for a gadget (frag grenade, breaching charge).
 
 Cell ids index the destruction cells of the map (see "Destruction" below).
 The reliable sender always lets at least one message into a packet, so a
@@ -121,6 +126,14 @@ u8  count                1..16
 count × { u16 buttons, u16 yaw_q, i16 pitch_q, u8 weapon_slot, u32 render_time }
                          cmds[i] has seq newest_seq - i
 ```
+
+`weapon_slot`: 0 = primary, 1 = secondary, 2 / 3 = gadget slot 0 / 1. With a
+gadget in hand the weapon is holstered by the shared simulation (no aiming,
+reloading or firing; switching takes 0.4 s). Pressing FIRE uses the gadget
+(server only, not predicted): thrown gadgets leave the hand (with AIM held:
+an underhand lob at 45 % speed); a breaching charge is placed on the surface
+in front of the player (within its reach). AIM + FIRE with the breaching
+charge in hand detonates the player's armed charges.
 
 `render_time` is the server tick (24.8 fixed point) at which the client was
 rendering remote players when it sampled the command. The server rewinds
@@ -158,6 +171,7 @@ f32 cooldown, f32 reload_timer, u8 reload_empty, f32 equip_timer
 u8  burst_left, u8 trigger_prev, u16 shots_fired
 f32 recoil_pitch, f32 recoil_yaw, f32 recover_timer, u32 shot_counter
 u8  health, u8 alive, f32 respawn_in
+2 × { u8 gadget_id, u8 count }      the local player's gadget slots
 -- other entities (≤ 64), sorted by id ascending, all present entities listed --
 u8  entity_count
   u16 id, u16 mask, fields in mask order:
@@ -168,7 +182,18 @@ u8  entity_count
 -- shot events (≤ 32): shots by other players since the previous snapshot --
 u8  shot_count
   u16 shooter, u8 weapon_id, i32 end_mm[3], u8 surface   (0..7 map material, 0xFE player, 0xFF nothing)
+-- gadget entities (≤ 24), always complete (not delta-encoded) --
+u8  gadget_count
+  u16 id, u8 gadget_id, u8 phase, u16 owner, i16 pos_cm[3]
 ```
+
+Gadget phases: 0 flying, 1 resting, 2 planted (charge arming), 3 armed,
+4 smoking (smoke cloud). Gadget ids refer to `Shared/Definitions/gadgets.json`
+(loaded by both sides; the golden vectors carry its hash so the C++ parser is
+checked against Rust).
+
+Entity `weapon_id`: the held weapon, or `0x80 | gadget id` while a gadget
+is in hand.
 
 Entity flags: bit0 on_ground, bit1 crouched, bit2 sprinting, bit3 alive,
 bit4 prone, bit5 reloading.

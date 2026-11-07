@@ -15,6 +15,11 @@
 namespace tfps
 {
 	constexpr int kWeaponSlots = 2;
+	/** Gadget slots follow the weapon slots (input slot kWeaponSlots + i = gadget i, weapon holstered). */
+	constexpr int kGadgetSlots = 2;
+	constexpr float kGadgetEquipTime = 0.4f;
+	constexpr float kGadgetAimTime = 0.25f;
+	inline bool IsGadgetSlot(uint8_t Active) { return Active >= kWeaponSlots && Active < kWeaponSlots + kGadgetSlots; }
 	constexpr int kMaxShotsPerTick = 4;
 	constexpr int kMaxPellets = 12;
 

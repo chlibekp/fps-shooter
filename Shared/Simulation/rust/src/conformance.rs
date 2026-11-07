@@ -4,7 +4,7 @@
 //! Text format (one record per line, all floats as raw IEEE-754 bits in hex):
 //!
 //! ```text
-//! tfps-player-vectors 3
+//! tfps-player-vectors 4
 //! solid <minx> <miny> <minz> <maxx> <maxy> <maxz> <material> <destructible>
 //! destroyed <cell_id>
 //! seq <name> <dt> <primary_id> <secondary_id>
@@ -20,10 +20,10 @@
 use crate::map::CollisionWorld;
 use crate::math::Vec3;
 use crate::movement::{buttons, simulate, MoveInput, MoveState};
-use crate::weapon::{simulate_player, ShotBuffer, WeaponDef, WeaponSet, WeaponState};
+use crate::weapon::{simulate_player, ShotBuffer, WeaponDef, WeaponSet, WeaponState, SLOTS};
 use std::fmt::Write;
 
-pub const FORMAT_VERSION: u32 = 3;
+pub const FORMAT_VERSION: u32 = 4;
 
 struct XorShift(u64);
 impl XorShift {
@@ -182,7 +182,15 @@ pub fn generate(
                         b |= buttons::RELOAD;
                     }
                     if bit(34, 31) {
-                        input.slot ^= 1;
+                        input.slot = if (input.slot as usize) < SLOTS {
+                            input.slot ^ 1
+                        } else {
+                            0
+                        };
+                    }
+                    if (r >> 45) & 31 == 0 {
+                        // Gadget in hand (weapon holstered).
+                        input.slot = (SLOTS as u64 + ((r >> 50) & 1)) as u8;
                     }
                     input.buttons = b;
                     hold = 3 + ((r >> 40) & 0x1F) as u32;

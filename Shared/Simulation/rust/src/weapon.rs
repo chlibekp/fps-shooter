@@ -17,6 +17,19 @@ use crate::movement::{self, approach_scalar, buttons, MoveInput, MoveState};
 use serde::Deserialize;
 
 pub const SLOTS: usize = 2;
+/// Gadget slots follow the weapon slots: input slot `SLOTS + i` holds
+/// gadget `i` (the weapon is holstered; gadget use is resolved by the server).
+pub const GADGET_SLOTS: usize = 2;
+/// Seconds to bring a gadget up (and the weapon back down).
+pub const GADGET_EQUIP_TIME: f32 = 0.4;
+/// Aim (ADS) decay rate while holding a gadget, in 1/s.
+pub const GADGET_AIM_TIME: f32 = 0.25;
+
+/// True if `active` is a gadget slot (weapon holstered).
+#[inline]
+pub fn is_gadget_slot(active: u8) -> bool {
+    active as usize >= SLOTS && (active as usize) < SLOTS + GADGET_SLOTS
+}
 pub const MAX_SHOTS_PER_TICK: usize = 4;
 pub const MAX_PELLETS: usize = 12;
 
@@ -401,21 +414,28 @@ pub fn simulate_player(
 ) -> bool {
     let b = input.buttons;
 
-    // 0. Weapon switching.
-    let want = if (input.slot as usize) < SLOTS {
+    // 0. Weapon / gadget switching.
+    let want = if (input.slot as usize) < SLOTS + GADGET_SLOTS {
         input.slot
     } else {
         0
     };
     if want != ws.active {
         ws.active = want;
-        ws.equip_timer = loadout[want as usize].equip_time;
+        ws.equip_timer = if (want as usize) < SLOTS {
+            loadout[want as usize].equip_time
+        } else {
+            GADGET_EQUIP_TIME
+        };
         ws.reload_timer = 0.0;
         ws.burst_left = 0;
         ws.shots_fired = 0;
         if ws.cooldown < 0.0 {
             ws.cooldown = 0.0;
         }
+    }
+    if is_gadget_slot(ws.active) {
+        return simulate_holstered(ms, ws, input, dt, world, loadout[0]);
     }
     let def = loadout[ws.active as usize];
 
@@ -571,6 +591,43 @@ pub fn simulate_player(
             ws.recoil_pitch = approach_scalar(ws.recoil_pitch, 0.0, step);
             ws.recoil_yaw = approach_scalar(ws.recoil_yaw, 0.0, step);
         }
+    }
+    sprinted
+}
+
+/// A tick with a gadget in hand: the weapon cannot aim, reload or fire;
+/// movement, timers and recoil recovery continue.
+fn simulate_holstered(
+    ms: &mut MoveState,
+    ws: &mut WeaponState,
+    input: &MoveInput,
+    dt: f32,
+    world: &CollisionWorld,
+    recovery_def: &WeaponDef,
+) -> bool {
+    ms.aim = approach_scalar(ms.aim, 0.0, dt / GADGET_AIM_TIME);
+    let sprinted = movement::simulate(ms, input, dt, world);
+    if ws.equip_timer > 0.0 {
+        ws.equip_timer -= dt;
+        if ws.equip_timer < 0.0 {
+            ws.equip_timer = 0.0;
+        }
+    }
+    ws.cooldown -= dt;
+    if ws.cooldown < 0.0 {
+        ws.cooldown = 0.0;
+    }
+    ws.shots_fired = 0;
+    ws.trigger_prev = input.buttons & buttons::FIRE != 0;
+    if ws.recover_timer > 0.0 {
+        ws.recover_timer -= dt;
+        if ws.recover_timer < 0.0 {
+            ws.recover_timer = 0.0;
+        }
+    } else {
+        let step = recovery_def.recoil.recovery_rate * dt;
+        ws.recoil_pitch = approach_scalar(ws.recoil_pitch, 0.0, step);
+        ws.recoil_yaw = approach_scalar(ws.recoil_yaw, 0.0, step);
     }
     sprinted
 }

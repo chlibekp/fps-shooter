@@ -76,3 +76,30 @@ bool FTfpsMapLoader::LoadWeapons(tfps::WeaponSet& OutWeapons, FString& OutError)
 	OutError = FString::Printf(TEXT("weapons.json not found (looked in %s and %s)"), *Candidates[0], *Candidates[1]);
 	return false;
 }
+
+bool FTfpsMapLoader::LoadGadgets(tfps::GadgetSet& OutGadgets, FString& OutError)
+{
+	const TArray<FString> Candidates = {
+		FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Definitions"), TEXT("gadgets.json")),
+		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("Shared"), TEXT("Definitions"), TEXT("gadgets.json")),
+	};
+	for (const FString& Path : Candidates)
+	{
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *Path))
+		{
+			continue;
+		}
+		const std::string Utf8(TCHAR_TO_UTF8(*Text));
+		std::string Error;
+		if (!tfps::ParseGadgetsJson(Utf8, OutGadgets, Error))
+		{
+			OutError = FString::Printf(TEXT("%s: %s"), *Path, UTF8_TO_TCHAR(Error.c_str()));
+			return false;
+		}
+		UE_LOG(LogTfps, Log, TEXT("Loaded %d gadgets from %s"), static_cast<int32>(OutGadgets.Gadgets.size()), *Path);
+		return true;
+	}
+	OutError = FString::Printf(TEXT("gadgets.json not found (looked in %s and %s)"), *Candidates[0], *Candidates[1]);
+	return false;
+}

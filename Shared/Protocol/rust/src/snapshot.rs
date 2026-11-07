@@ -3,7 +3,8 @@
 
 use crate::bytes::{Reader, Writer};
 use crate::DecodeError;
-use tfps_sim::weapon::{SlotAmmo, WeaponState, SLOTS};
+use tfps_sim::gadget::GadgetStock;
+use tfps_sim::weapon::{SlotAmmo, WeaponState, GADGET_SLOTS, SLOTS};
 use tfps_sim::{MoveState, Vec3};
 
 pub mod entity_flags {
@@ -17,6 +18,7 @@ pub mod entity_flags {
 
 pub const MAX_ENTITIES_PER_SNAPSHOT: usize = 64;
 pub const MAX_SHOT_EVENTS: usize = 32;
+pub const MAX_GADGET_ENTITIES: usize = 24;
 
 const M_PX: u16 = 1 << 0;
 const M_PY: u16 = 1 << 1;
@@ -99,6 +101,34 @@ pub struct ShotEvent {
     pub surface: u8,
 }
 
+/// A gadget entity (grenade, placed charge, smoke cloud). Sent in full in
+/// every snapshot; positions in centimetres.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GadgetEntityState {
+    pub id: u16,
+    /// Gadget definition id.
+    pub gadget: u8,
+    /// Phase (see the server's `gadgets::phase`).
+    pub phase: u8,
+    pub owner: u16,
+    pub pos_cm: [i16; 3],
+}
+
+#[inline]
+pub fn quantize_cm(v: f32) -> i16 {
+    (v * 100.0).round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
+}
+
+impl GadgetEntityState {
+    pub fn position(&self) -> Vec3 {
+        Vec3::new(
+            self.pos_cm[0] as f32 * 0.01,
+            self.pos_cm[1] as f32 * 0.01,
+            self.pos_cm[2] as f32 * 0.01,
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SnapshotHeader {
     pub server_tick: u32,
@@ -113,6 +143,8 @@ pub struct SnapshotHeader {
     pub alive: bool,
     /// Seconds until respawn while dead.
     pub respawn_in: f32,
+    /// The local player's gadget slots (id and count left).
+    pub gadgets: [GadgetStock; GADGET_SLOTS],
 }
 
 fn change_mask(cur: &EntityState, base: &EntityState) -> u16 {
@@ -187,6 +219,10 @@ fn encode_local(w: &mut Writer, h: &SnapshotHeader) {
     w.u8(h.local_health);
     w.u8(h.alive as u8);
     w.f32(h.respawn_in);
+    for g in &h.gadgets {
+        w.u8(g.id);
+        w.u8(g.count);
+    }
 }
 
 fn decode_local(r: &mut Reader, h: &mut SnapshotHeader) -> Result<(), DecodeError> {
@@ -203,7 +239,7 @@ fn decode_local(r: &mut Reader, h: &mut SnapshotHeader) -> Result<(), DecodeErro
     l.aim = r.f32_finite()?;
     let ws = &mut h.weapon;
     ws.active = r.u8()?;
-    if ws.active as usize >= SLOTS {
+    if ws.active as usize >= SLOTS + GADGET_SLOTS {
         return Err(DecodeError::Invalid("bad weapon slot"));
     }
     for s in ws.slots.iter_mut() {
@@ -227,6 +263,10 @@ fn decode_local(r: &mut Reader, h: &mut SnapshotHeader) -> Result<(), DecodeErro
     h.local_health = r.u8()?;
     h.alive = r.u8()? != 0;
     h.respawn_in = r.f32_finite()?;
+    for g in h.gadgets.iter_mut() {
+        g.id = r.u8()?;
+        g.count = r.u8()?;
+    }
     Ok(())
 }
 
@@ -239,6 +279,7 @@ pub fn encode(
     entities: &[EntityState],
     baseline: Option<&[EntityState]>,
     shots: &[ShotEvent],
+    gadgets: &[GadgetEntityState],
 ) {
     debug_assert!(entities.windows(2).all(|p| p[0].id < p[1].id));
     debug_assert_eq!(baseline.is_none(), header.baseline_tick == 0);
@@ -299,6 +340,18 @@ pub fn encode(
         }
         w.u8(s.surface);
     }
+
+    let ng = gadgets.len().min(MAX_GADGET_ENTITIES);
+    w.u8(ng as u8);
+    for g in &gadgets[..ng] {
+        w.u16(g.id);
+        w.u8(g.gadget);
+        w.u8(g.phase);
+        w.u16(g.owner);
+        for v in g.pos_cm {
+            w.i16(v);
+        }
+    }
 }
 
 /// Reads only the baseline tick (to look up the baseline before decoding).
@@ -314,9 +367,11 @@ pub fn decode(
     baseline: Option<&[EntityState]>,
     out: &mut Vec<EntityState>,
     shots: &mut Vec<ShotEvent>,
+    gadgets: &mut Vec<GadgetEntityState>,
 ) -> Result<SnapshotHeader, DecodeError> {
     out.clear();
     shots.clear();
+    gadgets.clear();
     let mut h = SnapshotHeader {
         server_tick: r.u32()?,
         baseline_tick: r.u32()?,
@@ -401,6 +456,20 @@ pub fn decode(
             surface: r.u8()?,
         });
     }
+
+    let ng = r.u8()? as usize;
+    if ng > MAX_GADGET_ENTITIES {
+        return Err(DecodeError::Invalid("too many gadgets"));
+    }
+    for _ in 0..ng {
+        gadgets.push(GadgetEntityState {
+            id: r.u16()?,
+            gadget: r.u8()?,
+            phase: r.u8()?,
+            owner: r.u16()?,
+            pos_cm: [r.i16()?, r.i16()?, r.i16()?],
+        });
+    }
     Ok(h)
 }
 
@@ -450,6 +519,10 @@ mod tests {
             local_health: 77,
             alive: true,
             respawn_in: 0.0,
+            gadgets: [
+                GadgetStock { id: 1, count: 2 },
+                GadgetStock { id: 4, count: 3 },
+            ],
         }
     }
 
@@ -464,12 +537,28 @@ mod tests {
             surface: surface::PLAYER,
         }];
         let mut buf = Vec::new();
-        encode(&mut Writer::new(&mut buf), &header, &base, None, &shots);
-        let (mut out, mut sh) = (Vec::new(), Vec::new());
-        let h = decode(&mut Reader::new(&buf), None, &mut out, &mut sh).unwrap();
+        let gadgets = vec![GadgetEntityState {
+            id: 7,
+            gadget: 4,
+            phase: 3,
+            owner: 2,
+            pos_cm: [quantize_cm(1.234), -5, quantize_cm(-400.0)],
+        }];
+        encode(
+            &mut Writer::new(&mut buf),
+            &header,
+            &base,
+            None,
+            &shots,
+            &gadgets,
+        );
+        let (mut out, mut sh, mut gd) = (Vec::new(), Vec::new(), Vec::new());
+        let h = decode(&mut Reader::new(&buf), None, &mut out, &mut sh, &mut gd).unwrap();
         assert_eq!(h, header);
         assert_eq!(out, base);
         assert_eq!(sh, shots);
+        assert_eq!(gd, gadgets);
+        assert_eq!(gd[0].pos_cm, [123, -5, -32768]);
         let full_len = buf.len();
 
         let mut cur = vec![ent(1, 100), ent(2, 260), ent(9, 900)];
@@ -481,14 +570,21 @@ mod tests {
             ..header
         };
         buf.clear();
-        encode(&mut Writer::new(&mut buf), &h2, &cur, Some(&base), &[]);
+        encode(&mut Writer::new(&mut buf), &h2, &cur, Some(&base), &[], &[]);
         assert!(buf.len() < full_len);
         assert_eq!(peek_baseline_tick(&buf).unwrap(), 10);
-        decode(&mut Reader::new(&buf), Some(&base), &mut out, &mut sh).unwrap();
+        decode(
+            &mut Reader::new(&buf),
+            Some(&base),
+            &mut out,
+            &mut sh,
+            &mut gd,
+        )
+        .unwrap();
         assert_eq!(out, cur);
         assert!(sh.is_empty());
         assert_eq!(
-            decode(&mut Reader::new(&buf), None, &mut out, &mut sh).err(),
+            decode(&mut Reader::new(&buf), None, &mut out, &mut sh, &mut gd).err(),
             Some(DecodeError::MissingBaseline(10))
         );
     }
@@ -502,9 +598,23 @@ mod tests {
         };
         let base = vec![ent(1, 1)];
         let mut a = Vec::new();
-        encode(&mut Writer::new(&mut a), &header, &base, Some(&base), &[]);
+        encode(
+            &mut Writer::new(&mut a),
+            &header,
+            &base,
+            Some(&base),
+            &[],
+            &[],
+        );
         let mut b = Vec::new();
-        encode(&mut Writer::new(&mut b), &header, &[], Some(&base), &[]);
+        encode(
+            &mut Writer::new(&mut b),
+            &header,
+            &[],
+            Some(&base),
+            &[],
+            &[],
+        );
         assert_eq!(a.len() - b.len(), 4);
     }
 
@@ -513,10 +623,11 @@ mod tests {
         let mut header = header();
         header.local.pos.x = f32::NAN;
         let mut buf = Vec::new();
-        encode(&mut Writer::new(&mut buf), &header, &[], None, &[]);
+        encode(&mut Writer::new(&mut buf), &header, &[], None, &[], &[]);
         assert!(decode(
             &mut Reader::new(&buf),
             None,
+            &mut Vec::new(),
             &mut Vec::new(),
             &mut Vec::new()
         )

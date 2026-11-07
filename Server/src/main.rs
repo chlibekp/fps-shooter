@@ -22,6 +22,12 @@ struct Args {
     /// Map gameplay definition (JSON).
     #[arg(long, default_value = "Shared/Definitions/maps/test_arena.json")]
     map: PathBuf,
+    /// Weapon definitions (JSON, must match the clients' file).
+    #[arg(long, default_value = "Shared/Definitions/weapons.json")]
+    weapons: PathBuf,
+    /// Gadget definitions (JSON).
+    #[arg(long, default_value = "Shared/Definitions/gadgets.json")]
+    gadgets: PathBuf,
     /// Require this join token (hex u64) from clients.
     #[arg(long, value_parser = parse_hex_u64)]
     join_token: Option<u64>,
@@ -47,6 +53,8 @@ fn main() -> anyhow::Result<()> {
         snapshot_interval: args.snapshot_interval,
         max_players: args.max_players,
         map_path: args.map,
+        weapons_path: args.weapons,
+        gadgets_path: args.gadgets,
         join_token: args.join_token,
         stats_interval: Duration::from_secs(args.stats_interval.max(1)),
         ..Default::default()

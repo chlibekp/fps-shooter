@@ -18,7 +18,7 @@
 namespace tfps
 {
 	constexpr uint16_t kMagic = 0x4654;
-	constexpr uint16_t kProtocolVersion = 3;
+	constexpr uint16_t kProtocolVersion = 4;
 	constexpr size_t kMaxPacketSize = 1200;
 	constexpr size_t kHandshakePacketSize = 256;
 	constexpr size_t kMaxNameLen = 24;
@@ -27,6 +27,7 @@ namespace tfps
 	constexpr size_t kMaxEntitiesPerSnapshot = 64;
 	constexpr size_t kMaxReliablePayload = 512;
 	constexpr size_t kMaxShotEvents = 32;
+	constexpr size_t kMaxGadgetEntities = 24;
 
 	enum class EPacketType : uint8_t
 	{
@@ -77,6 +78,7 @@ namespace tfps
 		constexpr uint8_t Kill = 6;
 		constexpr uint8_t CellsDestroyed = 7;
 		constexpr uint8_t Explosion = 8;
+		constexpr uint8_t Flash = 9;
 	}
 	constexpr size_t kMaxCellsPerMessage = 90;
 
@@ -238,9 +240,10 @@ namespace tfps
 		uint8_t WeaponId = 0;     // Kill
 		bool bHeadshot = false;
 		bool bKilled = false;     // HitConfirm
-		int32_t FromMm[3] = {0, 0, 0};    // Damaged: attacker position; Explosion: centre
+		int32_t FromMm[3] = {0, 0, 0};    // Damaged: attacker position; Explosion / Flash: centre
 		std::vector<uint32_t> Cells;      // CellsDestroyed
 		uint16_t RadiusCm = 0;            // Explosion
+		uint8_t Intensity = 0;            // Flash: how strongly the receiving player is blinded (0..255)
 
 		bool Decode(uint8_t InType, const std::vector<uint8_t>& Payload);
 		std::vector<uint8_t> EncodePayload() const;
@@ -298,6 +301,37 @@ namespace tfps
 		}
 	};
 
+	/** Gadget entity (grenade, placed charge, smoke cloud), sent in full in every snapshot. */
+	struct GadgetEntityState
+	{
+		uint16_t Id = 0;
+		uint8_t Gadget = 0;   // gadget definition id
+		uint8_t Phase = 0;    // GadgetPhase
+		uint16_t Owner = 0;
+		int16_t PosCm[3] = {0, 0, 0};
+
+		Vec3 Position() const { return Vec3(PosCm[0] * 0.01f, PosCm[1] * 0.01f, PosCm[2] * 0.01f); }
+		bool operator==(const GadgetEntityState& O) const
+		{
+			return Id == O.Id && Gadget == O.Gadget && Phase == O.Phase && Owner == O.Owner && PosCm[0] == O.PosCm[0] && PosCm[1] == O.PosCm[1] && PosCm[2] == O.PosCm[2];
+		}
+	};
+
+	namespace GadgetPhase
+	{
+		constexpr uint8_t Flying = 0;
+		constexpr uint8_t Resting = 1;
+		constexpr uint8_t Planted = 2;
+		constexpr uint8_t Armed = 3;
+		constexpr uint8_t Smoking = 4;
+	}
+
+	struct GadgetStock
+	{
+		uint8_t Id = 0;
+		uint8_t Count = 0;
+	};
+
 	int32_t QuantizeMm(float V);
 	float DequantizeMm(int32_t V);
 
@@ -312,13 +346,14 @@ namespace tfps
 		uint8_t LocalHealth = 0;
 		bool bAlive = true;
 		float RespawnIn = 0.0f;
+		GadgetStock Gadgets[kGadgetSlots];
 	};
 
 	/** Entities must be sorted by id. Baseline may be null (then Header.BaselineTick must be 0). */
 	void EncodeSnapshot(ByteWriter& W, const SnapshotHeader& Header, const std::vector<EntityState>& Entities, const std::vector<EntityState>* Baseline,
-		const std::vector<ShotEvent>& Shots);
+		const std::vector<ShotEvent>& Shots, const std::vector<GadgetEntityState>* Gadgets = nullptr);
 	/** Returns false on malformed data or missing baseline. */
 	bool PeekSnapshotBaselineTick(const uint8_t* Data, size_t Len, uint32_t& OutBaseline);
 	bool DecodeSnapshot(ByteReader& R, const std::vector<EntityState>* Baseline, SnapshotHeader& OutHeader, std::vector<EntityState>& OutEntities,
-		std::vector<ShotEvent>& OutShots);
+		std::vector<ShotEvent>& OutShots, std::vector<GadgetEntityState>* OutGadgets = nullptr);
 }

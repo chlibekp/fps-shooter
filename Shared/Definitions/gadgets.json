@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "gadgets": [
+    { "id": 1, "name": "Frag Grenade", "kind": "frag",
+      "throw_speed": 15.0, "fuse": 3.0, "radius": 5.0, "damage": 150.0, "cell_damage": 400.0 },
+    { "id": 2, "name": "Flashbang", "kind": "flash",
+      "throw_speed": 15.0, "fuse": 1.6, "radius": 14.0, "duration": 4.5 },
+    { "id": 3, "name": "Smoke Grenade", "kind": "smoke",
+      "throw_speed": 13.0, "fuse": 1.2, "radius": 4.0, "duration": 14.0 },
+    { "id": 4, "name": "Breaching Charge", "kind": "breach",
+      "reach": 1.8, "arm_time": 1.0, "radius": 1.4, "damage": 90.0, "cell_damage": 2500.0 }
+  ],
+  "team_loadouts": [
+    [ { "id": 1, "count": 2 }, { "id": 4, "count": 3 } ],
+    [ { "id": 3, "count": 2 }, { "id": 2, "count": 2 } ]
+  ]
+}

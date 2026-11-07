@@ -123,7 +123,16 @@ void ATfpsPlayerController::PlayerTick(float DeltaTime)
 		if (WasInputKeyJustPressed(Keys.Jump) && bProneToggled) { bProneToggled = false; }
 		if (WasInputKeyJustPressed(Keys.PrimaryWeapon)) { SelectedSlot = 0; }
 		if (WasInputKeyJustPressed(Keys.SecondaryWeapon)) { SelectedSlot = 1; }
-		if (WasInputKeyJustPressed(Keys.NextWeapon) || WasInputKeyJustPressed(Keys.PrevWeapon)) { SelectedSlot = SelectedSlot == 0 ? 1 : 0; }
+		if (WasInputKeyJustPressed(Keys.NextWeapon) || WasInputKeyJustPressed(Keys.PrevWeapon))
+		{
+			SelectedSlot = tfps::IsGadgetSlot(SelectedSlot) ? LastWeaponSlot : (SelectedSlot == 0 ? 1 : 0);
+		}
+		if (WasInputKeyJustPressed(Keys.Gadget1)) { SelectedSlot = tfps::kWeaponSlots; }
+		if (WasInputKeyJustPressed(Keys.Gadget2)) { SelectedSlot = tfps::kWeaponSlots + 1; }
+	}
+	if (!tfps::IsGadgetSlot(SelectedSlot))
+	{
+		LastWeaponSlot = SelectedSlot;
 	}
 
 	UpdateLook();
@@ -132,6 +141,21 @@ void ATfpsPlayerController::PlayerTick(float DeltaTime)
 	if (Net == nullptr)
 	{
 		return;
+	}
+	// After a grenade leaves the hand (the server's count dropped), go back to the gun.
+	if (const tfps::ClientCore* Core = Net->GetCore())
+	{
+		for (int32 G = 0; G < tfps::kGadgetSlots; ++G)
+		{
+			const tfps::GadgetStock Stock = Core->LocalGadget(G);
+			const tfps::GadgetDef* Def = Net->GetGadgets().Get(Stock.Id);
+			const bool bThrown = Def != nullptr && Def->Kind != tfps::EGadgetKind::Breach;
+			if (SelectedSlot == tfps::kWeaponSlots + G && bThrown && Stock.Count < LastGadgetCount[G])
+			{
+				SelectedSlot = LastWeaponSlot;
+			}
+			LastGadgetCount[G] = Stock.Count;
+		}
 	}
 	const FRotator Rot = GetControlRotation();
 	tfps::MoveInput Input;

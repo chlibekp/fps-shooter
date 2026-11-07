@@ -68,6 +68,7 @@ namespace tfps
 			W.U8(H.LocalHealth);
 			W.U8(H.bAlive ? 1 : 0);
 			W.F32(H.RespawnIn);
+			for (const GadgetStock& G : H.Gadgets) { W.U8(G.Id); W.U8(G.Count); }
 		}
 
 		bool DecodeLocal(ByteReader& R, SnapshotHeader& H)
@@ -80,7 +81,7 @@ namespace tfps
 			L.JumpTimer = R.F32Finite(); L.StanceTimer = R.F32Finite(); L.Lean = R.F32Finite(); L.Aim = R.F32Finite();
 			WeaponState& Ws = H.Weapon;
 			Ws.Active = R.U8();
-			if (Ws.Active >= kWeaponSlots) { R.Fail(); return false; }
+			if (Ws.Active >= kWeaponSlots + kGadgetSlots) { R.Fail(); return false; }
 			for (SlotAmmo& Sl : Ws.Slots) { Sl.Ammo = R.U16(); Sl.bChambered = R.U8() != 0; Sl.Reserve = R.U16(); }
 			Ws.Cooldown = R.F32Finite(); Ws.ReloadTimer = R.F32Finite(); Ws.bReloadEmpty = R.U8() != 0; Ws.EquipTimer = R.F32Finite();
 			Ws.BurstLeft = R.U8(); Ws.bTriggerPrev = R.U8() != 0; Ws.ShotsFired = R.U16();
@@ -88,6 +89,7 @@ namespace tfps
 			H.LocalHealth = R.U8();
 			H.bAlive = R.U8() != 0;
 			H.RespawnIn = R.F32Finite();
+			for (GadgetStock& G : H.Gadgets) { G.Id = R.U8(); G.Count = R.U8(); }
 			return R.Ok();
 		}
 	}
@@ -444,6 +446,10 @@ namespace tfps
 			FromMm[0] = R.I32(); FromMm[1] = R.I32(); FromMm[2] = R.I32();
 			RadiusCm = R.U16();
 			break;
+		case MsgType::Flash:
+			FromMm[0] = R.I32(); FromMm[1] = R.I32(); FromMm[2] = R.I32();
+			Intensity = R.U8();
+			break;
 		case MsgType::Kill:
 			OtherId = R.U16();   // killer
 			PlayerId = R.U16();  // victim
@@ -476,6 +482,7 @@ namespace tfps
 			break;
 		}
 		case MsgType::Explosion: W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); W.U16(RadiusCm); break;
+		case MsgType::Flash: W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); W.U8(Intensity); break;
 		default: break;
 		}
 		return V;
@@ -533,7 +540,7 @@ namespace tfps
 	}
 
 	void EncodeSnapshot(ByteWriter& W, const SnapshotHeader& H, const std::vector<EntityState>& Entities, const std::vector<EntityState>* Baseline,
-		const std::vector<ShotEvent>& Shots)
+		const std::vector<ShotEvent>& Shots, const std::vector<GadgetEntityState>* Gadgets)
 	{
 		W.U32(H.ServerTick);
 		W.U32(H.BaselineTick);
@@ -570,6 +577,14 @@ namespace tfps
 			W.I32(S.EndMm[0]); W.I32(S.EndMm[1]); W.I32(S.EndMm[2]);
 			W.U8(S.SurfaceKind);
 		}
+		const size_t NG = Gadgets == nullptr ? 0 : (Gadgets->size() < kMaxGadgetEntities ? Gadgets->size() : kMaxGadgetEntities);
+		W.U8(static_cast<uint8_t>(NG));
+		for (size_t I = 0; I < NG; ++I)
+		{
+			const GadgetEntityState& G = (*Gadgets)[I];
+			W.U16(G.Id); W.U8(G.Gadget); W.U8(G.Phase); W.U16(G.Owner);
+			W.I16(G.PosCm[0]); W.I16(G.PosCm[1]); W.I16(G.PosCm[2]);
+		}
 	}
 
 	bool PeekSnapshotBaselineTick(const uint8_t* Data, size_t Len, uint32_t& OutBaseline)
@@ -581,10 +596,11 @@ namespace tfps
 	}
 
 	bool DecodeSnapshot(ByteReader& R, const std::vector<EntityState>* Baseline, SnapshotHeader& H, std::vector<EntityState>& Out,
-		std::vector<ShotEvent>& OutShots)
+		std::vector<ShotEvent>& OutShots, std::vector<GadgetEntityState>* OutGadgets)
 	{
 		Out.clear();
 		OutShots.clear();
+		if (OutGadgets != nullptr) { OutGadgets->clear(); }
 		H.ServerTick = R.U32();
 		H.BaselineTick = R.U32();
 		H.LastCmdSeq = R.U32();
@@ -635,6 +651,15 @@ namespace tfps
 			S.EndMm[0] = R.I32(); S.EndMm[1] = R.I32(); S.EndMm[2] = R.I32();
 			S.SurfaceKind = R.U8();
 			OutShots.push_back(S);
+		}
+		const uint8_t NG = R.U8();
+		if (!R.Ok() || NG > kMaxGadgetEntities) { return false; }
+		for (uint8_t I = 0; I < NG; ++I)
+		{
+			GadgetEntityState G;
+			G.Id = R.U16(); G.Gadget = R.U8(); G.Phase = R.U8(); G.Owner = R.U16();
+			G.PosCm[0] = R.I16(); G.PosCm[1] = R.I16(); G.PosCm[2] = R.I16();
+			if (OutGadgets != nullptr) { OutGadgets->push_back(G); }
 		}
 		return R.Ok();
 	}

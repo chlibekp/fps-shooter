@@ -30,4 +30,5 @@ sync_definitions() {
   mkdir -p "$REPO_ROOT/Client/Content/Definitions/Maps"
   cp "$REPO_ROOT"/Shared/Definitions/maps/*.json "$REPO_ROOT/Client/Content/Definitions/Maps/"
   cp "$REPO_ROOT"/Shared/Definitions/weapons.json "$REPO_ROOT/Client/Content/Definitions/"
+  cp "$REPO_ROOT"/Shared/Definitions/gadgets.json "$REPO_ROOT/Client/Content/Definitions/"
 }

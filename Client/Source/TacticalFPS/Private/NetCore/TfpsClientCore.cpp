@@ -415,6 +415,11 @@ namespace tfps
 			E.From = Vec3(DequantizeMm(M.FromMm[0]), DequantizeMm(M.FromMm[1]), DequantizeMm(M.FromMm[2]));
 			E.Radius = static_cast<float>(M.RadiusCm) * 0.01f;
 			break;
+		case MsgType::Flash:
+			E.Type = ClientEvent::EType::Flash;
+			E.From = Vec3(DequantizeMm(M.FromMm[0]), DequantizeMm(M.FromMm[1]), DequantizeMm(M.FromMm[2]));
+			E.Intensity = static_cast<float>(M.Intensity) / 255.0f;
+			break;
 		case MsgType::Kill:
 			E.Type = ClientEvent::EType::Kill;
 			E.PlayerId = M.PlayerId;
@@ -453,7 +458,7 @@ namespace tfps
 			if (Base == nullptr) { ++NetStats.SnapshotsDroppedNoBaseline; return; }
 		}
 		SnapshotHeader H;
-		if (!DecodeSnapshot(R, Base, H, DecodeBuf, ShotEventBuf)) { return; }
+		if (!DecodeSnapshot(R, Base, H, DecodeBuf, ShotEventBuf, &GadgetBuf)) { return; }
 		++NetStats.SnapshotsReceived;
 		if (H.BaselineTick != 0) { ++NetStats.DeltaSnapshots; }
 		if (H.ServerTick <= LatestTick) { return; }
@@ -498,6 +503,8 @@ namespace tfps
 		LocalHealth = H.LocalHealth;
 		bAlive = H.bAlive;
 		RespawnSeconds = H.RespawnIn;
+		GadgetEntities.swap(GadgetBuf);
+		for (int I = 0; I < kGadgetSlots; ++I) { LocalGadgets[I] = H.Gadgets[I]; }
 		NetStats.ServerInputDepth = H.InputBufferDepth;
 		Reconcile(H.LastCmdSeq, H.Local, H.Weapon);
 		AdjustTimeScale(H.InputBufferDepth);

@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
+#include "NetCore/TfpsWeapon.h"
 
 #include "TfpsPlayerController.generated.h"
 
@@ -32,6 +33,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Use = EKeys::F;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey PrimaryWeapon = EKeys::One;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey SecondaryWeapon = EKeys::Two;
+	/** Gadget slots (throw / place with Fire; Aim + Fire = underhand lob / detonate charges). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Gadget1 = EKeys::Three;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Gadget2 = EKeys::Four;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey NextWeapon = EKeys::MouseScrollDown;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey PrevWeapon = EKeys::MouseScrollUp;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey ToggleNetStats = EKeys::F3;
@@ -87,4 +91,7 @@ private:
 	bool bCrouchToggled = false;
 	bool bProneToggled = false;
 	uint8 SelectedSlot = 0;
+	/** Weapon slot to return to after throwing a grenade. */
+	uint8 LastWeaponSlot = 0;
+	uint8 LastGadgetCount[tfps::kGadgetSlots] = {0, 0};
 };

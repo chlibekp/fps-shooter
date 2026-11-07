@@ -5,10 +5,14 @@
 
 use crate::combat::{self, BodyPart, Hitboxes, LagHistory};
 use crate::destruction::{self, Destruction, Obstacle};
+use crate::gadgets::{self, phase, GadgetEntity};
 use tfps_protocol::snapshot::{
     entity_flags, quantize_lean, quantize_mm, quantize_unit, surface, EntityState, ShotEvent,
 };
-use tfps_sim::weapon::{Shot, ShotBuffer, WeaponDef, WeaponSet, WeaponState, SLOTS};
+use tfps_sim::gadget::{GadgetKind, GadgetSet, GadgetStock};
+use tfps_sim::weapon::{
+    is_gadget_slot, Shot, ShotBuffer, WeaponDef, WeaponSet, WeaponState, GADGET_SLOTS, SLOTS,
+};
 use tfps_sim::{
     buttons, movement, simulate_player, CollisionWorld, MapDef, MoveInput, MoveState, Vec3,
 };
@@ -204,6 +208,10 @@ pub struct Player {
     pub deaths: u32,
     /// Last tick's starvation, reported to the client for time sync.
     pub last_starved: bool,
+    /// Gadgets in the two gadget slots and how many are left.
+    pub gadgets: [GadgetStock; GADGET_SLOTS],
+    /// Seconds until the next gadget use is accepted.
+    pub gadget_cooldown: f32,
 }
 
 impl Player {
@@ -240,8 +248,18 @@ impl Player {
             flags,
             health: self.health,
             lean_q: quantize_lean(self.state.lean),
-            weapon: self.loadout[self.weapon.active as usize],
+            weapon: self.held_item(),
             aim_q: quantize_unit(self.state.aim),
+        }
+    }
+
+    /// Replicated held item: weapon id, or `0x80 | gadget id` for a gadget.
+    pub fn held_item(&self) -> u8 {
+        let a = self.weapon.active as usize;
+        if a < SLOTS {
+            self.loadout[a]
+        } else {
+            0x80 | self.gadgets[a - SLOTS].id
         }
     }
 
@@ -274,12 +292,22 @@ pub enum GameEvent {
         weapon: u8,
         headshot: bool,
     },
+    /// A flashbang went off; `intensity` (0..=255) per affected player.
+    Flash {
+        pos: Vec3,
+        /// (player id, intensity), only players with intensity > 0.
+        victims: Vec<(u16, u8)>,
+    },
 }
 
 pub struct GameWorld {
     pub map: MapDef,
     pub collision: CollisionWorld,
     pub weapons: WeaponSet,
+    pub gadget_defs: GadgetSet,
+    /// Live gadget entities, sorted by id.
+    pub gadgets: Vec<GadgetEntity>,
+    next_gadget_id: u16,
     pub rules: MatchRules,
     pub dt: f32,
     pub tick_rate: u16,
@@ -302,7 +330,13 @@ pub struct GameWorld {
 }
 
 impl GameWorld {
-    pub fn new(map: MapDef, weapons: WeaponSet, rules: MatchRules, tick_rate: u16) -> Self {
+    pub fn new(
+        map: MapDef,
+        weapons: WeaponSet,
+        gadget_defs: GadgetSet,
+        rules: MatchRules,
+        tick_rate: u16,
+    ) -> Self {
         let collision = CollisionWorld::from_map(&map);
         let destruction = Destruction::new(&collision);
         // One second of history (enough for any accepted rewind).
@@ -311,6 +345,9 @@ impl GameWorld {
             map,
             collision,
             weapons,
+            gadget_defs,
+            gadgets: Vec::new(),
+            next_gadget_id: 1,
             rules,
             dt: tfps_sim::tick_dt(tick_rate),
             tick_rate,
@@ -404,15 +441,20 @@ impl GameWorld {
         id: u16,
         team: u8,
         name: String,
-        restore: Option<(MoveState, WeaponState, u8)>,
+        restore: Option<(MoveState, WeaponState, u8, [GadgetStock; GADGET_SLOTS])>,
     ) {
         let loadout = self.default_loadout();
-        let (state, weapon, health) = match restore {
+        let (state, weapon, health, gadget_stock) = match restore {
             Some(r) => r,
             None => {
                 let spawn = self.spawn_state(team);
                 let weapon = WeaponState::new(&self.loadout_defs(&loadout));
-                (spawn, weapon, self.rules.max_health)
+                (
+                    spawn,
+                    weapon,
+                    self.rules.max_health,
+                    self.gadget_defs.loadout(team),
+                )
             }
         };
         let yaw_q = self.spawn_yaw_q(&state);
@@ -436,6 +478,8 @@ impl GameWorld {
             kills: 0,
             deaths: 0,
             last_starved: false,
+            gadgets: gadget_stock,
+            gadget_cooldown: 0.0,
         };
         match self.players.binary_search_by_key(&id, |p| p.id) {
             Ok(i) => self.players[i] = p,
@@ -457,9 +501,12 @@ impl GameWorld {
         let loadout = self.players[idx].loadout;
         let w = WeaponState::new(&self.loadout_defs(&loadout));
         let max_health = self.rules.max_health;
+        let stock = self.gadget_defs.loadout(team);
         let p = &mut self.players[idx];
         p.state = s;
         p.weapon = w;
+        p.gadgets = stock;
+        p.gadget_cooldown = 0.0;
         p.health = max_health;
         p.alive = true;
         p.respawn_timer = 0.0;
@@ -495,6 +542,8 @@ impl GameWorld {
             ];
             self.shot_buf.clear();
             let p = &mut self.players[i];
+            let trigger_was = p.weapon.trigger_prev;
+            p.gadget_cooldown = (p.gadget_cooldown - dt).max(0.0);
             simulate_player(
                 &mut p.state,
                 &mut p.weapon,
@@ -507,7 +556,11 @@ impl GameWorld {
             for s in self.shot_buf.as_slice() {
                 self.pending_shots.push((p.id, render_time, *s));
             }
-            if p.state.pos.z < kill_z {
+            let pressed = cmd.buttons & buttons::FIRE != 0 && !trigger_was;
+            if pressed && is_gadget_slot(p.weapon.active) && p.weapon.equip_timer <= 0.0 {
+                self.use_gadget(i, &cmd);
+            }
+            if self.players[i].state.pos.z < kill_z {
                 self.respawn(i);
             }
         }
@@ -519,7 +572,10 @@ impl GameWorld {
         }
         self.pending_shots = shots;
 
-        // 3. Record this tick for future rewinds.
+        // 3. Gadgets: flight, fuses, arming, smoke.
+        self.update_gadgets();
+
+        // 4. Record this tick for future rewinds.
         let mut ents = std::mem::take(&mut self.entity_buf);
         self.collect_entities(&mut ents);
         self.history.record(self.tick, &ents);
@@ -709,8 +765,12 @@ impl GameWorld {
     ) {
         let mut targets: Vec<(u16, f32)> = Vec::new();
         let mut obs = std::mem::take(&mut self.trace_buf);
+        let source_team = source.and_then(|id| self.player(id)).map(|p| p.team);
         for p in &self.players {
             if !p.alive {
+                continue;
+            }
+            if !self.rules.friendly_fire && source_team == Some(p.team) && source != Some(p.id) {
                 continue;
             }
             let chest = Vec3::new(
@@ -749,6 +809,226 @@ impl GameWorld {
         self.destruction
             .explode_cells(&mut self.collision, center, radius, cell_damage);
         self.explosions.push((center, radius));
+    }
+
+    /// Handles a gadget use (FIRE pressed with a gadget in hand) by player `i`.
+    fn use_gadget(&mut self, i: usize, cmd: &MoveInput) {
+        let p = &self.players[i];
+        let slot = p.weapon.active as usize - SLOTS;
+        let stock = p.gadgets[slot];
+        let Some(def) = self.gadget_defs.get(stock.id).cloned() else {
+            return;
+        };
+        let eye = p.state.eye_position(cmd.yaw_q);
+        let dir = combat::direction(
+            tfps_sim::math::dequantize_yaw_deg(cmd.yaw_q),
+            tfps_sim::math::dequantize_pitch_deg(cmd.pitch_q),
+        );
+        let (owner, team, vel) = (p.id, p.team, p.state.vel);
+        let aiming = cmd.buttons & buttons::AIM != 0;
+
+        // Detonating placed charges does not consume a charge or need stock.
+        if def.kind == GadgetKind::Breach && aiming {
+            let ready: Vec<u16> = self
+                .gadgets
+                .iter()
+                .filter(|g| g.owner == owner && g.def == def.id && g.phase == phase::ARMED)
+                .map(|g| g.id)
+                .collect();
+            for id in ready {
+                self.detonate(id);
+            }
+            return;
+        }
+        if stock.count == 0
+            || p.gadget_cooldown > 0.0
+            || self.gadgets.len() >= gadgets::MAX_GADGET_ENTITIES
+        {
+            return;
+        }
+        let entity = if def.kind.is_thrown() {
+            let speed = def.throw_speed * if aiming { gadgets::LOB_SPEED_MULT } else { 1.0 };
+            GadgetEntity {
+                id: 0,
+                def: def.id,
+                owner,
+                team,
+                pos: gadgets::throw_origin(&self.collision, eye, dir),
+                vel: Vec3::new(
+                    dir.x * speed + vel.x,
+                    dir.y * speed + vel.y,
+                    dir.z * speed + vel.z.max(0.0),
+                ),
+                phase: phase::FLYING,
+                timer: def.fuse,
+                attached_cell: None,
+            }
+        } else {
+            let Some((pos, cell)) = gadgets::placement(&self.collision, eye, dir, def.reach) else {
+                return; // nothing within reach to place it on
+            };
+            GadgetEntity {
+                id: 0,
+                def: def.id,
+                owner,
+                team,
+                pos,
+                vel: Vec3::ZERO,
+                phase: phase::PLANTED,
+                timer: def.arm_time,
+                attached_cell: cell,
+            }
+        };
+        let p = &mut self.players[i];
+        p.gadgets[slot].count -= 1;
+        p.gadget_cooldown = gadgets::USE_COOLDOWN;
+        self.spawn_gadget(entity);
+    }
+
+    fn spawn_gadget(&mut self, mut g: GadgetEntity) {
+        // Ids wrap at u16 but skip 0 and ids still in use.
+        loop {
+            let id = self.next_gadget_id;
+            self.next_gadget_id = self.next_gadget_id.wrapping_add(1).max(1);
+            if !self.gadgets.iter().any(|o| o.id == id) {
+                g.id = id;
+                break;
+            }
+        }
+        let at = self.gadgets.partition_point(|o| o.id < g.id);
+        self.gadgets.insert(at, g);
+    }
+
+    fn update_gadgets(&mut self) {
+        let dt = self.dt;
+        let kill_z = self.map.kill_z;
+        let mut due: Vec<u16> = Vec::new();
+        let mut gone: Vec<u16> = Vec::new();
+        for g in self.gadgets.iter_mut() {
+            match g.phase {
+                phase::FLYING | phase::RESTING => {
+                    gadgets::step_projectile(&self.collision, g, dt);
+                    g.timer -= dt;
+                    if g.timer <= 0.0 {
+                        due.push(g.id);
+                    }
+                }
+                phase::PLANTED | phase::ARMED => {
+                    if g.attached_cell
+                        .is_some_and(|c| self.collision.is_destroyed(c))
+                    {
+                        gone.push(g.id); // knocked off: lost without exploding
+                        continue;
+                    }
+                    if g.phase == phase::PLANTED {
+                        g.timer -= dt;
+                        if g.timer <= 0.0 {
+                            g.phase = phase::ARMED;
+                        }
+                    }
+                }
+                phase::SMOKING => {
+                    g.timer -= dt;
+                    if g.timer <= 0.0 {
+                        gone.push(g.id);
+                    }
+                }
+                _ => {}
+            }
+            if g.pos.z < kill_z {
+                gone.push(g.id);
+            }
+        }
+        self.gadgets.retain(|g| !gone.contains(&g.id));
+        for id in due {
+            self.detonate(id);
+        }
+    }
+
+    /// Fuse end / remote detonation of gadget `id`.
+    fn detonate(&mut self, id: u16) {
+        let Ok(idx) = self.gadgets.binary_search_by_key(&id, |g| g.id) else {
+            return;
+        };
+        let g = self.gadgets[idx].clone();
+        let Some(def) = self.gadget_defs.get(g.def).cloned() else {
+            self.gadgets.remove(idx);
+            return;
+        };
+        let weapon = 0x80 | def.id;
+        match def.kind {
+            GadgetKind::Smoke => {
+                let s = &mut self.gadgets[idx];
+                s.phase = phase::SMOKING;
+                s.timer = def.duration;
+                s.vel = Vec3::ZERO;
+            }
+            GadgetKind::Frag | GadgetKind::Breach => {
+                self.gadgets.remove(idx);
+                self.explode(
+                    g.pos,
+                    def.radius,
+                    def.damage,
+                    def.cell_damage,
+                    Some(g.owner),
+                    weapon,
+                );
+            }
+            GadgetKind::Flash => {
+                self.gadgets.remove(idx);
+                let victims = self.flash_victims(g.pos, def.radius);
+                self.events.push(GameEvent::Flash {
+                    pos: g.pos,
+                    victims,
+                });
+            }
+        }
+    }
+
+    /// Flash intensity per player: falls off with distance, stronger when
+    /// looking towards the flash, zero without line of sight (glass lets it
+    /// through).
+    fn flash_victims(&mut self, pos: Vec3, radius: f32) -> Vec<(u16, u8)> {
+        let mut out = Vec::new();
+        let mut obs = std::mem::take(&mut self.trace_buf);
+        for p in &self.players {
+            if !p.alive {
+                continue;
+            }
+            let eye = p.state.eye_position(p.cmds.last_cmd.yaw_q);
+            let d = eye.distance(&pos);
+            if d >= radius {
+                continue;
+            }
+            if d > 1e-3 {
+                let to = Vec3::new(
+                    (pos.x - eye.x) / d,
+                    (pos.y - eye.y) / d,
+                    (pos.z - eye.z) / d,
+                );
+                destruction::trace(&self.collision, eye, to, d, &mut obs);
+                let blocked = obs
+                    .iter()
+                    .any(|o| o.t_in < d - 0.05 && o.material != tfps_sim::Material::Glass);
+                if blocked {
+                    continue;
+                }
+                let view = combat::direction(
+                    tfps_sim::math::dequantize_yaw_deg(p.cmds.last_cmd.yaw_q),
+                    tfps_sim::math::dequantize_pitch_deg(p.cmds.last_cmd.pitch_q),
+                );
+                let facing = (view.x * to.x + view.y * to.y + view.z * to.z).max(0.0);
+                let k = (1.0 - d / radius) * (0.3 + 0.7 * facing);
+                let v = (k * 1.6).min(1.0);
+                if v > 0.02 {
+                    out.push((p.id, (v * 255.0).round() as u8));
+                }
+            } else {
+                out.push((p.id, 255));
+            }
+        }
+        self.trace_buf = obs;
+        out
     }
 
     /// Cells destroyed during the last tick (to replicate).
@@ -832,6 +1112,14 @@ mod tests {
     }
 
     /// Flat 40x40 m floor; team 0 spawns at x=0, team 1 at x=20 (facing -X).
+    fn gadget_defs() -> GadgetSet {
+        GadgetSet::load(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../Shared/Definitions/gadgets.json"
+        ))
+        .unwrap()
+    }
+
     fn test_map(extra: &str) -> MapDef {
         MapDef::from_json(&format!(
             r#"{{"name":"t","kill_z":-10,"solids":[{{"min":[-20,-20,-1],"max":[30,20,0],"material":"concrete"}}{extra}],
@@ -847,7 +1135,7 @@ mod tests {
 
     impl Arena {
         fn new(extra: &str, rules: MatchRules) -> Self {
-            let mut w = GameWorld::new(test_map(extra), weapons(), rules, 64);
+            let mut w = GameWorld::new(test_map(extra), weapons(), gadget_defs(), rules, 64);
             w.add_player(1, 0, "shooter".into(), None);
             w.add_player(2, 1, "target".into(), None);
             let mut a = Arena { w, seq: 0 };
@@ -1127,5 +1415,178 @@ mod tests {
         a.w.explode(Vec3::new(20.0, 0.0, 1.0), 3.0, 150.0, 400.0, Some(1), 0);
         assert!(!a.w.player(2).unwrap().alive);
         assert_eq!(a.w.player(1).unwrap().kills, 1);
+    }
+
+    fn slot_cmd(c: MoveInput, slot: u8) -> MoveInput {
+        MoveInput { slot, ..c }
+    }
+
+    #[test]
+    fn frag_grenade_is_thrown_bounces_and_kills_near_its_rest_point() {
+        let mut a = Arena::new("", MatchRules::default());
+        // Equip the frag (team 0, gadget slot 0 = input slot 2).
+        let hold = slot_cmd(aim_at(0, 10.0, 0.0, 4.0), 2);
+        a.step(hold, cmd(0), 30);
+        assert_eq!(a.w.player(1).unwrap().held_item(), 0x81);
+        let throw = slot_cmd(aim_at(buttons::FIRE, 10.0, 0.0, 4.0), 2);
+        a.step(throw, cmd(0), 1);
+        assert_eq!(a.w.gadgets.len(), 1, "grenade spawned");
+        assert_eq!(a.w.player(1).unwrap().gadgets[0].count, 1);
+        assert!(a.w.shot_events.is_empty(), "the weapon is holstered");
+        // Let it land and roll, then put the target next to it.
+        a.step(hold, cmd(0), 64 * 2);
+        let g = a.w.gadgets[0].clone();
+        assert_eq!(g.phase, phase::RESTING, "{g:?}");
+        assert!(g.pos.x > 5.0 && g.pos.x < 29.0, "{g:?}");
+        a.w.player_mut(2).unwrap().state.pos = Vec3::new(g.pos.x + 1.0, g.pos.y, 0.0);
+        let mut killed = false;
+        for _ in 0..64 {
+            a.step(hold, cmd(0), 1);
+            killed |= a.w.events.iter().any(|e| {
+                matches!(
+                    e,
+                    GameEvent::Kill {
+                        killer: 1,
+                        victim: 2,
+                        weapon: 0x81,
+                        ..
+                    }
+                )
+            });
+        }
+        assert!(killed, "frag at 1 m must kill");
+        assert!(a.w.gadgets.is_empty());
+        assert_eq!(a.hp(1), 100, "thrower far away is unhurt");
+    }
+
+    #[test]
+    fn gadget_stock_is_limited_and_restocked_on_respawn() {
+        let mut a = Arena::new("", MatchRules::default());
+        let hold = slot_cmd(aim_at(0, 10.0, 0.0, 3.0), 2);
+        let throw = slot_cmd(aim_at(buttons::FIRE, 10.0, 0.0, 3.0), 2);
+        a.step(hold, cmd(0), 30);
+        for _ in 0..4 {
+            a.step(throw, cmd(0), 1);
+            a.step(hold, cmd(0), 60); // release + cooldown
+        }
+        assert_eq!(a.w.player(1).unwrap().gadgets[0].count, 0);
+        let thrown = a.w.gadgets.len() + a.w.explosions.len();
+        assert!(thrown <= 2);
+        // Weapon ammo untouched while the gadget was in hand.
+        assert_eq!(a.w.player(1).unwrap().weapon.slots[0].ammo, 29);
+        let idx = a.w.players.iter().position(|p| p.id == 1).unwrap();
+        a.w.respawn(idx);
+        assert_eq!(a.w.player(1).unwrap().gadgets[0].count, 2);
+    }
+
+    #[test]
+    fn breach_charge_is_placed_armed_and_blows_a_hole_in_brick() {
+        let wall = r#",{"min":[1.5,-3,0],"max":[1.7,3,3],"material":"brick"}"#;
+        let mut a = Arena::new(wall, MatchRules::default());
+        // Breach charge = team 0 gadget slot 1 = input slot 3.
+        let hold = slot_cmd(aim_at(0, 1.5, 0.0, 1.2), 3);
+        a.step(hold, cmd(0), 30);
+        a.step(slot_cmd(aim_at(buttons::FIRE, 1.5, 0.0, 1.2), 3), cmd(0), 1);
+        assert_eq!(a.w.gadgets.len(), 1);
+        let charge = a.w.gadgets[0].clone();
+        assert_eq!(charge.phase, phase::PLANTED);
+        assert!(charge.attached_cell.is_some());
+        assert!((charge.pos.x - 1.47).abs() < 0.01, "{charge:?}");
+        assert_eq!(a.w.player(1).unwrap().gadgets[1].count, 2);
+        // Not armed yet: detonation (AIM + FIRE) does nothing.
+        let det = slot_cmd(aim_at(buttons::AIM | buttons::FIRE, 1.5, 0.0, 1.2), 3);
+        let aimed = slot_cmd(aim_at(buttons::AIM, 1.5, 0.0, 1.2), 3);
+        a.step(aimed, cmd(0), 1);
+        a.step(det, cmd(0), 1);
+        assert_eq!(a.w.gadgets.len(), 1);
+        // Back off, wait for arming, detonate.
+        a.w.player_mut(1).unwrap().state.pos = Vec3::new(-3.0, 0.0, 0.0);
+        a.step(aimed, cmd(0), 64);
+        assert_eq!(a.w.gadgets[0].phase, phase::ARMED);
+        a.step(det, cmd(0), 1);
+        assert!(a.w.gadgets.is_empty());
+        assert!(
+            a.w.destroyed_this_tick().len() >= 4,
+            "brick must be breached: {}",
+            a.w.destroyed_this_tick().len()
+        );
+        assert_eq!(a.w.explosions.len(), 1);
+        assert_eq!(a.hp(1), 100);
+        // Placing needs a surface within reach.
+        a.step(hold, cmd(0), 60);
+        a.step(
+            slot_cmd(aim_at(buttons::FIRE, 10.0, 0.0, 1.65), 3),
+            cmd(0),
+            1,
+        );
+        assert!(a.w.gadgets.is_empty());
+        assert_eq!(a.w.player(1).unwrap().gadgets[1].count, 2);
+    }
+
+    fn spawn_test_gadget(w: &mut GameWorld, def: u8, pos: Vec3) {
+        w.spawn_gadget(GadgetEntity {
+            id: 0,
+            def,
+            owner: 2,
+            team: 1,
+            pos,
+            vel: Vec3::ZERO,
+            phase: phase::RESTING,
+            timer: 0.001,
+            attached_cell: None,
+        });
+    }
+
+    fn flash_of(w: &GameWorld) -> Vec<(u16, u8)> {
+        w.events
+            .iter()
+            .find_map(|e| match e {
+                GameEvent::Flash { victims, .. } => Some(victims.clone()),
+                _ => None,
+            })
+            .expect("flash event")
+    }
+
+    #[test]
+    fn flashbang_needs_line_of_sight_and_is_worse_when_facing_it() {
+        let wall = r#",{"min":[14,-3,0],"max":[14.3,3,3],"material":"concrete"}"#;
+        let mut a = Arena::new(wall, MatchRules::default());
+        spawn_test_gadget(&mut a.w, 2, Vec3::new(6.0, 0.0, 0.1));
+        a.step(cmd(0), cmd(0), 1);
+        let v = flash_of(&a.w);
+        let p1 = v.iter().find(|x| x.0 == 1).expect("player 1 sees it").1;
+        assert!(p1 > 150, "facing, 6 m: {p1}");
+        assert!(v.iter().all(|x| x.0 != 2), "player 2 is behind concrete");
+        // Same distance, looking away: weaker.
+        let away = MoveInput {
+            yaw_q: quantize_yaw_deg(180.0),
+            ..cmd(0)
+        };
+        a.step(away, cmd(0), 2);
+        spawn_test_gadget(&mut a.w, 2, Vec3::new(6.0, 0.0, 0.1));
+        a.step(away, cmd(0), 1);
+        let back = flash_of(&a.w).iter().find(|x| x.0 == 1).unwrap().1;
+        assert!(back < p1, "{back} vs {p1}");
+    }
+
+    #[test]
+    fn smoke_grenade_emits_then_disappears() {
+        let mut a = Arena::new("", MatchRules::default());
+        spawn_test_gadget(&mut a.w, 3, Vec3::new(6.0, 0.0, 0.1));
+        a.step(cmd(0), cmd(0), 1);
+        assert_eq!(a.w.gadgets[0].phase, phase::SMOKING);
+        a.step(cmd(0), cmd(0), 64 * 13);
+        assert_eq!(a.w.gadgets.len(), 1);
+        a.step(cmd(0), cmd(0), 64 * 2);
+        assert!(a.w.gadgets.is_empty());
+    }
+
+    #[test]
+    fn frag_respects_friendly_fire_rule() {
+        let mut a = Arena::new("", MatchRules::default());
+        a.w.add_player(3, 0, "mate".into(), None);
+        a.w.player_mut(3).unwrap().state.pos = Vec3::new(10.0, 0.0, 0.0);
+        a.w.explode(Vec3::new(10.0, 0.0, 0.5), 5.0, 150.0, 0.0, Some(1), 0x81);
+        assert_eq!(a.w.player(3).unwrap().health, 100);
     }
 }

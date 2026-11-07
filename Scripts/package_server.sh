@@ -21,5 +21,6 @@ cp "$BIN_DIR"/tfps-server* "$OUT/" 2>/dev/null || true
 rm -f "$OUT"/*.d
 cp Shared/Definitions/maps/*.json "$OUT/Shared/Definitions/maps/"
 cp Shared/Definitions/weapons.json "$OUT/Shared/Definitions/"
+cp Shared/Definitions/gadgets.json "$OUT/Shared/Definitions/"
 echo "packaged server: $OUT"
 ls -la "$OUT"

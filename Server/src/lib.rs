@@ -10,6 +10,7 @@ pub mod combat;
 pub mod config;
 pub mod connection;
 pub mod destruction;
+pub mod gadgets;
 pub mod game;
 pub mod server;
 pub mod stats;
@@ -23,7 +24,7 @@ use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender, TryS
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use tfps_sim::{MapDef, WeaponSet};
+use tfps_sim::{GadgetSet, MapDef, WeaponSet};
 use tracing::{info, warn};
 
 /// Capacity of the network -> simulation inbox. When full, packets are
@@ -93,14 +94,17 @@ pub fn start(cfg: ServerConfig) -> anyhow::Result<ServerHandle> {
         .with_context(|| format!("loading map {}", cfg.map_path.display()))?;
     let weapons = WeaponSet::load(&cfg.weapons_path)
         .with_context(|| format!("loading weapons {}", cfg.weapons_path.display()))?;
-    start_with_data(cfg, map, weapons)
+    let gadgets = GadgetSet::load(&cfg.gadgets_path)
+        .with_context(|| format!("loading gadgets {}", cfg.gadgets_path.display()))?;
+    start_with_data(cfg, map, weapons, gadgets)
 }
 
-/// Starts a server with already-loaded map and weapon definitions.
+/// Starts a server with already-loaded map, weapon and gadget definitions.
 pub fn start_with_data(
     cfg: ServerConfig,
     map: MapDef,
     weapons: WeaponSet,
+    gadgets: GadgetSet,
 ) -> anyhow::Result<ServerHandle> {
     cfg.validate().map_err(anyhow::Error::msg)?;
     let std_socket =
@@ -140,6 +144,7 @@ pub fn start_with_data(
         map_hash = format!("{:016x}", map.geometry_hash()),
         weapons = weapons.weapons.len(),
         weapons_hash = format!("{:016x}", weapons.hash()),
+        gadgets = gadgets.gadgets.len(),
         "server started"
     );
 
@@ -149,7 +154,8 @@ pub fn start_with_data(
         std::thread::Builder::new()
             .name("tfps-sim".into())
             .spawn(move || {
-                let core = server::ServerCore::new(cfg, map, weapons, send_socket, stats.clone());
+                let core =
+                    server::ServerCore::new(cfg, map, weapons, gadgets, send_socket, stats.clone());
                 sim_loop(core, inbox_rx, pool_tx, stats, shutdown);
             })?
     };

@@ -21,9 +21,10 @@ use tfps_protocol::packet::{
     DataHeader, Disconnect, DisconnectReason, PacketType, RejectReason,
 };
 use tfps_protocol::reliable::{ReliableReceiver, ReliableSender};
-use tfps_protocol::snapshot::{self, EntityState, ShotEvent};
+use tfps_protocol::snapshot::{self, EntityState, GadgetEntityState, ShotEvent};
 use tfps_protocol::{Reader, Writer, MAX_PACKET_SIZE};
-use tfps_sim::weapon::{ShotBuffer, WeaponDef, WeaponSet, WeaponState};
+use tfps_sim::gadget::GadgetStock;
+use tfps_sim::weapon::{ShotBuffer, WeaponDef, WeaponSet, WeaponState, GADGET_SLOTS};
 use tfps_sim::{simulate_player, CollisionWorld, MapDef, MoveInput, MoveState, Vec3};
 
 const HANDSHAKE_RESEND: Duration = Duration::from_millis(250);
@@ -115,6 +116,11 @@ pub enum ClientEvent {
     Explosion {
         pos_mm: [i32; 3],
         radius_cm: u16,
+    },
+    /// A flashbang went off; `intensity` is how much it blinded us (0..=255).
+    Flash {
+        pos_mm: [i32; 3],
+        intensity: u8,
     },
 }
 
@@ -224,6 +230,10 @@ pub struct Client {
     pub destroyed_cells: u64,
     pub remote_shot_events: Vec<ShotEvent>,
     shot_decode: Vec<ShotEvent>,
+    /// Gadget entities in the newest snapshot (grenades, charges, smoke).
+    pub gadgets: Vec<GadgetEntityState>,
+    /// Our gadget slots and remaining counts (authoritative).
+    pub gadget_stock: [GadgetStock; GADGET_SLOTS],
     have_authoritative: bool,
     last_frame: Option<Instant>,
     tick_accum: f64,
@@ -304,6 +314,8 @@ impl Client {
             local_shots: 0,
             destroyed_cells: 0,
             remote_shot_events: Vec::new(),
+            gadgets: Vec::new(),
+            gadget_stock: Default::default(),
             shot_decode: Vec::new(),
             have_authoritative: false,
             last_frame: None,
@@ -751,6 +763,10 @@ impl Client {
                 self.events
                     .push_back(ClientEvent::PlayerConnState { player_id, state });
             }
+            Message::Flash { pos_mm, intensity } => {
+                self.events
+                    .push_back(ClientEvent::Flash { pos_mm, intensity });
+            }
             Message::HitConfirm {
                 victim,
                 damage,
@@ -818,11 +834,13 @@ impl Client {
         }
         let mut out = std::mem::take(&mut self.decode_buf);
         let mut shots = std::mem::take(&mut self.shot_decode);
+        let mut gadgets = Vec::new();
         let h = snapshot::decode(
             r,
             base_idx.map(|i| self.ring[i].1.as_slice()),
             &mut out,
             &mut shots,
+            &mut gadgets,
         )?;
         let own = self.player_id;
         self.remote_shot_events
@@ -841,6 +859,8 @@ impl Client {
             self.decode_buf = out;
             return Ok(());
         }
+        self.gadgets = gadgets;
+        self.gadget_stock = h.gadgets;
         // Store for future delta decoding.
         let slot = &mut self.ring[self.ring_cursor];
         slot.0 = h.server_tick;

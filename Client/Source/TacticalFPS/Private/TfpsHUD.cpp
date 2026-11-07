@@ -131,13 +131,40 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 	const FLinearColor HealthColor = HealthFrac > 0.35f ? FLinearColor(0.85f, 0.88f, 0.85f, 0.95f) : FLinearColor(0.9f, 0.25f, 0.18f, 0.95f);
 	DrawRect(HealthColor, BX, BY, BW * HealthFrac, BH);
 
-	// Weapon and ammo (bottom right).
+	// Weapon and ammo, or the gadget in hand (bottom right).
 	const tfps::WeaponState& Ws = Core.Weapon();
-	const tfps::WeaponDef* Def = Core.LoadoutWeapon(Ws.Active);
-	const tfps::SlotAmmo& Ammo = Ws.Slots[Ws.Active];
 	const float AX = W - 290.0f * Scale;
 	const float AY = H - 86.0f * Scale;
 	DrawRect(Panel, AX - 10.0f * Scale, AY - 6.0f * Scale, 276.0f * Scale, 72.0f * Scale);
+	// Gadget slots (above the weapon panel): [3] name xN  [4] name xN.
+	for (int32 G = 0; G < tfps::kGadgetSlots; ++G)
+	{
+		const tfps::GadgetStock Stock = Core.LocalGadget(G);
+		const tfps::GadgetDef* GDef = Net.GetGadgets().Get(Stock.Id);
+		if (GDef == nullptr)
+		{
+			continue;
+		}
+		const bool bHeld = Ws.Active == tfps::kWeaponSlots + G;
+		DrawText(FString::Printf(TEXT("[%d] %s x%d"), tfps::kWeaponSlots + G + 1, UTF8_TO_TCHAR(GDef->Name.c_str()), static_cast<int32>(Stock.Count)),
+			bHeld ? Text : (Stock.Count == 0 ? FLinearColor(0.5f, 0.3f, 0.3f, 0.8f) : Dim), AX, AY - (28.0f + 18.0f * (tfps::kGadgetSlots - 1 - G)) * Scale, Small, Scale);
+	}
+	if (tfps::IsGadgetSlot(Ws.Active))
+	{
+		const tfps::GadgetStock Stock = Core.LocalGadget(Ws.Active - tfps::kWeaponSlots);
+		const tfps::GadgetDef* GDef = Net.GetGadgets().Get(Stock.Id);
+		DrawText(FString::Printf(TEXT("x%d"), static_cast<int32>(Stock.Count)), Stock.Count == 0 ? FLinearColor(0.9f, 0.3f, 0.2f) : Text, AX, AY, Font, Scale * 1.6f);
+		if (GDef != nullptr)
+		{
+			const bool bPlaced = GDef->Kind == tfps::EGadgetKind::Breach;
+			DrawText(UTF8_TO_TCHAR(GDef->Name.c_str()), Text, AX + 70.0f * Scale, AY + 12.0f * Scale, Font, Scale);
+			DrawText(bPlaced ? TEXT("[LMB] place   [RMB+LMB] detonate") : TEXT("[LMB] throw   [RMB+LMB] lob"), Dim, AX, AY + 42.0f * Scale, Small, Scale);
+		}
+	}
+	else
+	{
+	const tfps::WeaponDef* Def = Core.LoadoutWeapon(Ws.Active);
+	const tfps::SlotAmmo& Ammo = Ws.Slots[Ws.Active];
 	const int32 InGun = Ammo.Ammo + (Ammo.bChambered ? 1 : 0);
 	DrawText(FString::Printf(TEXT("%d"), InGun), InGun == 0 ? FLinearColor(0.9f, 0.3f, 0.2f) : Text, AX, AY, Font, Scale * 1.6f);
 	DrawText(FString::Printf(TEXT("/ %d"), static_cast<int32>(Ammo.Reserve)), Dim, AX + 70.0f * Scale, AY + 12.0f * Scale, Font, Scale);
@@ -154,6 +181,17 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 	else if (InGun == 0 && Ammo.Reserve > 0)
 	{
 		DrawText(TEXT("RELOAD [R]"), FLinearColor(0.9f, 0.6f, 0.2f), CX - 40.0f * Scale, CY + 40.0f * Scale, Small, Scale);
+	}
+	}
+
+	// Flashbang: white-out that holds, then fades (drawn under the rest of the HUD text that follows).
+	const UTfpsNetSubsystem::FFlash& Fl = Net.GetFlash();
+	const float FlashAge = static_cast<float>(Now - Fl.Time);
+	if (FlashAge >= 0.0f && FlashAge < Fl.Duration)
+	{
+		const float Hold = Fl.Duration * 0.35f;
+		const float Fade = FlashAge < Hold ? 1.0f : 1.0f - (FlashAge - Hold) / (Fl.Duration - Hold);
+		DrawRect(FLinearColor(1.0f, 1.0f, 0.97f, FMath::Clamp(Fl.Intensity * 1.2f, 0.0f, 1.0f) * Fade), 0.0f, 0.0f, W, H);
 	}
 
 	// Hit marker: diagonal ticks around the crosshair (red for kills).

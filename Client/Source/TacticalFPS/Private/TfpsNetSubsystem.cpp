@@ -48,8 +48,17 @@ bool UTfpsNetSubsystem::Connect(const FString& Address, const FString& PlayerNam
 		UE_LOG(LogTfps, Error, TEXT("%s"), *Error);
 		return false;
 	}
+	tfps::GadgetSet NewGadgets;
+	if (!FTfpsMapLoader::LoadGadgets(NewGadgets, Error))
+	{
+		Status = ETfpsConnectionStatus::Failed;
+		StatusText = Error;
+		UE_LOG(LogTfps, Error, TEXT("%s"), *Error);
+		return false;
+	}
 	Map = std::move(NewMap);
 	Weapons = std::move(NewWeapons);
+	Gadgets = std::move(NewGadgets);
 	bHasMap = true;
 	++MapRevision;
 
@@ -194,11 +203,31 @@ void UTfpsNetSubsystem::HandleEvents()
 				PendingExplosions.Add(TPair<FVector, float>(FVector(Event.From.X, Event.From.Y, Event.From.Z), Event.Radius));
 			}
 			break;
+		case tfps::ClientEvent::EType::Flash:
+		{
+			if (PendingFlashes.Num() < 16)
+			{
+				PendingFlashes.Add(FVector(Event.From.X, Event.From.Y, Event.From.Z));
+			}
+			if (Event.Intensity > 0.0f)
+			{
+				// Hold time scales with how strongly the flash hit (gadget "duration" at full intensity).
+				float Duration = 4.0f;
+				for (const tfps::GadgetDef& G : Gadgets.Gadgets)
+				{
+					if (G.Kind == tfps::EGadgetKind::Flash) { Duration = G.Duration; }
+				}
+				Flash.Time = FPlatformTime::Seconds();
+				Flash.Intensity = Event.Intensity;
+				Flash.Duration = FMath::Max(0.5f, Duration * Event.Intensity);
+			}
+			break;
+		}
 		case tfps::ClientEvent::EType::Kill:
 		{
-			const tfps::WeaponDef* W = Weapons.Get(Event.WeaponId);
+			const FString Item = ItemName(Event.WeaponId);
 			FKillFeedEntry Entry;
-			Entry.Text = FString::Printf(TEXT("%s  [%s%s]  %s"), *PlayerName(Event.OtherId), W ? UTF8_TO_TCHAR(W->Name.c_str()) : TEXT("?"),
+			Entry.Text = FString::Printf(TEXT("%s  [%s%s]  %s"), *PlayerName(Event.OtherId), *Item,
 				Event.bHeadshot ? TEXT(", headshot") : TEXT(""), *PlayerName(Event.PlayerId));
 			Entry.Time = FPlatformTime::Seconds();
 			Entry.bInvolvesMe = Event.OtherId == Core->PlayerId() || Event.PlayerId == Core->PlayerId();
@@ -229,4 +258,19 @@ void UTfpsNetSubsystem::HandleEvents()
 		}
 		}
 	}
+}
+
+FString UTfpsNetSubsystem::ItemName(uint8 ItemId) const
+{
+	if (ItemId & 0x80)
+	{
+		const tfps::GadgetDef* G = Gadgets.Get(static_cast<uint8_t>(ItemId & 0x7F));
+		return G != nullptr ? FString(UTF8_TO_TCHAR(G->Name.c_str())) : FString(TEXT("Gadget"));
+	}
+	if (ItemId == 0)
+	{
+		return TEXT("Explosion");
+	}
+	const tfps::WeaponDef* W = Weapons.Get(ItemId);
+	return W != nullptr ? FString(UTF8_TO_TCHAR(W->Name.c_str())) : FString(TEXT("?"));
 }

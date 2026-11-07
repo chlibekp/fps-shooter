@@ -35,6 +35,7 @@ fn bench(c: &mut Criterion) {
                 black_box(&cur),
                 Some(&base),
                 &shots,
+                &[],
             );
         })
     });
@@ -45,8 +46,10 @@ fn bench(c: &mut Criterion) {
         &cur,
         Some(&base),
         &shots,
+        &[],
     );
     let (mut out, mut sh) = (Vec::with_capacity(64), Vec::with_capacity(32));
+    let mut gd = Vec::with_capacity(24);
     c.bench_function("snapshot_decode_delta_10", |b| {
         b.iter(|| {
             snapshot::decode(
@@ -54,6 +57,7 @@ fn bench(c: &mut Criterion) {
                 Some(&base),
                 &mut out,
                 &mut sh,
+                &mut gd,
             )
             .unwrap()
         })

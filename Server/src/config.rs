@@ -12,6 +12,7 @@ pub struct ServerConfig {
     pub max_players: u16,
     pub map_path: PathBuf,
     pub weapons_path: PathBuf,
+    pub gadgets_path: PathBuf,
     pub rules: crate::game::MatchRules,
     /// If set, clients must present this join token (lobby system).
     pub join_token: Option<u64>,
@@ -34,6 +35,7 @@ impl Default for ServerConfig {
             max_players: 10,
             map_path: PathBuf::from("Shared/Definitions/maps/test_arena.json"),
             weapons_path: PathBuf::from("Shared/Definitions/weapons.json"),
+            gadgets_path: PathBuf::from("Shared/Definitions/gadgets.json"),
             rules: Default::default(),
             join_token: None,
             interrupt_after: Duration::from_secs(2),

@@ -63,7 +63,7 @@ TFPS_TEST(PlayerSimConformanceWithRust)
 	std::istringstream Lines(Text);
 	std::string Line;
 	std::getline(Lines, Line);
-	TFPS_REQUIRE(Line == "tfps-player-vectors 3");
+	TFPS_REQUIRE(Line == "tfps-player-vectors 4");
 	tfps::CollisionWorld World;
 	tfps::MoveState Ms;
 	tfps::WeaponState Ws;

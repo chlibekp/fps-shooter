@@ -10,12 +10,20 @@ use tfps_protocol::packet::{
 };
 use tfps_protocol::{input::InputBundle, Writer};
 use tfps_server::config::ServerConfig;
-use tfps_sim::{buttons, MapDef, MoveInput, WeaponSet};
+use tfps_sim::{buttons, GadgetSet, MapDef, MoveInput, WeaponSet};
 
 fn weapons() -> WeaponSet {
     WeaponSet::load(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../Shared/Definitions/weapons.json"
+    ))
+    .unwrap()
+}
+
+fn gadgets() -> GadgetSet {
+    GadgetSet::load(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../Shared/Definitions/gadgets.json"
     ))
     .unwrap()
 }
@@ -47,7 +55,7 @@ fn test_cfg() -> ServerConfig {
 }
 
 fn server_cfg(cfg: ServerConfig) -> tfps_server::ServerHandle {
-    tfps_server::start_with_data(cfg, map(), weapons()).expect("server start")
+    tfps_server::start_with_data(cfg, map(), weapons(), gadgets()).expect("server start")
 }
 
 fn client(srv: &tfps_server::ServerHandle, name: &str) -> Client {
@@ -537,7 +545,7 @@ fn combat_over_the_network_hits_kills_and_respawns() {
         },
         ..test_cfg()
     };
-    let srv = tfps_server::start_with_data(cfg, open_map(), weapons()).unwrap();
+    let srv = tfps_server::start_with_data(cfg, open_map(), weapons(), gadgets()).unwrap();
     let mut a = Client::connect(
         ClientConfig::new(srv.local_addr, "Shooter"),
         &open_map(),
@@ -635,7 +643,7 @@ fn destruction_is_replicated_and_late_joiners_get_it() {
         )
         .unwrap()
     };
-    let srv = tfps_server::start_with_data(test_cfg(), map(), weapons()).unwrap();
+    let srv = tfps_server::start_with_data(test_cfg(), map(), weapons(), gadgets()).unwrap();
     let mut a = Client::connect(
         ClientConfig::new(srv.local_addr, "Breacher"),
         &map(),
@@ -684,4 +692,85 @@ fn destruction_is_replicated_and_late_joiners_get_it() {
         max: tfps_sim::Vec3::new(hole.max.x - 0.01, hole.max.y - 0.01, hole.max.z - 0.01),
     };
     assert!(!b.world().overlaps_any(&probe));
+}
+
+#[test]
+fn thrown_flashbang_is_replicated_and_blinds_the_player_facing_it() {
+    let srv = tfps_server::start_with_data(test_cfg(), open_map(), weapons(), gadgets()).unwrap();
+    let mut a = Client::connect(
+        ClientConfig::new(srv.local_addr, "Attacker"),
+        &open_map(),
+        &weapons(),
+    )
+    .unwrap();
+    let mut b = Client::connect(
+        ClientConfig::new(srv.local_addr, "Defender"),
+        &open_map(),
+        &weapons(),
+    )
+    .unwrap();
+    connect_all(&mut [&mut a, &mut b]);
+    run(&mut [&mut a, &mut b], Duration::from_millis(400));
+    // Team 1 (b) carries smoke + flash; the flash is gadget slot 1 = input slot 3.
+    assert_eq!(b.gadget_stock[1].id, 2);
+    assert_eq!(b.gadget_stock[1].count, 2);
+    assert_eq!(a.gadget_stock[0].id, 1, "team 0 carries frags");
+    // a looks at b; b lobs the flash towards a, slightly upwards.
+    let (ya, pa) = aim(a.predicted.eye_position(0), b.predicted.eye_position(0));
+    a.set_input(MoveInput {
+        buttons: 0,
+        yaw_q: ya,
+        pitch_q: pa,
+        slot: 0,
+    });
+    let mut target = a.predicted.pos;
+    target.z += 3.0;
+    let (yb, pb) = aim(b.predicted.eye_position(0), target);
+    let hold = MoveInput {
+        buttons: 0,
+        yaw_q: yb,
+        pitch_q: pb,
+        slot: 3,
+    };
+    b.set_input(hold);
+    run(&mut [&mut a, &mut b], Duration::from_millis(600)); // equip
+    b.set_input(MoveInput {
+        buttons: buttons::FIRE | buttons::AIM,
+        ..hold
+    });
+    run(&mut [&mut a, &mut b], Duration::from_millis(100));
+    // b turns away after throwing.
+    b.set_input(MoveInput {
+        yaw_q: yb.wrapping_add(32768),
+        pitch_q: 0,
+        ..hold
+    });
+    let mut seen_flying = false;
+    let mut flash: Option<u8> = None;
+    let mut b_flash: Option<u8> = None;
+    let end = Instant::now() + Duration::from_secs(4);
+    while Instant::now() < end && (flash.is_none() || b_flash.is_none()) {
+        run(&mut [&mut a, &mut b], Duration::from_millis(5));
+        seen_flying |= a
+            .gadgets
+            .iter()
+            .any(|g| g.gadget == 2 && g.owner == b.player_id);
+        for e in drain(&mut a) {
+            if let ClientEvent::Flash { intensity, .. } = e {
+                flash = Some(intensity);
+            }
+        }
+        for e in drain(&mut b) {
+            if let ClientEvent::Flash { intensity, .. } = e {
+                b_flash = Some(intensity);
+            }
+        }
+    }
+    assert!(seen_flying, "the grenade must be replicated while flying");
+    let fa = flash.expect("a must get the flash event");
+    let fb = b_flash.expect("b must get the flash event");
+    assert!(fa > 60, "a faces the flash: {fa}");
+    assert!(fb < fa, "b turned away from the flash: {fb} vs {fa}");
+    assert_eq!(b.gadget_stock[1].count, 1);
+    assert!(a.gadgets.is_empty(), "flash is gone after going off");
 }

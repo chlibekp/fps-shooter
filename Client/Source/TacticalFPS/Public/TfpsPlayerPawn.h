@@ -63,4 +63,6 @@ private:
 	FVector LastNetLocation = FVector::ZeroVector;
 	FVector CorrectionOffset = FVector::ZeroVector;
 	bool bHasLocation = false;
+	FVector DroneCamera = FVector::ZeroVector;
+	bool bDroneCamera = false;
 };

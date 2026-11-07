@@ -11,7 +11,8 @@ use tfps_protocol::snapshot::{
 };
 use tfps_sim::gadget::{GadgetKind, GadgetSet, GadgetStock};
 use tfps_sim::weapon::{
-    is_gadget_slot, Shot, ShotBuffer, WeaponDef, WeaponSet, WeaponState, GADGET_SLOTS, SLOTS,
+    is_gadget_slot, Shot, ShotBuffer, WeaponDef, WeaponSet, WeaponState, GADGET_SLOTS,
+    REMOTE_CONTROL, SLOTS,
 };
 use tfps_sim::{
     buttons, movement, simulate_player, CollisionWorld, MapDef, MoveInput, MoveState, Vec3,
@@ -212,6 +213,13 @@ pub struct Player {
     pub gadgets: [GadgetStock; GADGET_SLOTS],
     /// Seconds until the next gadget use is accepted.
     pub gadget_cooldown: f32,
+    /// Buttons of the previous simulated command (edge detection).
+    pub prev_buttons: u16,
+    /// Remote-controlling a drone this tick (the body stands still).
+    pub droning: bool,
+    /// View of the body while droning (replicated instead of the drone camera).
+    pub body_yaw_q: u16,
+    pub body_pitch_q: i16,
 }
 
 impl Player {
@@ -243,8 +251,16 @@ impl Player {
                 quantize_mm(self.state.pos.y),
                 quantize_mm(self.state.pos.z),
             ],
-            yaw_q: self.cmds.last_cmd.yaw_q,
-            pitch_q: self.cmds.last_cmd.pitch_q,
+            yaw_q: if self.droning {
+                self.body_yaw_q
+            } else {
+                self.cmds.last_cmd.yaw_q
+            },
+            pitch_q: if self.droning {
+                self.body_pitch_q
+            } else {
+                self.cmds.last_cmd.pitch_q
+            },
             flags,
             health: self.health,
             lean_q: quantize_lean(self.state.lean),
@@ -292,6 +308,14 @@ pub enum GameEvent {
         weapon: u8,
         headshot: bool,
     },
+    /// A drone of `spotter` saw enemy `target` at `pos`; tell `team`.
+    Spotted {
+        spotter: u16,
+        team: u8,
+        target: u16,
+        pos: Vec3,
+        duration: f32,
+    },
     /// A flashbang went off; `intensity` (0..=255) per affected player.
     Flash {
         pos: Vec3,
@@ -322,6 +346,8 @@ pub struct GameWorld {
     pub events: Vec<GameEvent>,
     shot_buf: ShotBuffer,
     entity_buf: Vec<EntityState>,
+    /// Drone id, controlling command and newly pressed buttons, this tick.
+    drone_cmds: Vec<(u16, MoveInput, u16)>,
     pending_shots: Vec<(u16, u32, Shot)>,
     destruction: Destruction,
     trace_buf: Vec<Obstacle>,
@@ -358,6 +384,7 @@ impl GameWorld {
             shot_events: Vec::new(),
             events: Vec::new(),
             shot_buf: ShotBuffer::default(),
+            drone_cmds: Vec::new(),
             entity_buf: Vec::with_capacity(64),
             pending_shots: Vec::with_capacity(64),
             destruction,
@@ -480,6 +507,10 @@ impl GameWorld {
             last_starved: false,
             gadgets: gadget_stock,
             gadget_cooldown: 0.0,
+            prev_buttons: 0,
+            droning: false,
+            body_yaw_q: yaw_q,
+            body_pitch_q: 0,
         };
         match self.players.binary_search_by_key(&id, |p| p.id) {
             Ok(i) => self.players[i] = p,
@@ -488,6 +519,9 @@ impl GameWorld {
     }
 
     pub fn remove_player(&mut self, id: u16) -> Option<Player> {
+        // Remote-controlled and placed gadgets go with their owner.
+        self.gadgets
+            .retain(|g| g.owner != id || g.kind.is_grenade());
         match self.players.binary_search_by_key(&id, |p| p.id) {
             Ok(i) => Some(self.players.remove(i)),
             Err(_) => None,
@@ -542,7 +576,6 @@ impl GameWorld {
             ];
             self.shot_buf.clear();
             let p = &mut self.players[i];
-            let trigger_was = p.weapon.trigger_prev;
             p.gadget_cooldown = (p.gadget_cooldown - dt).max(0.0);
             simulate_player(
                 &mut p.state,
@@ -556,8 +589,30 @@ impl GameWorld {
             for s in self.shot_buf.as_slice() {
                 self.pending_shots.push((p.id, render_time, *s));
             }
-            let pressed = cmd.buttons & buttons::FIRE != 0 && !trigger_was;
-            if pressed && is_gadget_slot(p.weapon.active) && p.weapon.equip_timer <= 0.0 {
+            let pressed = cmd.buttons & !p.prev_buttons;
+            p.prev_buttons = cmd.buttons;
+            let remote = cmd.slot & REMOTE_CONTROL != 0;
+            p.droning = remote;
+            if !remote {
+                p.body_yaw_q = cmd.yaw_q;
+                p.body_pitch_q = cmd.pitch_q;
+            }
+            if remote {
+                // Drive the player's newest drone with this command.
+                let owner = p.id;
+                if let Some(d) = self
+                    .gadgets
+                    .iter()
+                    .filter(|g| g.owner == owner && g.kind == GadgetKind::Drone)
+                    .map(|g| g.id)
+                    .max()
+                {
+                    self.drone_cmds.push((d, cmd, pressed));
+                }
+            } else if pressed & buttons::FIRE != 0
+                && is_gadget_slot(p.weapon.active)
+                && p.weapon.equip_timer <= 0.0
+            {
                 self.use_gadget(i, &cmd);
             }
             if self.players[i].state.pos.z < kill_z {
@@ -627,11 +682,15 @@ impl GameWorld {
             }
         }
         player_hits.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // An enemy drone in the way stops the bullet (and is destroyed).
+        let drone = self.drone_hit(origin, dir, def.range, shooter_team);
+        let range = drone.map_or(def.range, |d| d.0);
+        player_hits.retain(|h| h.0 < range);
 
         // Walk the obstacles (current destruction state) in order: damage the
         // cells crossed, penetrate while the bullet has power left.
         let mut obs = std::mem::take(&mut self.trace_buf);
-        destruction::trace(&self.collision, origin, dir, def.range, &mut obs);
+        destruction::trace(&self.collision, origin, dir, range, &mut obs);
         let mut power = def.penetration;
         let mut dmg_mult = 1.0f32;
         let mut blocked_at: Option<(f32, u8)> = None;
@@ -661,6 +720,9 @@ impl GameWorld {
         if victim.is_none() && blocked_at.is_none() {
             if let Some(&(t, part, id)) = player_hits.first() {
                 victim = Some((t, part, id, dmg_mult));
+            } else if let Some((t, id)) = drone {
+                self.gadgets.retain(|g| g.id != id);
+                blocked_at = Some((t, tfps_sim::Material::Metal as u8));
             }
         }
         self.trace_buf = obs;
@@ -808,6 +870,9 @@ impl GameWorld {
         }
         self.destruction
             .explode_cells(&mut self.collision, center, radius, cell_damage);
+        // Drones in the blast are destroyed.
+        self.gadgets
+            .retain(|g| g.kind != GadgetKind::Drone || g.pos.distance(&center) >= radius);
         self.explosions.push((center, radius));
     }
 
@@ -846,11 +911,13 @@ impl GameWorld {
         {
             return;
         }
-        let entity = if def.kind.is_thrown() {
-            let speed = def.throw_speed * if aiming { gadgets::LOB_SPEED_MULT } else { 1.0 };
+        let entity = if def.kind.is_grenade() || def.kind == GadgetKind::Drone {
+            let lob = aiming && def.kind != GadgetKind::Drone;
+            let speed = def.throw_speed * if lob { gadgets::LOB_SPEED_MULT } else { 1.0 };
             GadgetEntity {
                 id: 0,
                 def: def.id,
+                kind: def.kind,
                 owner,
                 team,
                 pos: gadgets::throw_origin(&self.collision, eye, dir),
@@ -870,6 +937,7 @@ impl GameWorld {
             GadgetEntity {
                 id: 0,
                 def: def.id,
+                kind: def.kind,
                 owner,
                 team,
                 pos,
@@ -904,7 +972,39 @@ impl GameWorld {
         let kill_z = self.map.kill_z;
         let mut due: Vec<u16> = Vec::new();
         let mut gone: Vec<u16> = Vec::new();
+        let mut spots: Vec<(u16, MoveInput)> = Vec::new();
+        let drone_cmds = std::mem::take(&mut self.drone_cmds);
         for g in self.gadgets.iter_mut() {
+            if g.kind == GadgetKind::Drone {
+                let Some(def) = self.gadget_defs.get(g.def) else {
+                    continue;
+                };
+                let ctl = drone_cmds.iter().find(|c| c.0 == g.id);
+                let (wish, jump) = match ctl {
+                    Some((_, cmd, pressed)) => (drone_wish(cmd), pressed & buttons::JUMP != 0),
+                    None => ((0.0, 0.0), false),
+                };
+                gadgets::step_drone(
+                    &self.collision,
+                    g,
+                    wish,
+                    jump,
+                    def.speed,
+                    def.jump_speed,
+                    dt,
+                );
+                g.timer = (g.timer - dt).max(0.0); // spot cooldown
+                if let Some((_, cmd, pressed)) = ctl {
+                    if pressed & buttons::FIRE != 0 && g.timer <= 0.0 {
+                        g.timer = gadgets::SPOT_COOLDOWN;
+                        spots.push((g.id, *cmd));
+                    }
+                }
+                if g.pos.z < kill_z {
+                    gone.push(g.id);
+                }
+                continue;
+            }
             match g.phase {
                 phase::FLYING | phase::RESTING => {
                     gadgets::step_projectile(&self.collision, g, dt);
@@ -940,9 +1040,100 @@ impl GameWorld {
             }
         }
         self.gadgets.retain(|g| !gone.contains(&g.id));
+        self.drone_cmds = drone_cmds;
+        self.drone_cmds.clear();
+        for (drone, cmd) in spots {
+            self.drone_spot(drone, &cmd);
+        }
         for id in due {
             self.detonate(id);
         }
+    }
+
+    /// A drone pings: the nearest enemy close to the centre of its camera
+    /// view, within range and in line of sight, is spotted for the team.
+    fn drone_spot(&mut self, drone: u16, cmd: &MoveInput) {
+        let Some(g) = self.gadgets.iter().find(|g| g.id == drone).cloned() else {
+            return;
+        };
+        let Some(def) = self.gadget_defs.get(g.def).cloned() else {
+            return;
+        };
+        let cam = Vec3::new(g.pos.x, g.pos.y, g.pos.z + gadgets::DRONE_CAMERA_HEIGHT);
+        let view = combat::direction(
+            tfps_sim::math::dequantize_yaw_deg(cmd.yaw_q),
+            tfps_sim::math::dequantize_pitch_deg(cmd.pitch_q),
+        );
+        let mut best: Option<(f32, u16, Vec3)> = None;
+        let mut obs = std::mem::take(&mut self.trace_buf);
+        for p in &self.players {
+            if !p.alive || p.team == g.team {
+                continue;
+            }
+            let chest = Vec3::new(
+                p.state.pos.x,
+                p.state.pos.y,
+                p.state.pos.z + p.state.height() * 0.6,
+            );
+            let d = chest.distance(&cam);
+            if d > def.spot_range || d < 1e-3 {
+                continue;
+            }
+            let to = Vec3::new(
+                (chest.x - cam.x) / d,
+                (chest.y - cam.y) / d,
+                (chest.z - cam.z) / d,
+            );
+            // Within ~5 degrees of the view centre.
+            if view.x * to.x + view.y * to.y + view.z * to.z < 0.996 {
+                continue;
+            }
+            destruction::trace(&self.collision, cam, to, d, &mut obs);
+            if obs
+                .iter()
+                .any(|o| o.t_in < d - 0.05 && o.material != tfps_sim::Material::Glass)
+            {
+                continue;
+            }
+            if best.is_none_or(|b| d < b.0) {
+                best = Some((d, p.id, p.state.pos));
+            }
+        }
+        self.trace_buf = obs;
+        if let Some((_, target, pos)) = best {
+            self.events.push(GameEvent::Spotted {
+                spotter: g.owner,
+                team: g.team,
+                target,
+                pos,
+                duration: def.duration,
+            });
+        }
+    }
+
+    /// Nearest enemy drone hit by a ray within `max_t`: (t, drone id).
+    fn drone_hit(
+        &self,
+        origin: Vec3,
+        dir: Vec3,
+        max_t: f32,
+        shooter_team: u8,
+    ) -> Option<(f32, u16)> {
+        let mut best: Option<(f32, u16)> = None;
+        for g in &self.gadgets {
+            if g.kind != GadgetKind::Drone || (!self.rules.friendly_fire && g.team == shooter_team)
+            {
+                continue;
+            }
+            let half = self.gadget_defs.get(g.def).map_or(0.15, |d| d.radius);
+            let b = gadgets::drone_box(g.pos, half);
+            if let Some((t, _)) = combat::ray_aabb_interval(origin, dir, &b) {
+                if t <= max_t && best.is_none_or(|x| t < x.0) {
+                    best = Some((t, g.id));
+                }
+            }
+        }
+        best
     }
 
     /// Fuse end / remote detonation of gadget `id`.
@@ -957,6 +1148,7 @@ impl GameWorld {
         };
         let weapon = 0x80 | def.id;
         match def.kind {
+            GadgetKind::Drone => {}
             GadgetKind::Smoke => {
                 let s = &mut self.gadgets[idx];
                 s.phase = phase::SMOKING;
@@ -1041,6 +1233,21 @@ impl GameWorld {
         out.clear();
         out.extend(self.players.iter().map(|p| p.entity_state()));
     }
+}
+
+/// Horizontal drive direction of a drone from a command (relative to its
+/// view yaw, like player movement).
+fn drone_wish(cmd: &MoveInput) -> (f32, f32) {
+    let b = cmd.buttons;
+    let f = ((b & buttons::FORWARD != 0) as i32 - (b & buttons::BACK != 0) as i32) as f32;
+    let r = ((b & buttons::RIGHT != 0) as i32 - (b & buttons::LEFT != 0) as i32) as f32;
+    if f == 0.0 && r == 0.0 {
+        return (0.0, 0.0);
+    }
+    let (s, c) = tfps_sim::math::yaw_sin_cos(cmd.yaw_q);
+    let (x, y) = (f * c - r * s, f * s + r * c);
+    let len = (x * x + y * y).sqrt();
+    (x / len, y / len)
 }
 
 #[cfg(test)]
@@ -1524,9 +1731,11 @@ mod tests {
     }
 
     fn spawn_test_gadget(w: &mut GameWorld, def: u8, pos: Vec3) {
+        let kind = w.gadget_defs.get(def).unwrap().kind;
         w.spawn_gadget(GadgetEntity {
             id: 0,
             def,
+            kind,
             owner: 2,
             team: 1,
             pos,
@@ -1588,5 +1797,113 @@ mod tests {
         a.w.player_mut(3).unwrap().state.pos = Vec3::new(10.0, 0.0, 0.0);
         a.w.explode(Vec3::new(10.0, 0.0, 0.5), 5.0, 150.0, 0.0, Some(1), 0x81);
         assert_eq!(a.w.player(3).unwrap().health, 100);
+    }
+
+    #[test]
+    fn drone_is_deployed_driven_spots_enemies_and_dies_to_one_bullet() {
+        let mut a = Arena::new("", MatchRules::default());
+        // Team 0 gadget slot 2 = input slot 4 holds two drones.
+        let hold = slot_cmd(aim_at(0, 3.0, 0.0, 0.0), 4);
+        a.step(hold, cmd(0), 30);
+        a.step(slot_cmd(aim_at(buttons::FIRE, 3.0, 0.0, 0.0), 4), cmd(0), 1);
+        assert_eq!(a.w.gadgets.len(), 1);
+        assert_eq!(a.w.gadgets[0].kind, GadgetKind::Drone);
+        assert_eq!(a.w.player(1).unwrap().gadgets[2].count, 1);
+        a.step(hold, cmd(0), 64);
+        let landed = a.w.gadgets[0].pos;
+        assert_eq!(a.w.gadgets[0].phase, phase::RESTING, "{landed:?}");
+        // Remote control: forward drives the drone, the body stays where it is.
+        let body = a.w.player(1).unwrap().state.pos;
+        let drive = MoveInput {
+            buttons: buttons::FORWARD,
+            yaw_q: 0,
+            pitch_q: 0,
+            slot: 4 | REMOTE_CONTROL,
+        };
+        a.step(drive, cmd(0), 64 * 2);
+        let p1 = a.w.player(1).unwrap();
+        assert_eq!(p1.state.pos, body, "body must not move while droning");
+        assert!(p1.droning);
+        let d = a.w.gadgets[0].pos;
+        assert!(
+            d.x > landed.x + 5.0,
+            "drone drove forward: {landed:?} -> {d:?}"
+        );
+        // Spot: look at the target's chest (player 2 at x = 20) and press FIRE.
+        let cam = Vec3::new(d.x, d.y, d.z + gadgets::DRONE_CAMERA_HEIGHT);
+        let (dx, dz) = (20.0 - cam.x, 1.08 - cam.z);
+        let look = MoveInput {
+            buttons: 0,
+            yaw_q: 0,
+            pitch_q: quantize_pitch_deg(dz.atan2(dx).to_degrees()),
+            slot: 4 | REMOTE_CONTROL,
+        };
+        a.step(look, cmd(0), 1);
+        a.step(
+            MoveInput {
+                buttons: buttons::FIRE,
+                ..look
+            },
+            cmd(0),
+            1,
+        );
+        assert!(
+            a.w.events.iter().any(|e| matches!(
+                e,
+                GameEvent::Spotted {
+                    spotter: 1,
+                    team: 0,
+                    target: 2,
+                    ..
+                }
+            )),
+            "{:?}",
+            a.w.events
+        );
+        // The target shoots the drone: one bullet destroys it.
+        let drone_pos = a.w.gadgets[0].pos;
+        let t_eye = Vec3::new(20.0, 0.0, movement::STAND_EYE);
+        let (ex, ey, ez) = (
+            drone_pos.x - t_eye.x,
+            drone_pos.y - t_eye.y,
+            drone_pos.z - 0.05 - t_eye.z,
+        );
+        let shoot = MoveInput {
+            buttons: buttons::AIM,
+            yaw_q: quantize_yaw_deg(ey.atan2(ex).to_degrees()),
+            pitch_q: quantize_pitch_deg(ez.atan2((ex * ex + ey * ey).sqrt()).to_degrees()),
+            slot: 0,
+        };
+        a.step(look, shoot, 32);
+        a.step(
+            look,
+            MoveInput {
+                buttons: buttons::AIM | buttons::FIRE,
+                ..shoot
+            },
+            1,
+        );
+        assert!(a.w.gadgets.is_empty(), "drone destroyed by a bullet");
+        assert_eq!(a.hp(1), 100, "the bullet stopped at the drone");
+        // Leaving remote control gives the body back.
+        a.step(hold, cmd(0), 2);
+        assert!(!a.w.player(1).unwrap().droning);
+    }
+
+    #[test]
+    fn explosions_destroy_drones_and_owners_take_drones_along_when_leaving() {
+        let mut a = Arena::new("", MatchRules::default());
+        let hold = slot_cmd(aim_at(0, 3.0, 0.0, 0.0), 4);
+        a.step(hold, cmd(0), 30);
+        a.step(slot_cmd(aim_at(buttons::FIRE, 3.0, 0.0, 0.0), 4), cmd(0), 1);
+        a.step(hold, cmd(0), 64);
+        let p = a.w.gadgets[0].pos;
+        a.w.explode(p, 2.0, 10.0, 0.0, Some(2), 0x81);
+        assert!(a.w.gadgets.is_empty());
+        a.step(hold, cmd(0), 60);
+        a.step(slot_cmd(aim_at(buttons::FIRE, 3.0, 0.0, 0.0), 4), cmd(0), 1);
+        assert_eq!(a.w.gadgets.len(), 1);
+        a.w.remove_player(1);
+        assert!(a.w.gadgets.is_empty());
     }
 }

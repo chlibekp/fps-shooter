@@ -106,6 +106,7 @@ struct FVector
 {
 	double X = 0, Y = 0, Z = 0;
 	static const FVector ZeroVector;
+	static double DotProduct(const FVector& A, const FVector& B) { return A.X * B.X + A.Y * B.Y + A.Z * B.Z; }
 	FVector() = default; FVector(double A, double B, double C) : X(A), Y(B), Z(C) {} explicit FVector(double A) : X(A), Y(A), Z(A) {}
 	FVector operator+(const FVector& O) const { return {X + O.X, Y + O.Y, Z + O.Z}; }
 	FVector operator-(const FVector& O) const { return {X - O.X, Y - O.Y, Z - O.Z}; }
@@ -158,6 +159,7 @@ struct FMath
 	static float Atan2(float Y, float X) { return std::atan2(Y, X); }
 	static float Sin(float V) { return std::sin(V); }
 	static float Cos(float V) { return std::cos(V); }
+	static float Tan(float V) { return std::tan(V); }
 };
 struct FChar { static bool IsAlnum(TCHAR C) { return std::iswalnum(static_cast<wint_t>(C)) != 0; } };
 struct FCString { static int32 Atoi(const TCHAR* S) { return static_cast<int32>(std::wcstol(S, nullptr, 10)); } };
@@ -273,8 +275,8 @@ class APawn : public AActor { public: bool bUseControllerRotationYaw = true, bUs
 class AController : public AActor { public: void Possess(APawn*) {} APawn* GetPawn() const { return nullptr; } FRotator GetControlRotation() const { return FRotator(); } void SetControlRotation(const FRotator&) {} bool IsLocalController() const { return true; } };
 struct FInputModeGameOnly {}; struct FInputModeGameAndUI {};
 struct FKey { FKey() = default; FKey(const char*) {} bool IsValid() const { return true; } };
-struct EKeys { static const FKey W, S, A, D, SpaceBar, LeftControl, C, LeftShift, LeftAlt, Q, E, RightMouseButton, LeftMouseButton, Z, R, F, F3, Escape, One, Two, Three, Four, MouseScrollUp, MouseScrollDown; };
-inline const FKey EKeys::One{"1"}, EKeys::Two{"2"}, EKeys::Three{"3"}, EKeys::Four{"4"}, EKeys::MouseScrollUp{"WU"}, EKeys::MouseScrollDown{"WD"};
+struct EKeys { static const FKey W, S, A, D, SpaceBar, LeftControl, C, LeftShift, LeftAlt, Q, E, RightMouseButton, LeftMouseButton, Z, R, F, F3, Escape, One, Two, Three, Four, Five, MouseScrollUp, MouseScrollDown; };
+inline const FKey EKeys::One{"1"}, EKeys::Two{"2"}, EKeys::Three{"3"}, EKeys::Four{"4"}, EKeys::Five{"5"}, EKeys::MouseScrollUp{"WU"}, EKeys::MouseScrollDown{"WD"};
 inline const FKey EKeys::W{"W"}, EKeys::S{"S"}, EKeys::A{"A"}, EKeys::D{"D"}, EKeys::SpaceBar{"Sp"}, EKeys::LeftControl{"LC"}, EKeys::C{"C"}, EKeys::LeftShift{"LS"}, EKeys::LeftAlt{"LA"}, EKeys::Q{"Q"}, EKeys::E{"E"}, EKeys::RightMouseButton{"RMB"}, EKeys::LeftMouseButton{"LMB"}, EKeys::Z{"Z"}, EKeys::R{"R"}, EKeys::F{"F"}, EKeys::F3{"F3"}, EKeys::Escape{"Esc"};
 class APlayerController : public AController
 {

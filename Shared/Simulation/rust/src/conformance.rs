@@ -189,8 +189,11 @@ pub fn generate(
                         };
                     }
                     if (r >> 45) & 31 == 0 {
-                        // Gadget in hand (weapon holstered).
-                        input.slot = (SLOTS as u64 + ((r >> 50) & 1)) as u8;
+                        // Gadget in hand (weapon holstered), sometimes remote-controlling.
+                        input.slot = (SLOTS as u64 + ((r >> 50) % 3)) as u8;
+                        if (r >> 53) & 1 == 1 {
+                            input.slot |= crate::weapon::REMOTE_CONTROL;
+                        }
                     }
                     input.buttons = b;
                     hold = 3 + ((r >> 40) & 0x1F) as u32;

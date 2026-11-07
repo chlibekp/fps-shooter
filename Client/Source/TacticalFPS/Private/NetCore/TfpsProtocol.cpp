@@ -450,6 +450,12 @@ namespace tfps
 			FromMm[0] = R.I32(); FromMm[1] = R.I32(); FromMm[2] = R.I32();
 			Intensity = R.U8();
 			break;
+		case MsgType::Spotted:
+			PlayerId = R.U16();
+			OtherId = R.U16();
+			FromMm[0] = R.I32(); FromMm[1] = R.I32(); FromMm[2] = R.I32();
+			DurationDs = R.U8();
+			break;
 		case MsgType::Kill:
 			OtherId = R.U16();   // killer
 			PlayerId = R.U16();  // victim
@@ -483,6 +489,7 @@ namespace tfps
 		}
 		case MsgType::Explosion: W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); W.U16(RadiusCm); break;
 		case MsgType::Flash: W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); W.U8(Intensity); break;
+		case MsgType::Spotted: W.U16(PlayerId); W.U16(OtherId); W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); W.U8(DurationDs); break;
 		default: break;
 		}
 		return V;

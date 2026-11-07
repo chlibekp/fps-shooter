@@ -36,6 +36,8 @@ public:
 	/** Gadget slots (throw / place with Fire; Aim + Fire = underhand lob / detonate charges). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Gadget1 = EKeys::Three;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Gadget2 = EKeys::Four;
+	/** Third gadget slot (attackers: drones; Fire deploys, then the drone is driven while the slot is held). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Gadget3 = EKeys::Five;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey NextWeapon = EKeys::MouseScrollDown;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey PrevWeapon = EKeys::MouseScrollUp;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey ToggleNetStats = EKeys::F3;

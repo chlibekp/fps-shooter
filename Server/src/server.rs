@@ -657,6 +657,35 @@ impl ServerCore {
                         },
                     );
                 }
+                GameEvent::Spotted {
+                    spotter,
+                    team,
+                    target,
+                    pos,
+                    duration,
+                } => {
+                    let m = Message::Spotted {
+                        target,
+                        spotter,
+                        pos_mm: [quantize_mm(pos.x), quantize_mm(pos.y), quantize_mm(pos.z)],
+                        duration_ds: (duration * 10.0).round().clamp(1.0, 255.0) as u8,
+                    };
+                    let payload = m.encode_payload();
+                    let team_ids: Vec<u16> = self
+                        .game
+                        .players()
+                        .iter()
+                        .filter(|p| p.team == team)
+                        .map(|p| p.id)
+                        .collect();
+                    for c in self.conns.values_mut() {
+                        if team_ids.contains(&c.player_id)
+                            && c.rel_tx.queue(m.msg_type(), payload.clone()).is_err()
+                        {
+                            c.doomed = Some(DisconnectReason::ProtocolError);
+                        }
+                    }
+                }
                 GameEvent::Flash { pos, ref victims } => {
                     let pos_mm = [quantize_mm(pos.x), quantize_mm(pos.y), quantize_mm(pos.z)];
                     for c in self.conns.values_mut() {

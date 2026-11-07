@@ -184,6 +184,70 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 	}
 	}
 
+	// Spotted enemies: diamond markers at the spotted position (projected with
+	// the current view; the pose is the pinned spot, not live tracking).
+	const ATfpsPlayerController* SpotPC = Cast<ATfpsPlayerController>(GetOwningPlayerController());
+	if (SpotPC != nullptr && Net.GetSpotMarkers().Num() > 0)
+	{
+		const tfps::GadgetEntityState* Drone = Net.GetControlledDrone();
+		const FRotator ViewRot = SpotPC->GetControlRotation();
+		FVector Origin;
+		if (Drone != nullptr)
+		{
+			const tfps::Vec3 D = Drone->Position();
+			Origin = FVector(D.X, D.Y, D.Z + 0.1f);
+		}
+		else
+		{
+			const tfps::Vec3 E = Core.Predicted().EyePosition(tfps::QuantizeYawDeg(static_cast<float>(ViewRot.Yaw)));
+			Origin = FVector(E.X, E.Y, E.Z);
+		}
+		const float FovDeg = 90.0f * (Drone != nullptr ? 1.1f : FMath::Lerp(1.0f, 0.78f, Core.Predicted().Aim));
+		const float Yaw = FMath::DegreesToRadians(static_cast<float>(ViewRot.Yaw));
+		const float Pitch = FMath::DegreesToRadians(static_cast<float>(FRotator::NormalizeAxis(ViewRot.Pitch)));
+		const FVector Fwd(FMath::Cos(Pitch) * FMath::Cos(Yaw), FMath::Cos(Pitch) * FMath::Sin(Yaw), FMath::Sin(Pitch));
+		const FVector Right(-FMath::Sin(Yaw), FMath::Cos(Yaw), 0.0f);
+		const FVector Up(-FMath::Sin(Pitch) * FMath::Cos(Yaw), -FMath::Sin(Pitch) * FMath::Sin(Yaw), FMath::Cos(Pitch));
+		const float Focal = CX / FMath::Tan(FMath::DegreesToRadians(FovDeg * 0.5f));
+		for (const UTfpsNetSubsystem::FSpotMarker& M : Net.GetSpotMarkers())
+		{
+			const float Left = static_cast<float>(M.Until - Now);
+			if (Left <= 0.0f)
+			{
+				continue;
+			}
+			const FVector Rel = (M.PosMeters + FVector(0.0f, 0.0f, 1.2f)) - Origin;
+			const float Z = static_cast<float>(FVector::DotProduct(Rel, Fwd));
+			if (Z < 0.2f)
+			{
+				continue; // behind the camera
+			}
+			const float SX = CX + static_cast<float>(FVector::DotProduct(Rel, Right)) / Z * Focal;
+			const float SY = CY - static_cast<float>(FVector::DotProduct(Rel, Up)) / Z * Focal;
+			const float R = 9.0f * Scale;
+			const FLinearColor C(1.0f, 0.55f, 0.1f, FMath::Clamp(Left, 0.0f, 1.0f));
+			DrawLine(SX, SY - R, SX + R, SY, C, 2.0f * Scale);
+			DrawLine(SX + R, SY, SX, SY + R, C, 2.0f * Scale);
+			DrawLine(SX, SY + R, SX - R, SY, C, 2.0f * Scale);
+			DrawLine(SX - R, SY, SX, SY - R, C, 2.0f * Scale);
+			DrawText(Net.PlayerName(M.Target), C, SX + R + 4.0f * Scale, SY - R, Small, Scale);
+		}
+	}
+
+	// Drone view overlay.
+	if (Net.GetControlledDrone() != nullptr)
+	{
+		const FLinearColor Ov(0.55f, 0.95f, 0.6f, 0.85f);
+		const float M = 40.0f * Scale;
+		const float L = 60.0f * Scale;
+		DrawLine(M, M, M + L, M, Ov, 2.0f * Scale); DrawLine(M, M, M, M + L, Ov, 2.0f * Scale);
+		DrawLine(W - M, M, W - M - L, M, Ov, 2.0f * Scale); DrawLine(W - M, M, W - M, M + L, Ov, 2.0f * Scale);
+		DrawLine(M, H - M, M + L, H - M, Ov, 2.0f * Scale); DrawLine(M, H - M, M, H - M - L, Ov, 2.0f * Scale);
+		DrawLine(W - M, H - M, W - M - L, H - M, Ov, 2.0f * Scale); DrawLine(W - M, H - M, W - M, H - M - L, Ov, 2.0f * Scale);
+		DrawText(TEXT("DRONE"), Ov, M + 10.0f * Scale, M + 10.0f * Scale, Font, Scale);
+		DrawText(TEXT("[WASD] drive   [Space] hop   [LMB] spot   [1/2] back to body"), Ov, M + 10.0f * Scale, H - M - 30.0f * Scale, Small, Scale);
+	}
+
 	// Flashbang: white-out that holds, then fades (drawn under the rest of the HUD text that follows).
 	const UTfpsNetSubsystem::FFlash& Fl = Net.GetFlash();
 	const float FlashAge = static_cast<float>(Now - Fl.Time);

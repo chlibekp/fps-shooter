@@ -19,7 +19,11 @@ use serde::Deserialize;
 pub const SLOTS: usize = 2;
 /// Gadget slots follow the weapon slots: input slot `SLOTS + i` holds
 /// gadget `i` (the weapon is holstered; gadget use is resolved by the server).
-pub const GADGET_SLOTS: usize = 2;
+pub const GADGET_SLOTS: usize = 3;
+/// Flag in `MoveInput::slot`: the player is remote-controlling a device
+/// (drone). The body only keeps its stance; movement, lean and the weapon are
+/// disabled (the server routes the command to the device).
+pub const REMOTE_CONTROL: u8 = 0x80;
 /// Seconds to bring a gadget up (and the weapon back down).
 pub const GADGET_EQUIP_TIME: f32 = 0.4;
 /// Aim (ADS) decay rate while holding a gadget, in 1/s.
@@ -415,8 +419,10 @@ pub fn simulate_player(
     let b = input.buttons;
 
     // 0. Weapon / gadget switching.
-    let want = if (input.slot as usize) < SLOTS + GADGET_SLOTS {
-        input.slot
+    let remote = input.slot & REMOTE_CONTROL != 0;
+    let slot = input.slot & !REMOTE_CONTROL;
+    let want = if (slot as usize) < SLOTS + GADGET_SLOTS {
+        slot
     } else {
         0
     };
@@ -433,6 +439,13 @@ pub fn simulate_player(
         if ws.cooldown < 0.0 {
             ws.cooldown = 0.0;
         }
+    }
+    if remote {
+        let body = MoveInput {
+            buttons: input.buttons & (buttons::CROUCH | buttons::PRONE),
+            ..*input
+        };
+        return simulate_holstered(ms, ws, &body, dt, world, loadout[0]);
     }
     if is_gadget_slot(ws.active) {
         return simulate_holstered(ms, ws, input, dt, world, loadout[0]);

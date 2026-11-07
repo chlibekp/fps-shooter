@@ -16,7 +16,9 @@ namespace tfps
 {
 	constexpr int kWeaponSlots = 2;
 	/** Gadget slots follow the weapon slots (input slot kWeaponSlots + i = gadget i, weapon holstered). */
-	constexpr int kGadgetSlots = 2;
+	constexpr int kGadgetSlots = 3;
+	/** Flag in MoveInput::Slot: remote-controlling a device (drone); the body keeps only its stance. */
+	constexpr uint8_t kRemoteControl = 0x80;
 	constexpr float kGadgetEquipTime = 0.4f;
 	constexpr float kGadgetAimTime = 0.25f;
 	inline bool IsGadgetSlot(uint8_t Active) { return Active >= kWeaponSlots && Active < kWeaponSlots + kGadgetSlots; }

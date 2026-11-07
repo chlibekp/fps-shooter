@@ -224,3 +224,14 @@ always ignore it, as in any shooter.
 Gadget entities are sent complete in every snapshot (≤ 24, 12 bytes each)
 instead of delta-encoded: there are few of them and they change every tick
 while flying.
+
+Drones follow the same split. Driving one sets a REMOTE_CONTROL flag in the
+command's slot byte. The shared simulation then freezes the body (stance
+only) and holsters the weapon, so body prediction stays exact. The server
+applies the command to the drone: ground acceleration, hops, axis-separated
+sliding against intact cells. The drone itself is not predicted: the camera
+follows its snapshot position smoothed, which adds one round trip of
+latency to drone motion. One enemy bullet or any explosion destroys a
+drone. Spotting is decided by the server (view cone, range, line of sight),
+and only the spotter's team learns the position. The spotted player is not
+told, as in comparable games.

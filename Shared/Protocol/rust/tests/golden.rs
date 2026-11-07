@@ -244,6 +244,12 @@ fn vectors() -> String {
                 pos_mm: [3_000, -4_000, 120],
                 intensity: 211,
             },
+            Message::Spotted {
+                target: 5,
+                spotter: 2,
+                pos_mm: [10_000, -2_500, 0],
+                duration_ds: 40,
+            },
         ] {
             tx.queue(m.msg_type(), m.encode_payload()).unwrap();
         }
@@ -268,6 +274,7 @@ fn vectors() -> String {
             gadgets: [
                 tfps_sim::gadget::GadgetStock { id: 1, count: 2 },
                 tfps_sim::gadget::GadgetStock { id: 4, count: 3 },
+                tfps_sim::gadget::GadgetStock { id: 5, count: 1 },
             ],
         };
         let shots = [ShotEvent {

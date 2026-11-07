@@ -522,6 +522,7 @@ mod tests {
             gadgets: [
                 GadgetStock { id: 1, count: 2 },
                 GadgetStock { id: 4, count: 3 },
+                GadgetStock { id: 5, count: 2 },
             ],
         }
     }

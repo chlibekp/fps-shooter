@@ -5,6 +5,7 @@
 //! clients; they are replicated as a small entity list in every snapshot.
 //! Effects (explosions, flashes) are applied by [`crate::game::GameWorld`].
 
+use tfps_sim::gadget::GadgetKind;
 use tfps_sim::map::Aabb;
 use tfps_sim::{CollisionWorld, Vec3};
 
@@ -41,6 +42,7 @@ pub struct GadgetEntity {
     pub id: u16,
     /// Gadget definition id.
     pub def: u8,
+    pub kind: GadgetKind,
     pub owner: u16,
     pub team: u8,
     pub pos: Vec3,
@@ -188,6 +190,95 @@ pub fn step_projectile(world: &CollisionWorld, g: &mut GadgetEntity, dt: f32) ->
     false
 }
 
+/// Collision radius of a drone (m); its hit box is the definition's radius.
+pub const DRONE_RADIUS: f32 = 0.12;
+/// Camera height above the drone's centre (m).
+pub const DRONE_CAMERA_HEIGHT: f32 = 0.1;
+/// Ground acceleration of a drone (m/s²); air control is much weaker.
+pub const DRONE_ACCEL: f32 = 25.0;
+pub const DRONE_AIR_ACCEL: f32 = 3.0;
+/// Seconds between two spot pings of the same drone.
+pub const SPOT_COOLDOWN: f32 = 0.5;
+
+/// True if a drone at `pos` stands on something.
+pub fn drone_on_ground(world: &CollisionWorld, pos: Vec3) -> bool {
+    let below = Aabb {
+        min: Vec3::new(pos.x - 0.05, pos.y - 0.05, pos.z - DRONE_RADIUS - 0.02),
+        max: Vec3::new(pos.x + 0.05, pos.y + 0.05, pos.z - DRONE_RADIUS + 0.005),
+    };
+    world.overlaps_any(&below)
+}
+
+/// Advances a drone by `dt`. `wish` is the desired horizontal direction
+/// (length ≤ 1, world space); `jump` hops if on the ground.
+pub fn step_drone(
+    world: &CollisionWorld,
+    g: &mut GadgetEntity,
+    wish: (f32, f32),
+    jump: bool,
+    speed: f32,
+    jump_speed: f32,
+    dt: f32,
+) {
+    let grounded = drone_on_ground(world, g.pos);
+    let accel = if grounded {
+        DRONE_ACCEL
+    } else {
+        DRONE_AIR_ACCEL
+    } * dt;
+    let (tx, ty) = (wish.0 * speed, wish.1 * speed);
+    let (dx, dy) = (tx - g.vel.x, ty - g.vel.y);
+    let d = (dx * dx + dy * dy).sqrt();
+    if d <= accel {
+        g.vel.x = tx;
+        g.vel.y = ty;
+    } else if d > 0.0 {
+        g.vel.x += dx / d * accel;
+        g.vel.y += dy / d * accel;
+    }
+    if grounded && jump {
+        g.vel.z = jump_speed;
+    } else if grounded && g.vel.z < 0.0 {
+        g.vel.z = 0.0;
+    } else {
+        g.vel.z -= GRAVITY * dt;
+    }
+    // Axis by axis so the drone slides along walls.
+    for axis in [2usize, 0, 1] {
+        let v = g.vel.get(axis);
+        if v == 0.0 {
+            continue;
+        }
+        let mut delta = Vec3::ZERO;
+        delta.set(axis, v * dt);
+        match sweep(world, g.pos, delta, DRONE_RADIUS) {
+            None => g.pos.set(axis, g.pos.get(axis) + v * dt),
+            Some((t, _, _)) => {
+                g.pos
+                    .set(axis, g.pos.get(axis) + v * dt * (t - 1e-3).max(0.0));
+                g.vel.set(axis, 0.0);
+            }
+        }
+    }
+    g.phase = if drone_on_ground(world, g.pos) {
+        phase::RESTING
+    } else {
+        phase::FLYING
+    };
+}
+
+/// Hit box of a drone.
+pub fn drone_box(pos: Vec3, half: f32) -> Aabb {
+    Aabb {
+        min: Vec3::new(pos.x - half, pos.y - half, pos.z - DRONE_RADIUS),
+        max: Vec3::new(
+            pos.x + half,
+            pos.y + half,
+            pos.z - DRONE_RADIUS + 2.0 * half * 0.6,
+        ),
+    }
+}
+
 /// Where a charge placed from `eye` looking along unit `dir` would attach:
 /// `(position just off the surface, attached cell)`.
 pub fn placement(
@@ -243,6 +334,7 @@ mod tests {
         GadgetEntity {
             id: 1,
             def: 1,
+            kind: GadgetKind::Frag,
             owner: 1,
             team: 0,
             pos,
@@ -309,6 +401,40 @@ mod tests {
             step_projectile(&w, &mut g, 1.0 / 64.0);
         }
         assert!(g.pos.z < 0.5, "{:?}", g.pos);
+    }
+
+    #[test]
+    fn drone_drives_slides_along_walls_and_hops() {
+        let w = room();
+        let mut g = grenade(Vec3::new(0.0, 0.0, 1.0), Vec3::ZERO);
+        // Falls and settles on the floor.
+        for _ in 0..64 {
+            step_drone(&w, &mut g, (0.0, 0.0), false, 3.2, 3.0, 1.0 / 64.0);
+        }
+        assert!((g.pos.z - DRONE_RADIUS).abs() < 0.01, "{:?}", g.pos);
+        assert_eq!(g.phase, phase::RESTING);
+        // Drives at a shallow angle into the wooden wall at x = 5 (y -3..3):
+        // stops at it and keeps sliding along it.
+        for _ in 0..(64 * 5 / 2) {
+            step_drone(&w, &mut g, (0.95, 0.312), false, 3.2, 3.0, 1.0 / 64.0);
+            assert!(g.pos.x < 5.0 - DRONE_RADIUS + 0.01, "{:?}", g.pos);
+        }
+        assert!(g.pos.x > 4.8, "{:?}", g.pos);
+        assert!(
+            g.pos.y > 1.9 && g.pos.y < 3.0,
+            "slid along the wall: {:?}",
+            g.pos
+        );
+        // Hops.
+        let z0 = g.pos.z;
+        step_drone(&w, &mut g, (0.0, 0.0), true, 3.2, 3.0, 1.0 / 64.0);
+        let mut peak = z0;
+        for _ in 0..40 {
+            step_drone(&w, &mut g, (0.0, 0.0), false, 3.2, 3.0, 1.0 / 64.0);
+            peak = peak.max(g.pos.z);
+        }
+        assert!(peak > z0 + 0.3, "hop height {}", peak - z0);
+        assert!((g.pos.z - z0).abs() < 0.01, "landed again");
     }
 
     #[test]

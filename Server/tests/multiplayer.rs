@@ -781,3 +781,100 @@ fn thrown_flashbang_is_replicated_and_blinds_the_player_facing_it() {
     assert_eq!(b.gadget_stock[1].count, 1);
     assert!(a.gadgets.is_empty(), "flash is gone after going off");
 }
+
+#[test]
+fn drone_is_driven_over_the_network_and_spots_for_its_team_only() {
+    let srv = tfps_server::start_with_data(test_cfg(), open_map(), weapons(), gadgets()).unwrap();
+    let mut a = Client::connect(
+        ClientConfig::new(srv.local_addr, "Pilot"),
+        &open_map(),
+        &weapons(),
+    )
+    .unwrap();
+    let mut b = Client::connect(
+        ClientConfig::new(srv.local_addr, "Target"),
+        &open_map(),
+        &weapons(),
+    )
+    .unwrap();
+    connect_all(&mut [&mut a, &mut b]);
+    run(&mut [&mut a, &mut b], Duration::from_millis(400));
+    assert_eq!(a.gadget_stock[2].id, 5, "team 0 carries drones");
+    // Deploy (drone slot = input slot 4), wait for it to land.
+    let hold = MoveInput {
+        buttons: 0,
+        yaw_q: 0,
+        pitch_q: tfps_sim::math::quantize_pitch_deg(-20.0),
+        slot: 4,
+    };
+    a.set_input(hold);
+    run(&mut [&mut a, &mut b], Duration::from_millis(600));
+    a.set_input(MoveInput {
+        buttons: buttons::FIRE,
+        ..hold
+    });
+    run(&mut [&mut a, &mut b], Duration::from_millis(100));
+    a.set_input(hold);
+    run(&mut [&mut a, &mut b], Duration::from_millis(1200));
+    let drone = *a
+        .gadgets
+        .iter()
+        .find(|g| g.gadget == 5 && g.owner == a.player_id)
+        .expect("drone replicated to its owner");
+    assert!(
+        b.gadgets.iter().any(|g| g.id == drone.id),
+        "and to the enemy"
+    );
+    // Drive towards b (spawns at x = -7.5 and x = +7.5), body frozen.
+    let body = a.predicted.pos;
+    a.set_input(MoveInput {
+        buttons: buttons::FORWARD,
+        yaw_q: 0,
+        pitch_q: 0,
+        slot: 4 | tfps_sim::weapon::REMOTE_CONTROL,
+    });
+    run(&mut [&mut a, &mut b], Duration::from_millis(1000));
+    let now = a
+        .gadgets
+        .iter()
+        .find(|g| g.id == drone.id)
+        .unwrap()
+        .position();
+    assert!(now.x > drone.position().x + 1.5, "drone moved: {now:?}");
+    assert!(
+        a.predicted.pos.distance(&body) < 0.01,
+        "body frozen while droning (prediction agrees)"
+    );
+    // Look at b's chest from the drone camera and ping.
+    let cam = tfps_sim::Vec3::new(now.x, now.y, now.z + 0.1);
+    let mut chest = b.predicted.pos;
+    chest.z += 1.08;
+    let (yaw_q, pitch_q) = aim(cam, chest);
+    let look = MoveInput {
+        buttons: 0,
+        yaw_q,
+        pitch_q,
+        slot: 4 | tfps_sim::weapon::REMOTE_CONTROL,
+    };
+    a.set_input(look);
+    run(&mut [&mut a, &mut b], Duration::from_millis(150));
+    a.set_input(MoveInput {
+        buttons: buttons::FIRE,
+        ..look
+    });
+    let b_id = b.player_id;
+    let mut spotted = false;
+    let mut leaked = false;
+    let end = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < end && !spotted {
+        run(&mut [&mut a, &mut b], Duration::from_millis(5));
+        spotted |= drain(&mut a)
+            .iter()
+            .any(|e| matches!(e, ClientEvent::Spotted { target, .. } if *target == b_id));
+        leaked |= drain(&mut b)
+            .iter()
+            .any(|e| matches!(e, ClientEvent::Spotted { .. }));
+    }
+    assert!(spotted, "the pilot's team is told about the spotted enemy");
+    assert!(!leaked, "the spotted enemy is not told");
+}

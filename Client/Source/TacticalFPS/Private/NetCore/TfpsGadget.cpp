@@ -24,7 +24,7 @@ namespace tfps
 		{
 			const uint8_t B[2] = {G.Id, static_cast<uint8_t>(G.Kind)};
 			H.Write(B, 2);
-			for (float V : {G.ThrowSpeed, G.Fuse, G.Radius, G.Damage, G.CellDamage, G.Duration, G.Reach, G.ArmTime}) { H.WriteF32(V); }
+			for (float V : {G.ThrowSpeed, G.Fuse, G.Radius, G.Damage, G.CellDamage, G.Duration, G.Reach, G.ArmTime, G.Speed, G.JumpSpeed, G.SpotRange}) { H.WriteF32(V); }
 		}
 		for (const auto& Team : TeamLoadouts)
 		{
@@ -62,16 +62,19 @@ namespace tfps
 			else if (Kind == "flash") { G.Kind = EGadgetKind::Flash; }
 			else if (Kind == "smoke") { G.Kind = EGadgetKind::Smoke; }
 			else if (Kind == "breach") { G.Kind = EGadgetKind::Breach; }
+			else if (Kind == "drone") { G.Kind = EGadgetKind::Drone; }
 			else { OutError = "unknown gadget kind '" + Kind + "'"; return false; }
 			G.ThrowSpeed = F(J, "throw_speed"); G.Fuse = F(J, "fuse"); G.Radius = F(J, "radius"); G.Damage = F(J, "damage");
 			G.CellDamage = F(J, "cell_damage"); G.Duration = F(J, "duration"); G.Reach = F(J, "reach"); G.ArmTime = F(J, "arm_time");
+			G.Speed = F(J, "speed"); G.JumpSpeed = F(J, "jump_speed"); G.SpotRange = F(J, "spot_range");
 			bool bFinite = true;
-			for (float V : {G.ThrowSpeed, G.Fuse, G.Radius, G.Damage, G.CellDamage, G.Duration, G.Reach, G.ArmTime})
+			for (float V : {G.ThrowSpeed, G.Fuse, G.Radius, G.Damage, G.CellDamage, G.Duration, G.Reach, G.ArmTime, G.Speed, G.JumpSpeed, G.SpotRange})
 			{
 				bFinite = bFinite && std::isfinite(V) && V >= 0.0f;
 			}
 			const bool bOk = G.Id != 0 && G.Id < 0x80 && bFinite && G.Radius > 0.0f
-				&& (G.Kind == EGadgetKind::Breach ? G.Reach > 0.0f : G.ThrowSpeed > 0.0f);
+				&& (G.Kind == EGadgetKind::Breach ? G.Reach > 0.0f
+					: (G.Kind == EGadgetKind::Drone ? (G.ThrowSpeed > 0.0f && G.Speed > 0.0f) : G.ThrowSpeed > 0.0f));
 			if (!bOk) { OutError = "gadget '" + G.Name + "' has invalid values"; return false; }
 			Set.Gadgets.push_back(G);
 		}

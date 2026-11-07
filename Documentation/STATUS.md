@@ -4,7 +4,7 @@ Legend: ✅ implemented and tested · 🟡 partially implemented / implemented b
 not verified end-to-end · ❌ not started · 🔒 placeholder (explicitly marked
 temporary).
 
-Last updated: Phase 4, part 1 (grenades and breaching charges). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
+Last updated: Phase 4, parts 1–2 (grenades, breaching charges, drones). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
 
 ## Verification environment caveat
 
@@ -147,7 +147,7 @@ result:
 | Gadget limits (count, cooldown, entity cap), restock on respawn, kept across reconnect | ✅ | |
 | Gadget entities replicated in snapshots; Flash message | ✅ | Protocol v4, Rust and C++ golden vectors |
 | Unreal: gadget keys (3/4), HUD gadget panel, flash white-out, gadget visuals | 🟡 🔒 | `ATfpsGadgetFx` uses engine shapes; mock-checked, not run |
-| Drones | ❌ | Next Phase 4 component |
+| Drones: deploy, remote control (body frozen by the shared simulation), hop, spot for the team, destroyed by one bullet or any explosion | ✅ server and NetCore / 🟡 🔒 Unreal | Unit and e2e tests. Drone motion is not predicted (camera follows snapshots). The Unreal drone camera, overlay and spot markers are only mock-checked. |
 | Cameras, motion sensors, jammers | ❌ | |
 | Barricades (placeable), wall reinforcement | ❌ | |
 

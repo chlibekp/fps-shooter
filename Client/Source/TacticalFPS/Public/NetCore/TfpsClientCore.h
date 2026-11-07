@@ -49,7 +49,7 @@ namespace tfps
 
 	struct ClientEvent
 	{
-		enum class EType : uint8_t { Connected, PlayerJoined, PlayerLeft, PlayerConnState, Disconnected, HitConfirm, Damaged, Kill, Explosion, Flash } Type = EType::Connected;
+		enum class EType : uint8_t { Connected, PlayerJoined, PlayerLeft, PlayerConnState, Disconnected, HitConfirm, Damaged, Kill, Explosion, Flash, Spotted } Type = EType::Connected;
 		uint16_t PlayerId = 0;
 		uint8_t Team = 0;
 		std::string Name;
@@ -67,6 +67,7 @@ namespace tfps
 		Vec3 From;          // Damaged: attacker position; Explosion / Flash: centre
 		float Radius = 0;   // Explosion
 		float Intensity = 0; // Flash: 0..1, how strongly the local player is blinded
+		float Duration = 0;  // Spotted: marker lifetime in seconds (PlayerId = target, OtherId = spotter, From = position)
 	};
 
 	/** A shot to visualise (muzzle flash, tracer, impact). */

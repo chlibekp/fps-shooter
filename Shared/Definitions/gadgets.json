@@ -8,10 +8,13 @@
     { "id": 3, "name": "Smoke Grenade", "kind": "smoke",
       "throw_speed": 13.0, "fuse": 1.2, "radius": 4.0, "duration": 14.0 },
     { "id": 4, "name": "Breaching Charge", "kind": "breach",
-      "reach": 1.8, "arm_time": 1.0, "radius": 1.4, "damage": 90.0, "cell_damage": 2500.0 }
+      "reach": 1.8, "arm_time": 1.0, "radius": 1.4, "damage": 90.0, "cell_damage": 2500.0 },
+    { "id": 5, "name": "Recon Drone", "kind": "drone",
+      "throw_speed": 5.0, "radius": 0.15, "speed": 3.2, "jump_speed": 3.0,
+      "spot_range": 40.0, "duration": 4.0 }
   ],
   "team_loadouts": [
-    [ { "id": 1, "count": 2 }, { "id": 4, "count": 3 } ],
-    [ { "id": 3, "count": 2 }, { "id": 2, "count": 2 } ]
+    [ { "id": 1, "count": 2 }, { "id": 4, "count": 3 }, { "id": 5, "count": 2 } ],
+    [ { "id": 3, "count": 2 }, { "id": 2, "count": 2 }, { "id": 0, "count": 0 } ]
   ]
 }

@@ -66,12 +66,19 @@ public:
 	struct FKillFeedEntry { FString Text; double Time = 0.0; bool bInvolvesMe = false; };
 	struct FHitMarker { double Time = -100.0; bool bHeadshot = false; bool bKill = false; };
 	struct FDamageIndicator { double Time = -100.0; FVector FromMeters = FVector::ZeroVector; int32 Amount = 0; };
+	/** An enemy spotted by a teammate's drone (shown until Until). */
+	struct FSpotMarker { uint16 Target = 0; FVector PosMeters = FVector::ZeroVector; double Until = 0.0; };
 	/** Last flashbang that affected the local player (Intensity 0..1). */
 	struct FFlash { double Time = -100.0; float Intensity = 0.0f; float Duration = 4.0f; };
 	const TArray<FKillFeedEntry>& GetKillFeed() const { return KillFeed; }
 	const FHitMarker& GetHitMarker() const { return HitMarker; }
 	const FDamageIndicator& GetDamageIndicator() const { return DamageIndicator; }
 	const FFlash& GetFlash() const { return Flash; }
+	const TArray<FSpotMarker>& GetSpotMarkers() const { return SpotMarkers; }
+	/** The local player's newest live drone, or nullptr. */
+	const tfps::GadgetEntityState* GetMyDrone() const;
+	/** The drone being remote-controlled this frame (local input has the remote flag), or nullptr. */
+	const tfps::GadgetEntityState* GetControlledDrone() const { return (LastInput.Slot & tfps::kRemoteControl) ? GetMyDrone() : nullptr; }
 	/** Flashbang detonations to visualise (position in meters), drained by ATfpsGadgetFx. */
 	TArray<FVector>& GetPendingFlashes() { return PendingFlashes; }
 	/** Shots to visualise this frame (drained by ATfpsShotFx). */
@@ -107,6 +114,8 @@ private:
 	bool bHasMap = false;
 	FFlash Flash;
 	TArray<FVector> PendingFlashes;
+	TArray<FSpotMarker> SpotMarkers;
+	tfps::MoveInput LastInput;
 	TArray<FKillFeedEntry> KillFeed;
 	FHitMarker HitMarker;
 	FDamageIndicator DamageIndicator;

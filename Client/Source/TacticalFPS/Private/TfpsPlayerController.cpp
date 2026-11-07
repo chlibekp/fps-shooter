@@ -129,6 +129,7 @@ void ATfpsPlayerController::PlayerTick(float DeltaTime)
 		}
 		if (WasInputKeyJustPressed(Keys.Gadget1)) { SelectedSlot = tfps::kWeaponSlots; }
 		if (WasInputKeyJustPressed(Keys.Gadget2)) { SelectedSlot = tfps::kWeaponSlots + 1; }
+		if (WasInputKeyJustPressed(Keys.Gadget3)) { SelectedSlot = tfps::kWeaponSlots + 2; }
 	}
 	if (!tfps::IsGadgetSlot(SelectedSlot))
 	{
@@ -149,7 +150,7 @@ void ATfpsPlayerController::PlayerTick(float DeltaTime)
 		{
 			const tfps::GadgetStock Stock = Core->LocalGadget(G);
 			const tfps::GadgetDef* Def = Net->GetGadgets().Get(Stock.Id);
-			const bool bThrown = Def != nullptr && Def->Kind != tfps::EGadgetKind::Breach;
+			const bool bThrown = Def != nullptr && (Def->Kind == tfps::EGadgetKind::Frag || Def->Kind == tfps::EGadgetKind::Flash || Def->Kind == tfps::EGadgetKind::Smoke);
 			if (SelectedSlot == tfps::kWeaponSlots + G && bThrown && Stock.Count < LastGadgetCount[G])
 			{
 				SelectedSlot = LastWeaponSlot;
@@ -163,6 +164,16 @@ void ATfpsPlayerController::PlayerTick(float DeltaTime)
 	Input.YawQ = tfps::QuantizeYawDeg(static_cast<float>(Rot.Yaw));
 	Input.PitchQ = tfps::QuantizePitchDeg(static_cast<float>(FRotator::NormalizeAxis(Rot.Pitch)));
 	Input.Slot = SelectedSlot;
+	// Drone slot with a live drone of ours: remote-control it (the server freezes the body).
+	if (tfps::IsGadgetSlot(SelectedSlot) && Net->GetMyDrone() != nullptr)
+	{
+		const tfps::ClientCore* Core = Net->GetCore();
+		const tfps::GadgetDef* Def = Core ? Net->GetGadgets().Get(Core->LocalGadget(SelectedSlot - tfps::kWeaponSlots).Id) : nullptr;
+		if (Def != nullptr && Def->Kind == tfps::EGadgetKind::Drone)
+		{
+			Input.Slot |= tfps::kRemoteControl;
+		}
+	}
 	Net->SetLocalInput(Input);
 	Net->Pump();
 

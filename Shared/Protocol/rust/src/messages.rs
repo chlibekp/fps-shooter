@@ -13,6 +13,7 @@ pub mod msg_type {
     pub const CELLS_DESTROYED: u8 = 7;
     pub const EXPLOSION: u8 = 8;
     pub const FLASH: u8 = 9;
+    pub const SPOTTED: u8 = 10;
 }
 
 /// Maximum cell ids per CellsDestroyed message (fits the 400-byte per-packet
@@ -76,6 +77,14 @@ pub enum Message {
     /// S -> all. A flashbang went off at `pos_mm`; `intensity` (0..=255) is
     /// how strongly the receiving player is blinded (0 = not affected).
     Flash { pos_mm: [i32; 3], intensity: u8 },
+    /// S -> the spotter's team. `target` was seen by `spotter` (drone) at
+    /// `pos_mm`; show a marker for `duration_ds` tenths of a second.
+    Spotted {
+        target: u16,
+        spotter: u16,
+        pos_mm: [i32; 3],
+        duration_ds: u8,
+    },
     /// S -> all. Kill feed.
     Kill {
         killer: u16,
@@ -97,6 +106,7 @@ impl Message {
             Message::CellsDestroyed { .. } => msg_type::CELLS_DESTROYED,
             Message::Explosion { .. } => msg_type::EXPLOSION,
             Message::Flash { .. } => msg_type::FLASH,
+            Message::Spotted { .. } => msg_type::SPOTTED,
         }
     }
 
@@ -162,6 +172,19 @@ impl Message {
                     w.i32(*v);
                 }
                 w.u8(*intensity);
+            }
+            Message::Spotted {
+                target,
+                spotter,
+                pos_mm,
+                duration_ds,
+            } => {
+                w.u16(*target);
+                w.u16(*spotter);
+                for v in pos_mm {
+                    w.i32(*v);
+                }
+                w.u8(*duration_ds);
             }
             Message::Kill {
                 killer,
@@ -236,6 +259,12 @@ impl Message {
                 pos_mm: [r.i32()?, r.i32()?, r.i32()?],
                 intensity: r.u8()?,
             },
+            msg_type::SPOTTED => Message::Spotted {
+                target: r.u16()?,
+                spotter: r.u16()?,
+                pos_mm: [r.i32()?, r.i32()?, r.i32()?],
+                duration_ds: r.u8()?,
+            },
             _ => return Err(DecodeError::Invalid("unknown message type")),
         })
     }
@@ -288,6 +317,12 @@ mod tests {
             Message::Flash {
                 pos_mm: [4, 5, -6],
                 intensity: 200,
+            },
+            Message::Spotted {
+                target: 7,
+                spotter: 2,
+                pos_mm: [1, 2, 3],
+                duration_ds: 40,
             },
         ] {
             assert_eq!(

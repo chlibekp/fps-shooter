@@ -122,6 +122,13 @@ pub enum ClientEvent {
         pos_mm: [i32; 3],
         intensity: u8,
     },
+    /// A teammate's drone spotted `target`.
+    Spotted {
+        target: u16,
+        spotter: u16,
+        pos_mm: [i32; 3],
+        duration_ds: u8,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -762,6 +769,19 @@ impl Client {
                 }
                 self.events
                     .push_back(ClientEvent::PlayerConnState { player_id, state });
+            }
+            Message::Spotted {
+                target,
+                spotter,
+                pos_mm,
+                duration_ds,
+            } => {
+                self.events.push_back(ClientEvent::Spotted {
+                    target,
+                    spotter,
+                    pos_mm,
+                    duration_ds,
+                });
             }
             Message::Flash { pos_mm, intensity } => {
                 self.events

@@ -12,7 +12,7 @@
 
 namespace tfps
 {
-	enum class EGadgetKind : uint8_t { Frag = 0, Flash = 1, Smoke = 2, Breach = 3 };
+	enum class EGadgetKind : uint8_t { Frag = 0, Flash = 1, Smoke = 2, Breach = 3, Drone = 4 };
 
 	struct GadgetDef
 	{
@@ -20,6 +20,7 @@ namespace tfps
 		std::string Name;
 		EGadgetKind Kind = EGadgetKind::Frag;
 		float ThrowSpeed = 0, Fuse = 0, Radius = 0, Damage = 0, CellDamage = 0, Duration = 0, Reach = 0, ArmTime = 0;
+		float Speed = 0, JumpSpeed = 0, SpotRange = 0; // drones
 	};
 
 	struct GadgetLoadoutEntry

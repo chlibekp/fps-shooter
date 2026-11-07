@@ -97,6 +97,7 @@ void UTfpsNetSubsystem::Disconnect()
 
 void UTfpsNetSubsystem::SetLocalInput(const tfps::MoveInput& Input)
 {
+	LastInput = Input;
 	if (Core)
 	{
 		Core->SetInput(Input);
@@ -203,6 +204,17 @@ void UTfpsNetSubsystem::HandleEvents()
 				PendingExplosions.Add(TPair<FVector, float>(FVector(Event.From.X, Event.From.Y, Event.From.Z), Event.Radius));
 			}
 			break;
+		case tfps::ClientEvent::EType::Spotted:
+		{
+			FSpotMarker Marker;
+			Marker.Target = Event.PlayerId;
+			Marker.PosMeters = FVector(Event.From.X, Event.From.Y, Event.From.Z);
+			Marker.Until = FPlatformTime::Seconds() + Event.Duration;
+			SpotMarkers.RemoveAll([&Marker](const FSpotMarker& M) { return M.Target == Marker.Target; });
+			SpotMarkers.Add(Marker);
+			PushEvent(FString::Printf(TEXT("%s spotted %s"), *PlayerName(Event.OtherId), *PlayerName(Event.PlayerId)));
+			break;
+		}
 		case tfps::ClientEvent::EType::Flash:
 		{
 			if (PendingFlashes.Num() < 16)
@@ -273,4 +285,22 @@ FString UTfpsNetSubsystem::ItemName(uint8 ItemId) const
 	}
 	const tfps::WeaponDef* W = Weapons.Get(ItemId);
 	return W != nullptr ? FString(UTF8_TO_TCHAR(W->Name.c_str())) : FString(TEXT("?"));
+}
+
+const tfps::GadgetEntityState* UTfpsNetSubsystem::GetMyDrone() const
+{
+	if (!Core)
+	{
+		return nullptr;
+	}
+	const tfps::GadgetEntityState* Best = nullptr;
+	for (const tfps::GadgetEntityState& G : Core->Gadgets())
+	{
+		const tfps::GadgetDef* Def = Gadgets.Get(G.Gadget);
+		if (G.Owner == Core->PlayerId() && Def != nullptr && Def->Kind == tfps::EGadgetKind::Drone && (Best == nullptr || G.Id > Best->Id))
+		{
+			Best = &G;
+		}
+	}
+	return Best;
 }

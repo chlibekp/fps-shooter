@@ -211,7 +211,9 @@ namespace tfps
 		const uint16_t B = Input.Buttons;
 
 		// 0. Weapon / gadget switching.
-		const uint8_t Want = Input.Slot < kWeaponSlots + kGadgetSlots ? Input.Slot : 0;
+		const bool bRemote = (Input.Slot & kRemoteControl) != 0;
+		const uint8_t SlotIn = static_cast<uint8_t>(Input.Slot & ~kRemoteControl);
+		const uint8_t Want = SlotIn < kWeaponSlots + kGadgetSlots ? SlotIn : 0;
 		if (Want != Ws.Active)
 		{
 			Ws.Active = Want;
@@ -220,6 +222,12 @@ namespace tfps
 			Ws.BurstLeft = 0;
 			Ws.ShotsFired = 0;
 			if (Ws.Cooldown < 0.0f) { Ws.Cooldown = 0.0f; }
+		}
+		if (bRemote)
+		{
+			MoveInput Body = Input;
+			Body.Buttons = static_cast<uint16_t>(Input.Buttons & (Buttons::Crouch | Buttons::Prone));
+			return SimulateHolstered(Ms, Ws, Body, Dt, World, *Loadout[0]);
 		}
 		if (IsGadgetSlot(Ws.Active))
 		{

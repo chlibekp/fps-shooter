@@ -415,6 +415,13 @@ namespace tfps
 			E.From = Vec3(DequantizeMm(M.FromMm[0]), DequantizeMm(M.FromMm[1]), DequantizeMm(M.FromMm[2]));
 			E.Radius = static_cast<float>(M.RadiusCm) * 0.01f;
 			break;
+		case MsgType::Spotted:
+			E.Type = ClientEvent::EType::Spotted;
+			E.PlayerId = M.PlayerId;
+			E.OtherId = M.OtherId;
+			E.From = Vec3(DequantizeMm(M.FromMm[0]), DequantizeMm(M.FromMm[1]), DequantizeMm(M.FromMm[2]));
+			E.Duration = static_cast<float>(M.DurationDs) * 0.1f;
+			break;
 		case MsgType::Flash:
 			E.Type = ClientEvent::EType::Flash;
 			E.From = Vec3(DequantizeMm(M.FromMm[0]), DequantizeMm(M.FromMm[1]), DequantizeMm(M.FromMm[2]));

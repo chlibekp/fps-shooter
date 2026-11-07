@@ -1,0 +1,32 @@
+[package]
+name = "tfps-server"
+description = "TacticalFPS authoritative dedicated game server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "tfps_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tfps-server"
+path = "src/main.rs"
+
+[dependencies]
+tfps-sim.workspace = true
+tfps-protocol.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+rand.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+# tfps-devclient.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "tick"
+harness = false

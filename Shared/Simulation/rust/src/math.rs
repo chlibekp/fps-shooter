@@ -4,6 +4,10 @@
 //! `Client/Source/TacticalFPS/Private/NetCore/TfpsMath.cpp`. Only IEEE-754
 //! basic operations (`+ - * /`, `sqrt`) are used; no libm transcendental
 //! functions, because their results differ between platforms and C runtimes.
+//!
+//! Polynomial coefficients are written with more digits than f32 holds; both
+//! Rust and C++ round the decimal literal to the same nearest f32.
+#![allow(clippy::excessive_precision)]
 
 /// Simple 3-component vector, meters, Z-up.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

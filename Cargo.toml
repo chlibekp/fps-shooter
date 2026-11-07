@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "Shared/Simulation/rust",
-    # "Shared/Protocol/rust",
+    "Shared/Protocol/rust",
     # "Server",
     # "Tools/DevClient",
 ]

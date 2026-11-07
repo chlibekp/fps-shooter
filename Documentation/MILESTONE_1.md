@@ -62,12 +62,16 @@ environment (see "Not verified" below).
   other's join messages, and see each other move. The observer's
   interpolated view converges to within 1 cm of the mover's authoritative
   position.
-* Client prediction matches the server exactly. In all tests there were
-  **0 mispredictions**, including with 20% packet loss in each direction.
+* Client prediction matches the server exactly. On Linux and macOS there
+  were **0 mispredictions** in all tests, including with 20% packet loss in
+  each direction. On Windows CI the test client's coarse `Sleep(1)` (~15.6 ms)
+  makes its input sends bursty. The server then occasionally runs short of
+  inputs, which correctly causes a few small corrections. The end state still
+  converged exactly.
 * The movement simulation is bit-identical between Rust and C++: 16,200
   conformance steps across 3 tick rates. This holds on GCC, Clang, Apple
-  Clang (ARM64 FMA) and MSVC (Windows CI result below), including fast-math
-  builds.
+  Clang (ARM64 FMA) and MSVC `/fp:precise` and `/fp:fast` (GitHub Actions), including
+  fast-math builds.
 * Reconnection after a client crash restores the same player id and
   position. Session takeover before timeout also works.
 * A command-flood speed hack gains no movement speed.

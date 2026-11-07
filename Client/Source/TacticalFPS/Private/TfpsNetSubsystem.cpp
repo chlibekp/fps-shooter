@@ -126,6 +126,15 @@ void UTfpsNetSubsystem::Pump()
 	{
 		PendingDestroyedCells.Add(Cell);
 	}
+	uint32_t Solid = 0;
+	while (Core && Core->PollReinforcedSolid(Solid))
+	{
+		PendingReinforced.Add(Solid);
+	}
+	while (Core && Core->PollAddedSolid(Solid))
+	{
+		// The arena builder reads new solids from the collision world directly.
+	}
 	const double Now = FPlatformTime::Seconds();
 	KillFeed.RemoveAll([Now](const FKillFeedEntry& E) { return Now - E.Time > 6.0; });
 }

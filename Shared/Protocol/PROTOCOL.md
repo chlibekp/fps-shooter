@@ -1,10 +1,11 @@
-# TacticalFPS wire protocol — version 6
+# TacticalFPS wire protocol — version 7
 
 Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
 stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions),
 v4 (Phase 4: gadget slots, gadget entities in snapshots, flashbangs),
 v5 (three gadget slots, drone remote control, Spotted),
-v6 (four gadget slots; cameras, motion sensors, jammers).
+v6 (four gadget slots; cameras, motion sensors, jammers),
+v7 (runtime solids for barricades, wall reinforcement).
 
 Implementations:
 
@@ -27,7 +28,7 @@ both sides.
 | Field | Type | Value |
 |-------|------|-------|
 | magic | u16 | `0x4654` (bytes `54 46`, "TF") |
-| version | u16 | `6` |
+| version | u16 | `7` |
 | type | u8 | packet type |
 
 Packet types: 1 ConnectRequest, 2 Challenge, 3 ChallengeResponse,
@@ -110,6 +111,8 @@ Message types (S→C):
 | 6 | Kill | `u16 killer, u16 victim, u8 weapon_id, u8 headshot` — to everyone (weapon 0 = explosion) |
 | 7 | CellsDestroyed | `u8 count (≤ 90), count × u32 cell_id` — to everyone; the complete set is also sent to a client right after it connects |
 | 8 | Explosion | `i32 pos_mm[3], u16 radius_cm` — to everyone (effects only) |
+| 11 | SolidAdded | `u16 index, i32 min_mm[3], i32 max_mm[3], u8 material, u8 destructible` — to everyone, and all of them, in order, to joining players before CellsDestroyed. `index` equals the receiver's current solid count; the solid is pushed to the collision world (cells subdivided by the usual rule), so prediction collides with it. Bounds are used exactly as `mm × 0.001` (f32), which is also what the server uses |
+| 12 | SolidReinforced | `u16 index` — the solid's material becomes Reinforced (6): bullets and explosives no longer affect it. Sent to joiners too |
 | 10 | Spotted | `u16 target, u16 spotter, i32 pos_mm[3], u8 duration_ds` — to the spotter's team only; show a marker at the pinned position for `duration_ds` / 10 s |
 | 9 | Flash | `i32 pos_mm[3], u8 intensity` — to everyone; `intensity` (0..255) is how strongly *the receiving player* is blinded (0 = only the bang is visible) |
 
@@ -144,6 +147,10 @@ reloading or firing; switching takes 0.4 s). Pressing FIRE uses the gadget
 an underhand lob at 45 % speed); a breaching charge is placed on the surface
 in front of the player (within its reach). AIM + FIRE with the breaching
 charge in hand detonates the player's armed charges.
+
+USE (button 14) held for 1.5 s by a defender (team 1) looking at a
+destructible wooden, drywall or brick solid within 1.8 m reinforces it
+(2 per defender per life).
 
 `render_time` is the server tick (24.8 fixed point) at which the client was
 rendering remote players when it sampled the command. The server rewinds
@@ -181,6 +188,7 @@ f32 cooldown, f32 reload_timer, u8 reload_empty, f32 equip_timer
 u8  burst_left, u8 trigger_prev, u16 shots_fired
 f32 recoil_pitch, f32 recoil_yaw, f32 recover_timer, u32 shot_counter
 u8  health, u8 alive, f32 respawn_in
+u8  reinforcements_left, u8 reinforce_progress (0..255 while holding USE on a wall)
 4 × { u8 gadget_id, u8 count }      the local player's gadget slots
 -- other entities (≤ 64), sorted by id ascending, all present entities listed --
 u8  entity_count

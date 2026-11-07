@@ -164,6 +164,14 @@ namespace tfps
 		bool IsAlive() const { return bAlive; }
 		float RespawnIn() const { return RespawnSeconds; }
 		uint8_t Health() const { return LocalHealth; }
+		/** Wall reinforcements left and progress (0..1) of the one being applied. */
+		uint8_t Reinforcements() const { return LocalReinforcements; }
+		float ReinforceProgress() const { return static_cast<float>(LocalReinforceProgress) / 255.0f; }
+		/** Next solid added at runtime (barricade) or reinforced since the last call (visuals). Returns false when none. */
+		bool PollAddedSolid(uint32_t& OutSolidIndex);
+		bool PollReinforcedSolid(uint32_t& OutSolidIndex);
+		/** SolidAdded messages that skipped an index (must stay 0). */
+		uint32_t SolidDesyncs() const { return SolidDesyncCount; }
 		/** Gadget entities (grenades, placed charges, smoke) in the newest snapshot. */
 		const std::vector<GadgetEntityState>& Gadgets() const { return GadgetEntities; }
 		/** The local player's gadget slot `Slot` (0..kGadgetSlots-1): id and remaining count. */
@@ -207,6 +215,11 @@ namespace tfps
 		std::deque<uint32_t> DestroyedCells;
 		std::vector<ShotEvent> ShotEventBuf;
 		std::vector<GadgetEntityState> GadgetBuf;
+		std::deque<uint32_t> AddedSolids;
+		std::deque<uint32_t> ReinforcedSolids;
+		uint32_t SolidDesyncCount = 0;
+		uint8_t LocalReinforcements = 0;
+		uint8_t LocalReinforceProgress = 0;
 		std::vector<GadgetEntityState> GadgetEntities;
 		GadgetStock LocalGadgets[kGadgetSlots];
 

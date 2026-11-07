@@ -259,6 +259,20 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 			H - M - 30.0f * Scale, Small, Scale);
 	}
 
+	// Wall reinforcement (defenders): count, and a progress bar while holding USE.
+	if (Core.Reinforcements() > 0 || Core.ReinforceProgress() > 0.0f)
+	{
+		DrawText(FString::Printf(TEXT("Reinforcements x%d  [hold F on a wall]"), static_cast<int32>(Core.Reinforcements())), Dim, 24.0f * Scale,
+			H - 120.0f * Scale, Small, Scale);
+	}
+	if (Core.ReinforceProgress() > 0.0f)
+	{
+		const float RW = 220.0f * Scale;
+		DrawRect(FLinearColor(0.1f, 0.1f, 0.1f, 0.7f), CX - RW * 0.5f, CY + 60.0f * Scale, RW, 8.0f * Scale);
+		DrawRect(FLinearColor(0.6f, 0.75f, 0.9f, 0.95f), CX - RW * 0.5f, CY + 60.0f * Scale, RW * Core.ReinforceProgress(), 8.0f * Scale);
+		DrawText(TEXT("REINFORCING"), Text, CX - 45.0f * Scale, CY + 72.0f * Scale, Small, Scale);
+	}
+
 	// Flashbang: white-out that holds, then fades (drawn under the rest of the HUD text that follows).
 	const UTfpsNetSubsystem::FFlash& Fl = Net.GetFlash();
 	const float FlashAge = static_cast<float>(Now - Fl.Time);

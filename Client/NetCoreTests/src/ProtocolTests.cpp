@@ -167,6 +167,12 @@ TFPS_TEST(GoldenDataPacketsMatchRust)
 	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
 	TFPS_EXPECT(M.Type == MsgType::Spotted && M.PlayerId == 5 && M.OtherId == 2 && M.FromMm[0] == 10000 && M.FromMm[1] == -2500 && M.DurationDs == 40);
 	TFPS_EXPECT(M.EncodePayload() == Payload);
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::SolidAdded && M.SolidIndex == 105 && M.MinMm[0] == 4000 && M.MinMm[1] == -950 && M.MaxMm[2] == 2200 && M.Material == 2 && M.bDestructible);
+	TFPS_EXPECT(M.EncodePayload() == Payload);
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::SolidReinforced && M.SolidIndex == 17);
+	TFPS_EXPECT(M.EncodePayload() == Payload);
 	TFPS_EXPECT(!Rx.Pop(Type, Payload));
 	TFPS_REQUIRE(R.U8() == static_cast<uint8_t>(EBodyKind::Snapshot));
 	SnapshotHeader SH;
@@ -175,6 +181,7 @@ TFPS_TEST(GoldenDataPacketsMatchRust)
 	std::vector<GadgetEntityState> GadgetsIn;
 	TFPS_REQUIRE(DecodeSnapshot(R, nullptr, SH, Ents, ShotsIn, &GadgetsIn));
 	TFPS_EXPECT(R.Remaining() == 0);
+	TFPS_EXPECT(SH.Reinforcements == 2 && SH.ReinforceProgress == 128);
 	TFPS_EXPECT(SH.Gadgets[0].Id == 1 && SH.Gadgets[0].Count == 2 && SH.Gadgets[1].Id == 4 && SH.Gadgets[1].Count == 3 && SH.Gadgets[2].Id == 5 && SH.Gadgets[2].Count == 1 && SH.Gadgets[3].Id == 3 && SH.Gadgets[3].Count == 2);
 	TFPS_REQUIRE(GadgetsIn.size() == 1);
 	TFPS_EXPECT(GadgetsIn[0].Id == 3 && GadgetsIn[0].Gadget == 1 && GadgetsIn[0].Phase == GadgetPhase::Flying && GadgetsIn[0].Owner == 2
@@ -247,7 +254,7 @@ TFPS_TEST(DefinitionHashesMatchRust)
 	GadgetSet Gadgets;
 	std::string Err;
 	TFPS_REQUIRE(ParseGadgetsJson(ReadText(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/gadgets.json"), Gadgets, Err));
-	TFPS_EXPECT(Gadgets.Gadgets.size() == 8 && Gadgets.Get(7)->Kind == EGadgetKind::MotionSensor && Gadgets.Get(4) != nullptr && Gadgets.Get(4)->Kind == EGadgetKind::Breach);
+	TFPS_EXPECT(Gadgets.Gadgets.size() == 9 && Gadgets.Get(9)->Kind == EGadgetKind::Barricade && Gadgets.Get(7)->Kind == EGadgetKind::MotionSensor && Gadgets.Get(4) != nullptr && Gadgets.Get(4)->Kind == EGadgetKind::Breach);
 	TFPS_EXPECT(Gadgets.Get(5) != nullptr && Gadgets.Get(5)->Kind == EGadgetKind::Drone && Gadgets.Get(5)->SpotRange == 40.0f);
 	std::printf("  gadgets hash %016llx\n", static_cast<unsigned long long>(Gadgets.Hash()));
 	TFPS_EXPECT(Gadgets.Hash() == HexU64(V["gadgets_hash"]));

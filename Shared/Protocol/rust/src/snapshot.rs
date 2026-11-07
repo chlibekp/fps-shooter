@@ -143,6 +143,10 @@ pub struct SnapshotHeader {
     pub alive: bool,
     /// Seconds until respawn while dead.
     pub respawn_in: f32,
+    /// Wall reinforcements the local player has left.
+    pub reinforcements: u8,
+    /// Progress of the reinforcement being applied (0..=255).
+    pub reinforce_progress: u8,
     /// The local player's gadget slots (id and count left).
     pub gadgets: [GadgetStock; GADGET_SLOTS],
 }
@@ -219,6 +223,8 @@ fn encode_local(w: &mut Writer, h: &SnapshotHeader) {
     w.u8(h.local_health);
     w.u8(h.alive as u8);
     w.f32(h.respawn_in);
+    w.u8(h.reinforcements);
+    w.u8(h.reinforce_progress);
     for g in &h.gadgets {
         w.u8(g.id);
         w.u8(g.count);
@@ -263,6 +269,8 @@ fn decode_local(r: &mut Reader, h: &mut SnapshotHeader) -> Result<(), DecodeErro
     h.local_health = r.u8()?;
     h.alive = r.u8()? != 0;
     h.respawn_in = r.f32_finite()?;
+    h.reinforcements = r.u8()?;
+    h.reinforce_progress = r.u8()?;
     for g in h.gadgets.iter_mut() {
         g.id = r.u8()?;
         g.count = r.u8()?;
@@ -519,6 +527,8 @@ mod tests {
             local_health: 77,
             alive: true,
             respawn_in: 0.0,
+            reinforcements: 1,
+            reinforce_progress: 77,
             gadgets: [
                 GadgetStock { id: 1, count: 2 },
                 GadgetStock { id: 4, count: 3 },

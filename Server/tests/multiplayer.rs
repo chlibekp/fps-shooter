@@ -706,23 +706,23 @@ fn destruction_is_replicated_and_late_joiners_get_it() {
 fn thrown_flashbang_is_replicated_and_blinds_the_player_facing_it() {
     let srv = tfps_server::start_with_data(test_cfg(), open_map(), weapons(), gadgets()).unwrap();
     let mut a = Client::connect(
-        ClientConfig::new(srv.local_addr, "Attacker"),
+        ClientConfig::new(srv.local_addr, "Watcher"),
         &open_map(),
         &weapons(),
     )
     .unwrap();
     let mut b = Client::connect(
-        ClientConfig::new(srv.local_addr, "Defender"),
+        ClientConfig::new(srv.local_addr, "Thrower"),
         &open_map(),
         &weapons(),
     )
     .unwrap();
-    connect_all(&mut [&mut a, &mut b]);
-    run(&mut [&mut a, &mut b], Duration::from_millis(400));
-    // Team 1 (b) carries the flash in gadget slot 0 = input slot 2.
-    assert_eq!(b.gadget_stock[0].id, 2);
-    assert_eq!(b.gadget_stock[0].count, 2);
-    assert_eq!(a.gadget_stock[0].id, 1, "team 0 carries frags");
+    connect_all(&mut [&mut b, &mut a]);
+    run(&mut [&mut b, &mut a], Duration::from_millis(400));
+    // b connects first (team 0, attackers): the flash is gadget slot 3 = input slot 5.
+    assert_eq!(b.gadget_stock[3].id, 2);
+    assert_eq!(b.gadget_stock[3].count, 2);
+    assert_eq!(a.gadget_stock[0].id, 9, "team 1 carries barricades");
     // a looks at b; b lobs the flash towards a, slightly upwards.
     let (ya, pa) = aim(a.predicted.eye_position(0), b.predicted.eye_position(0));
     a.set_input(MoveInput {
@@ -738,15 +738,15 @@ fn thrown_flashbang_is_replicated_and_blinds_the_player_facing_it() {
         buttons: 0,
         yaw_q: yb,
         pitch_q: pb,
-        slot: 2,
+        slot: 5,
     };
     b.set_input(hold);
-    run(&mut [&mut a, &mut b], Duration::from_millis(600)); // equip
+    run(&mut [&mut b, &mut a], Duration::from_millis(600)); // equip
     b.set_input(MoveInput {
         buttons: buttons::FIRE | buttons::AIM,
         ..hold
     });
-    run(&mut [&mut a, &mut b], Duration::from_millis(100));
+    run(&mut [&mut b, &mut a], Duration::from_millis(100));
     // b turns away after throwing.
     b.set_input(MoveInput {
         yaw_q: yb.wrapping_add(32768),
@@ -758,7 +758,7 @@ fn thrown_flashbang_is_replicated_and_blinds_the_player_facing_it() {
     let mut b_flash: Option<u8> = None;
     let end = Instant::now() + Duration::from_secs(4);
     while Instant::now() < end && (flash.is_none() || b_flash.is_none()) {
-        run(&mut [&mut a, &mut b], Duration::from_millis(5));
+        run(&mut [&mut b, &mut a], Duration::from_millis(5));
         seen_flying |= a
             .gadgets
             .iter()
@@ -779,7 +779,7 @@ fn thrown_flashbang_is_replicated_and_blinds_the_player_facing_it() {
     let fb = b_flash.expect("b must get the flash event");
     assert!(fa > 60, "a faces the flash: {fa}");
     assert!(fb < fa, "b turned away from the flash: {fb} vs {fa}");
-    assert_eq!(b.gadget_stock[0].count, 1);
+    assert_eq!(b.gadget_stock[3].count, 1);
     assert!(a.gadgets.is_empty(), "flash is gone after going off");
 }
 
@@ -878,4 +878,94 @@ fn drone_is_driven_over_the_network_and_spots_for_its_team_only() {
     }
     assert!(spotted, "the pilot's team is told about the spotted enemy");
     assert!(!leaked, "the spotted enemy is not told");
+}
+
+#[test]
+fn barricades_and_reinforcements_replicate_to_everyone_including_late_joiners() {
+    // Spawns 15 m apart; a doorway (wall x = 5.8..6.0, opening y = -0.5..0.5)
+    // in front of the defender at x = 7.5, and a brick wall to reinforce.
+    let map = || {
+        MapDef::from_json(
+            r#"{"name":"door","solids":[{"min":[-30,-30,-1],"max":[30,30,0],"material":"dirt"},
+                {"min":[5.8,-6,0],"max":[6.0,-0.5,3],"material":"concrete"},
+                {"min":[5.8,0.5,0],"max":[6.0,6,3],"material":"concrete"},
+                {"min":[5.8,-0.5,2.1],"max":[6.0,0.5,3],"material":"concrete"},
+                {"min":[6.2,1.2,0],"max":[9.0,1.4,3],"material":"brick"}],
+                "spawns":[{"pos":[-7.5,0,0],"team":0},{"pos":[7.5,0,0],"yaw":180,"team":1}]}"#,
+        )
+        .unwrap()
+    };
+    let srv = tfps_server::start_with_data(test_cfg(), map(), weapons(), gadgets()).unwrap();
+    let mut a = Client::connect(
+        ClientConfig::new(srv.local_addr, "Attacker"),
+        &map(),
+        &weapons(),
+    )
+    .unwrap();
+    let mut b = Client::connect(
+        ClientConfig::new(srv.local_addr, "Defender"),
+        &map(),
+        &weapons(),
+    )
+    .unwrap();
+    connect_all(&mut [&mut a, &mut b]);
+    run(&mut [&mut a, &mut b], Duration::from_millis(400));
+    let base = a.world().solids.len();
+    // Defender walks up to the doorway, then deploys the barricade (gadget slot 0).
+    let face = |buttons: u16, slot: u8| MoveInput {
+        buttons,
+        yaw_q: tfps_sim::math::quantize_yaw_deg(180.0),
+        pitch_q: 0,
+        slot,
+    };
+    b.set_input(face(buttons::FORWARD | buttons::WALK, 2));
+    run(&mut [&mut a, &mut b], Duration::from_millis(400));
+    b.set_input(face(0, 2));
+    run(&mut [&mut a, &mut b], Duration::from_millis(500));
+    b.set_input(face(buttons::FIRE, 2));
+    run(&mut [&mut a, &mut b], Duration::from_millis(100));
+    b.set_input(face(0, 2));
+    assert!(
+        pump_until(&mut a, Duration::from_secs(2), |a| a.world().solids.len()
+            == base + 1),
+        "barricade replicated (defender at {:?})",
+        b.predicted.pos
+    );
+    // Reinforce the brick wall: face +Y towards it and hold USE.
+    b.set_input(MoveInput {
+        buttons: buttons::USE,
+        yaw_q: tfps_sim::math::quantize_yaw_deg(90.0),
+        pitch_q: 0,
+        slot: 0,
+    });
+    run(&mut [&mut a, &mut b], Duration::from_millis(1900));
+    let brick = base - 1;
+    assert_eq!(
+        a.world().solids[brick].material,
+        tfps_sim::Material::Reinforced,
+        "reinforcement replicated"
+    );
+    // A late joiner gets the same geometry, cell ids and materials.
+    let mut c = Client::connect(
+        ClientConfig::new(srv.local_addr, "Late"),
+        &map(),
+        &weapons(),
+    )
+    .unwrap();
+    connect_all(&mut [&mut a, &mut b, &mut c]);
+    run(&mut [&mut a, &mut b, &mut c], Duration::from_millis(400));
+    assert_eq!(c.world().solids.len(), base + 1);
+    assert_eq!(c.world().solids[base].bounds, a.world().solids[base].bounds);
+    assert_eq!(c.world().cell_count(), a.world().cell_count());
+    assert_eq!(
+        c.world().solids[brick].material,
+        tfps_sim::Material::Reinforced
+    );
+    assert_eq!(c.stats.solid_desyncs, 0);
+    // Prediction collides with the barricade: the doorway is closed.
+    let probe = tfps_sim::Aabb {
+        min: tfps_sim::Vec3::new(5.8, -0.2, 0.5),
+        max: tfps_sim::Vec3::new(6.0, 0.2, 1.5),
+    };
+    assert!(c.world().overlaps_any(&probe));
 }

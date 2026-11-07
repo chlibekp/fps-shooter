@@ -14,6 +14,8 @@ pub mod msg_type {
     pub const EXPLOSION: u8 = 8;
     pub const FLASH: u8 = 9;
     pub const SPOTTED: u8 = 10;
+    pub const SOLID_ADDED: u8 = 11;
+    pub const SOLID_REINFORCED: u8 = 12;
 }
 
 /// Maximum cell ids per CellsDestroyed message (fits the 400-byte per-packet
@@ -85,6 +87,20 @@ pub enum Message {
         pos_mm: [i32; 3],
         duration_ds: u8,
     },
+    /// S -> all. A solid was added to the map at runtime (deployable
+    /// barricade). `index` must equal the receiver's current solid count;
+    /// sent in order, before any CellsDestroyed for its cells, and in full
+    /// to joining players.
+    SolidAdded {
+        index: u16,
+        min_mm: [i32; 3],
+        max_mm: [i32; 3],
+        material: u8,
+        destructible: bool,
+    },
+    /// S -> all. Solid `index` was reinforced (its material is now
+    /// Reinforced: bullets and explosives no longer affect it).
+    SolidReinforced { index: u16 },
     /// S -> all. Kill feed.
     Kill {
         killer: u16,
@@ -107,6 +123,8 @@ impl Message {
             Message::Explosion { .. } => msg_type::EXPLOSION,
             Message::Flash { .. } => msg_type::FLASH,
             Message::Spotted { .. } => msg_type::SPOTTED,
+            Message::SolidAdded { .. } => msg_type::SOLID_ADDED,
+            Message::SolidReinforced { .. } => msg_type::SOLID_REINFORCED,
         }
     }
 
@@ -173,6 +191,21 @@ impl Message {
                 }
                 w.u8(*intensity);
             }
+            Message::SolidAdded {
+                index,
+                min_mm,
+                max_mm,
+                material,
+                destructible,
+            } => {
+                w.u16(*index);
+                for v in min_mm.iter().chain(max_mm.iter()) {
+                    w.i32(*v);
+                }
+                w.u8(*material);
+                w.u8(*destructible as u8);
+            }
+            Message::SolidReinforced { index } => w.u16(*index),
             Message::Spotted {
                 target,
                 spotter,
@@ -259,6 +292,14 @@ impl Message {
                 pos_mm: [r.i32()?, r.i32()?, r.i32()?],
                 intensity: r.u8()?,
             },
+            msg_type::SOLID_ADDED => Message::SolidAdded {
+                index: r.u16()?,
+                min_mm: [r.i32()?, r.i32()?, r.i32()?],
+                max_mm: [r.i32()?, r.i32()?, r.i32()?],
+                material: r.u8()?,
+                destructible: r.u8()? != 0,
+            },
+            msg_type::SOLID_REINFORCED => Message::SolidReinforced { index: r.u16()? },
             msg_type::SPOTTED => Message::Spotted {
                 target: r.u16()?,
                 spotter: r.u16()?,
@@ -324,6 +365,14 @@ mod tests {
                 pos_mm: [1, 2, 3],
                 duration_ds: 40,
             },
+            Message::SolidAdded {
+                index: 105,
+                min_mm: [1, -2, 0],
+                max_mm: [1_080, 950, 2_200],
+                material: 2,
+                destructible: true,
+            },
+            Message::SolidReinforced { index: 12 },
         ] {
             assert_eq!(
                 Message::decode(m.msg_type(), &m.encode_payload()).unwrap(),

@@ -28,6 +28,10 @@ pub enum GadgetKind {
     /// Placed; enemy drones within `radius` stop working and enemy charges
     /// within it cannot be detonated.
     Jammer,
+    /// Wooden panel deployed into the doorway or window in front of the
+    /// player (fills the opening, up to `radius` half-width). Becomes map
+    /// geometry: destructible cells that client prediction collides with.
+    Barricade,
 }
 
 impl GadgetKind {
@@ -159,6 +163,7 @@ impl GadgetSet {
                 && g.radius > 0.0
                 && match g.kind {
                     GadgetKind::Drone => g.throw_speed > 0.0 && g.speed > 0.0,
+                    GadgetKind::Barricade => g.reach > 0.0,
                     k if k.is_placed() => g.reach > 0.0,
                     _ => g.throw_speed > 0.0,
                 };
@@ -240,7 +245,8 @@ mod tests {
             "/../../Definitions/gadgets.json"
         ))
         .unwrap();
-        assert_eq!(s.gadgets.len(), 8);
+        assert_eq!(s.gadgets.len(), 9);
+        assert_eq!(s.loadout(1)[0].id, 9);
         assert_eq!(s.get(7).unwrap().kind, GadgetKind::MotionSensor);
         assert_eq!(s.get(5).unwrap().kind, GadgetKind::Drone);
         assert_eq!(s.get(4).unwrap().kind, GadgetKind::Breach);

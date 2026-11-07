@@ -144,6 +144,22 @@ impl Destruction {
         }
     }
 
+    /// Adds health for cells of solids added to `world` after creation.
+    pub fn extend(&mut self, world: &CollisionWorld) {
+        let old = self.health.len() as u32;
+        self.health.resize(world.cell_count() as usize, 0.0);
+        for s in &world.solids {
+            if let Some(g) = s.grid {
+                if g.first + g.count() > old {
+                    let hp = props(s.material).cell_health;
+                    for c in g.first.max(old)..g.first + g.count() {
+                        self.health[c as usize] = hp;
+                    }
+                }
+            }
+        }
+    }
+
     /// Applies damage to a cell; destroys it (and shatters glass panes).
     /// Returns true if anything was destroyed.
     pub fn damage_cell(&mut self, world: &mut CollisionWorld, cell: u32, amount: f32) -> bool {

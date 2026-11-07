@@ -68,6 +68,8 @@ namespace tfps
 			W.U8(H.LocalHealth);
 			W.U8(H.bAlive ? 1 : 0);
 			W.F32(H.RespawnIn);
+			W.U8(H.Reinforcements);
+			W.U8(H.ReinforceProgress);
 			for (const GadgetStock& G : H.Gadgets) { W.U8(G.Id); W.U8(G.Count); }
 		}
 
@@ -89,6 +91,8 @@ namespace tfps
 			H.LocalHealth = R.U8();
 			H.bAlive = R.U8() != 0;
 			H.RespawnIn = R.F32Finite();
+			H.Reinforcements = R.U8();
+			H.ReinforceProgress = R.U8();
 			for (GadgetStock& G : H.Gadgets) { G.Id = R.U8(); G.Count = R.U8(); }
 			return R.Ok();
 		}
@@ -450,6 +454,16 @@ namespace tfps
 			FromMm[0] = R.I32(); FromMm[1] = R.I32(); FromMm[2] = R.I32();
 			Intensity = R.U8();
 			break;
+		case MsgType::SolidAdded:
+			SolidIndex = R.U16();
+			for (int32_t& Mm : MinMm) { Mm = R.I32(); }
+			for (int32_t& Mm : MaxMm) { Mm = R.I32(); }
+			Material = R.U8();
+			bDestructible = R.U8() != 0;
+			break;
+		case MsgType::SolidReinforced:
+			SolidIndex = R.U16();
+			break;
 		case MsgType::Spotted:
 			PlayerId = R.U16();
 			OtherId = R.U16();
@@ -489,6 +503,14 @@ namespace tfps
 		}
 		case MsgType::Explosion: W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); W.U16(RadiusCm); break;
 		case MsgType::Flash: W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); W.U8(Intensity); break;
+		case MsgType::SolidAdded:
+			W.U16(SolidIndex);
+			for (int32_t Mm : MinMm) { W.I32(Mm); }
+			for (int32_t Mm : MaxMm) { W.I32(Mm); }
+			W.U8(Material);
+			W.U8(bDestructible ? 1 : 0);
+			break;
+		case MsgType::SolidReinforced: W.U16(SolidIndex); break;
 		case MsgType::Spotted: W.U16(PlayerId); W.U16(OtherId); W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); W.U8(DurationDs); break;
 		default: break;
 		}

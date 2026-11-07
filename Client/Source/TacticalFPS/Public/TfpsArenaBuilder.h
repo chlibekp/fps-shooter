@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "NetCore/TfpsMap.h"
 
 #include "TfpsArenaBuilder.generated.h"
 
@@ -32,6 +33,11 @@ private:
 	void Rebuild();
 
 	void RemoveCell(uint32 Cell);
+	int32 MeshFor(tfps::EMaterial M);
+	int32 AddBox(int32 MeshIndex, const tfps::Aabb& B);
+	/** Adds a solid (whole box, or one instance per destruction cell). */
+	void AddSolid(const tfps::WorldSolid& S);
+	void ReinforceSolid(const tfps::WorldSolid& S);
 	void SpawnDebris(const FVector& CenterCm, const FVector& SizeCm, uint8 Material);
 
 	UPROPERTY()
@@ -49,4 +55,6 @@ private:
 	TArray<uint8> MeshMaterial;
 
 	int32 BuiltRevision = -1;
+	/** Solids of the collision world drawn so far (map solids + runtime barricades). */
+	int32 BuiltSolids = 0;
 };

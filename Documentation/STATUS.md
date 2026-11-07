@@ -4,7 +4,7 @@ Legend: ✅ implemented and tested · 🟡 partially implemented / implemented b
 not verified end-to-end · ❌ not started · 🔒 placeholder (explicitly marked
 temporary).
 
-Last updated: Phase 4, parts 1–3 (grenades, breaching charges, drones, cameras, motion sensors, jammers). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
+Last updated: Phase 4 complete (grenades, breaching charges, drones, cameras, motion sensors, jammers, barricades, reinforcement). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
 
 ## Verification environment caveat
 
@@ -132,7 +132,7 @@ result:
 | Chaos Destruction (fracture meshes) | ❌ | Cosmetic layer for Phase 5 assets; gameplay stays cell-based |
 | Shot-time rewind of destruction for lag compensation | ❌ | Shots use the current destruction state (documented in ARCHITECTURE.md) |
 | Doors that open/close (USE) | ❌ | Doors can only be destroyed for now |
-| Reinforced surfaces | ❌ | Phase 4 gadget (material exists) |
+| Reinforced surfaces | ✅ | Defenders reinforce wood, drywall and brick walls (Phase 4) |
 
 ## Gadgets (spec §6) — Phase 4
 
@@ -149,7 +149,7 @@ result:
 | Unreal: gadget keys (3/4), HUD gadget panel, flash white-out, gadget visuals | 🟡 🔒 | `ATfpsGadgetFx` uses engine shapes; mock-checked, not run |
 | Drones: deploy, remote control (body frozen by the shared simulation), hop, spot for the team, destroyed by one bullet or any explosion | ✅ server and NetCore / 🟡 🔒 Unreal | Unit and e2e tests. Drone motion is not predicted (camera follows snapshots). The Unreal drone camera, overlay and spot markers are only mock-checked. |
 | Wall cameras (place, view, spot), motion sensors (spot running enemies through walls), jammers (stop enemy drones, block charge detonation); all destroyed by one bullet or any explosion | ✅ server / 🟡 🔒 Unreal | Unit-tested; the camera view reuses the drone remote-control path |
-| Barricades (placeable), wall reinforcement | ❌ | |
+| Deployable barricades (fill the doorway or window in front, destructible wood, prediction collides with them) and wall reinforcement (hold USE, defenders, 2 per life) | ✅ server and NetCore / 🟡 🔒 Unreal | Unit tests, plus an e2e test that includes a late joiner. Barricade cells and reinforced tint are drawn by `ATfpsArenaBuilder` (mock-checked). |
 
 ## Frontend / UI (spec §11)
 

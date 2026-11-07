@@ -22,6 +22,22 @@ pub enum Material {
     Dirt = 7,
 }
 
+impl Material {
+    pub fn from_u8(v: u8) -> Option<Self> {
+        Some(match v {
+            0 => Material::Concrete,
+            1 => Material::Brick,
+            2 => Material::Wood,
+            3 => Material::Drywall,
+            4 => Material::Metal,
+            5 => Material::Glass,
+            6 => Material::Reinforced,
+            7 => Material::Dirt,
+            _ => return None,
+        })
+    }
+}
+
 /// Axis-aligned solid box, meters.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Aabb {

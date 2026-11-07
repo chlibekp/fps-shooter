@@ -18,7 +18,7 @@
 namespace tfps
 {
 	constexpr uint16_t kMagic = 0x4654;
-	constexpr uint16_t kProtocolVersion = 6;
+	constexpr uint16_t kProtocolVersion = 7;
 	constexpr size_t kMaxPacketSize = 1200;
 	constexpr size_t kHandshakePacketSize = 256;
 	constexpr size_t kMaxNameLen = 24;
@@ -80,6 +80,8 @@ namespace tfps
 		constexpr uint8_t Explosion = 8;
 		constexpr uint8_t Flash = 9;
 		constexpr uint8_t Spotted = 10;
+		constexpr uint8_t SolidAdded = 11;
+		constexpr uint8_t SolidReinforced = 12;
 	}
 	constexpr size_t kMaxCellsPerMessage = 90;
 
@@ -245,6 +247,12 @@ namespace tfps
 		std::vector<uint32_t> Cells;      // CellsDestroyed
 		uint16_t RadiusCm = 0;            // Explosion
 		uint8_t Intensity = 0;            // Flash: how strongly the receiving player is blinded (0..255)
+		// SolidAdded / SolidReinforced
+		uint16_t SolidIndex = 0;
+		int32_t MinMm[3] = {0, 0, 0};
+		int32_t MaxMm[3] = {0, 0, 0};
+		uint8_t Material = 0;
+		bool bDestructible = false;
 		uint8_t DurationDs = 0;           // Spotted: marker lifetime in tenths of a second (PlayerId = target, OtherId = spotter, FromMm = position)
 
 		bool Decode(uint8_t InType, const std::vector<uint8_t>& Payload);
@@ -348,6 +356,8 @@ namespace tfps
 		uint8_t LocalHealth = 0;
 		bool bAlive = true;
 		float RespawnIn = 0.0f;
+		uint8_t Reinforcements = 0;
+		uint8_t ReinforceProgress = 0; // 0..255
 		GadgetStock Gadgets[kGadgetSlots];
 	};
 

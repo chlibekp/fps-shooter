@@ -250,6 +250,14 @@ fn vectors() -> String {
                 pos_mm: [10_000, -2_500, 0],
                 duration_ds: 40,
             },
+            Message::SolidAdded {
+                index: 105,
+                min_mm: [4_000, -950, 0],
+                max_mm: [4_080, 950, 2_200],
+                material: 2,
+                destructible: true,
+            },
+            Message::SolidReinforced { index: 17 },
         ] {
             tx.queue(m.msg_type(), m.encode_payload()).unwrap();
         }
@@ -271,6 +279,8 @@ fn vectors() -> String {
             local_health: 100,
             alive: true,
             respawn_in: 0.0,
+            reinforcements: 2,
+            reinforce_progress: 128,
             gadgets: [
                 tfps_sim::gadget::GadgetStock { id: 1, count: 2 },
                 tfps_sim::gadget::GadgetStock { id: 4, count: 3 },
@@ -325,6 +335,8 @@ fn vectors() -> String {
             local_health: 0,
             alive: false,
             respawn_in: 4.5,
+            reinforcements: 0,
+            reinforce_progress: 0,
             gadgets: Default::default(),
         };
         snapshot::encode(&mut w, &h, &cur, Some(&base), &[], &[]);

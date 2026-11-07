@@ -50,6 +50,24 @@ void ATfpsArenaBuilder::Tick(float DeltaSeconds)
 		BuiltRevision = Net->GetMapRevision();
 		Rebuild();
 	}
+	// Solids added at runtime (barricades) must exist before their cells can be destroyed.
+	if (const tfps::ClientCore* Core = Net->GetCore())
+	{
+		const tfps::CollisionWorld& World = Core->World();
+		while (BuiltRevision >= 0 && BuiltSolids < static_cast<int32>(World.Solids.size()))
+		{
+			AddSolid(World.Solids[static_cast<size_t>(BuiltSolids)]);
+			++BuiltSolids;
+		}
+		for (const uint32 Index : Net->GetPendingReinforced())
+		{
+			if (Index < World.Solids.size())
+			{
+				ReinforceSolid(World.Solids[Index]);
+			}
+		}
+	}
+	Net->GetPendingReinforced().Reset();
 	for (const uint32 Cell : Net->GetPendingDestroyedCells())
 	{
 		RemoveCell(Cell);
@@ -66,6 +84,86 @@ void ATfpsArenaBuilder::Tick(float DeltaSeconds)
 				Debris[I]->SetVisibility(false);
 			}
 		}
+	}
+}
+
+int32 ATfpsArenaBuilder::MeshFor(tfps::EMaterial M)
+{
+	const uint8 Key = static_cast<uint8>(M);
+	if (const int32* Found = MeshForMaterial.Find(Key))
+	{
+		return *Found;
+	}
+	UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(this);
+	ISM->SetStaticMesh(FTfpsPlaceholderAssets::Cube());
+	ISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ISM->SetMobility(EComponentMobility::Movable);
+	ISM->SetupAttachment(GetRootComponent());
+	if (UMaterialInstanceDynamic* MID = FTfpsPlaceholderAssets::MakeTinted(this, MaterialTint(M)))
+	{
+		ISM->SetMaterial(0, MID);
+	}
+	ISM->RegisterComponent();
+	const int32 Index = MaterialMeshes.Add(ISM);
+	MeshMaterial.Add(Key);
+	MeshForMaterial.Add(Key, Index);
+	return Index;
+}
+
+int32 ATfpsArenaBuilder::AddBox(int32 MeshIndex, const tfps::Aabb& B)
+{
+	const FVector Center((B.Min.X + B.Max.X) * 0.5f, (B.Min.Y + B.Max.Y) * 0.5f, (B.Min.Z + B.Max.Z) * 0.5f);
+	const FVector Size(B.Max.X - B.Min.X, B.Max.Y - B.Min.Y, B.Max.Z - B.Min.Z);
+	// Engine cube: 1 m edge, centred pivot.
+	return MaterialMeshes[MeshIndex]->AddInstance(FTransform(FRotator::ZeroRotator, Center * TfpsMetersToUnreal, Size), /*bWorldSpace=*/true);
+}
+
+void ATfpsArenaBuilder::AddSolid(const tfps::WorldSolid& S)
+{
+	const int32 MeshIndex = MeshFor(S.Material);
+	if (!S.bHasGrid)
+	{
+		AddBox(MeshIndex, S.Bounds);
+		return;
+	}
+	for (uint32 IZ = 0; IZ < S.Grid.N[2]; ++IZ)
+	{
+		for (uint32 IY = 0; IY < S.Grid.N[1]; ++IY)
+		{
+			for (uint32 IX = 0; IX < S.Grid.N[0]; ++IX)
+			{
+				const uint32 Id = S.Grid.First + IX + S.Grid.N[0] * (IY + S.Grid.N[1] * IZ);
+				const int32 Instance = AddBox(MeshIndex, tfps::CollisionWorld::CellBounds(S.Bounds, S.Grid.N, IX, IY, IZ));
+				CellInstances.Add(Id, TPair<int32, int32>(MeshIndex, Instance));
+			}
+		}
+	}
+}
+
+void ATfpsArenaBuilder::ReinforceSolid(const tfps::WorldSolid& S)
+{
+	if (!S.bHasGrid)
+	{
+		return;
+	}
+	// Move the solid's remaining cells into the reinforced (metal-plated) batch.
+	const int32 Target = MeshFor(tfps::EMaterial::Reinforced);
+	for (uint32 Id = S.Grid.First; Id < S.Grid.First + S.Grid.N[0] * S.Grid.N[1] * S.Grid.N[2]; ++Id)
+	{
+		TPair<int32, int32>* Where = CellInstances.Find(Id);
+		if (Where == nullptr || Where->Key == Target)
+		{
+			continue;
+		}
+		UInstancedStaticMeshComponent* Old = MaterialMeshes[Where->Key];
+		FTransform T;
+		if (!Old->GetInstanceTransform(Where->Value, T, /*bWorldSpace=*/true))
+		{
+			continue;
+		}
+		Old->UpdateInstanceTransform(Where->Value, FTransform(FRotator::ZeroRotator, T.GetLocation(), FVector(0.001)), true, true, true);
+		const int32 Instance = MaterialMeshes[Target]->AddInstance(T, /*bWorldSpace=*/true);
+		*Where = TPair<int32, int32>(Target, Instance);
 	}
 }
 
@@ -153,58 +251,13 @@ void ATfpsArenaBuilder::Rebuild()
 	CellInstances.Reset();
 	MeshForMaterial.Reset();
 	MeshMaterial.Reset();
-	auto MeshFor = [this, Cube](tfps::EMaterial M) -> int32
-	{
-		const uint8 Key = static_cast<uint8>(M);
-		if (const int32* Found = MeshForMaterial.Find(Key))
-		{
-			return *Found;
-		}
-		UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(this);
-		ISM->SetStaticMesh(Cube);
-		ISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		ISM->SetMobility(EComponentMobility::Movable);
-		ISM->SetupAttachment(GetRootComponent());
-		if (UMaterialInstanceDynamic* MID = FTfpsPlaceholderAssets::MakeTinted(this, MaterialTint(M)))
-		{
-			ISM->SetMaterial(0, MID);
-		}
-		ISM->RegisterComponent();
-		const int32 Index = MaterialMeshes.Add(ISM);
-		MeshMaterial.Add(Key);
-		MeshForMaterial.Add(Key, Index);
-		return Index;
-	};
-	auto AddBox = [this](int32 MeshIndex, const tfps::Aabb& B) -> int32
-	{
-		const FVector Center((B.Min.X + B.Max.X) * 0.5f, (B.Min.Y + B.Max.Y) * 0.5f, (B.Min.Z + B.Max.Z) * 0.5f);
-		const FVector Size(B.Max.X - B.Min.X, B.Max.Y - B.Min.Y, B.Max.Z - B.Min.Z);
-		// Engine cube: 1 m edge, centred pivot.
-		return MaterialMeshes[MeshIndex]->AddInstance(FTransform(FRotator::ZeroRotator, Center * TfpsMetersToUnreal, Size), /*bWorldSpace=*/true);
-	};
 	// Same subdivision as the simulation (CollisionWorld), so cell ids match the server's.
 	const tfps::CollisionWorld World = tfps::CollisionWorld::FromMap(*Map);
 	for (const tfps::WorldSolid& S : World.Solids)
 	{
-		const int32 MeshIndex = MeshFor(S.Material);
-		if (!S.bHasGrid)
-		{
-			AddBox(MeshIndex, S.Bounds);
-			continue;
-		}
-		for (uint32 IZ = 0; IZ < S.Grid.N[2]; ++IZ)
-		{
-			for (uint32 IY = 0; IY < S.Grid.N[1]; ++IY)
-			{
-				for (uint32 IX = 0; IX < S.Grid.N[0]; ++IX)
-				{
-					const uint32 Id = S.Grid.First + IX + S.Grid.N[0] * (IY + S.Grid.N[1] * IZ);
-					const int32 Instance = AddBox(MeshIndex, tfps::CollisionWorld::CellBounds(S.Bounds, S.Grid.N, IX, IY, IZ));
-					CellInstances.Add(Id, TPair<int32, int32>(MeshIndex, Instance));
-				}
-			}
-		}
+		AddSolid(S);
 	}
+	BuiltSolids = static_cast<int32>(World.Solids.size());
 	// Cells already destroyed before we built (e.g. joined mid-match) are in the subsystem's queue.
 	UE_LOG(LogTfps, Log, TEXT("Built graybox for '%s': %d solids (%d destruction cells) in %d material batches"), UTF8_TO_TCHAR(Map->Name.c_str()),
 		static_cast<int32>(Map->Solids.size()), CellInstances.Num(), MaterialMeshes.Num());

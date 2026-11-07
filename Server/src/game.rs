@@ -180,6 +180,12 @@ pub struct MatchRules {
     pub respawn_delay: f32,
     /// Maximum time a shot may be rewound (lag compensation), seconds.
     pub max_rewind: f32,
+    /// Team that can reinforce walls (defenders).
+    pub defender_team: u8,
+    /// Wall reinforcements per defender per life.
+    pub reinforcements_per_player: u8,
+    /// Seconds of holding USE to reinforce a wall.
+    pub reinforce_time: f32,
 }
 
 impl Default for MatchRules {
@@ -190,6 +196,9 @@ impl Default for MatchRules {
             friendly_fire: false,
             respawn_delay: 5.0,
             max_rewind: 0.25,
+            defender_team: 1,
+            reinforcements_per_player: 2,
+            reinforce_time: 1.5,
         }
     }
 }
@@ -220,6 +229,11 @@ pub struct Player {
     /// View of the body while droning (replicated instead of the drone camera).
     pub body_yaw_q: u16,
     pub body_pitch_q: i16,
+    /// Wall reinforcements left (defenders).
+    pub reinforcements: u8,
+    /// Seconds USE has been held on `reinforce_target`.
+    pub reinforce_progress: f32,
+    pub reinforce_target: Option<usize>,
 }
 
 impl Player {
@@ -291,6 +305,16 @@ impl Player {
     }
 }
 
+/// A solid added to the map at runtime, as replicated (millimetres).
+#[derive(Clone, Debug, PartialEq)]
+pub struct AddedSolid {
+    pub index: u16,
+    pub min_mm: [i32; 3],
+    pub max_mm: [i32; 3],
+    pub material: u8,
+    pub destructible: bool,
+}
+
 /// Things that happened during a tick, for the network layer to announce.
 #[derive(Clone, Debug, PartialEq)]
 pub enum GameEvent {
@@ -348,6 +372,13 @@ pub struct GameWorld {
     entity_buf: Vec<EntityState>,
     /// Drone id, controlling command and newly pressed buttons, this tick.
     drone_cmds: Vec<(u16, MoveInput, u16)>,
+    /// Every solid added at runtime, in order (sent to joining players).
+    pub added_solids: Vec<AddedSolid>,
+    /// Indices into `added_solids` added during the last tick.
+    pub solids_added_this_tick: Vec<usize>,
+    /// Every reinforced solid, and those reinforced during the last tick.
+    pub reinforced: Vec<u16>,
+    pub reinforced_this_tick: Vec<u16>,
     pending_shots: Vec<(u16, u32, Shot)>,
     destruction: Destruction,
     trace_buf: Vec<Obstacle>,
@@ -385,6 +416,10 @@ impl GameWorld {
             events: Vec::new(),
             shot_buf: ShotBuffer::default(),
             drone_cmds: Vec::new(),
+            added_solids: Vec::new(),
+            solids_added_this_tick: Vec::new(),
+            reinforced: Vec::new(),
+            reinforced_this_tick: Vec::new(),
             entity_buf: Vec::with_capacity(64),
             pending_shots: Vec::with_capacity(64),
             destruction,
@@ -511,6 +546,13 @@ impl GameWorld {
             droning: false,
             body_yaw_q: yaw_q,
             body_pitch_q: 0,
+            reinforcements: if team == self.rules.defender_team {
+                self.rules.reinforcements_per_player
+            } else {
+                0
+            },
+            reinforce_progress: 0.0,
+            reinforce_target: None,
         };
         match self.players.binary_search_by_key(&id, |p| p.id) {
             Ok(i) => self.players[i] = p,
@@ -541,6 +583,13 @@ impl GameWorld {
         p.weapon = w;
         p.gadgets = stock;
         p.gadget_cooldown = 0.0;
+        p.reinforcements = if team == self.rules.defender_team {
+            self.rules.reinforcements_per_player
+        } else {
+            0
+        };
+        p.reinforce_progress = 0.0;
+        p.reinforce_target = None;
         p.health = max_health;
         p.alive = true;
         p.respawn_timer = 0.0;
@@ -554,6 +603,8 @@ impl GameWorld {
         self.events.clear();
         self.explosions.clear();
         self.destruction.destroyed_this_tick.clear();
+        self.solids_added_this_tick.clear();
+        self.reinforced_this_tick.clear();
         self.pending_shots.clear();
         let dt = self.dt;
         let kill_z = self.map.kill_z;
@@ -629,6 +680,7 @@ impl GameWorld {
             {
                 self.use_gadget(i, &cmd);
             }
+            self.update_reinforcing(i, &cmd, remote);
             if self.players[i].state.pos.z < kill_z {
                 self.respawn(i);
             }
@@ -929,10 +981,32 @@ impl GameWorld {
             }
             return;
         }
-        if stock.count == 0
-            || p.gadget_cooldown > 0.0
-            || self.gadgets.len() >= gadgets::MAX_GADGET_ENTITIES
-        {
+        if stock.count == 0 || p.gadget_cooldown > 0.0 {
+            return;
+        }
+        if def.kind == GadgetKind::Barricade {
+            let yaw_q = cmd.yaw_q;
+            let base = p.state.pos;
+            let Some(b) =
+                gadgets::barricade_bounds(&self.collision, base, yaw_q, def.reach, def.radius)
+            else {
+                return; // no doorway or window in front of the player
+            };
+            let b = self.quantized(b);
+            if self
+                .players
+                .iter()
+                .any(|o| o.alive && o.state.bounds().overlaps(&b))
+            {
+                return; // never trap a player inside geometry
+            }
+            self.add_solid(b, tfps_sim::Material::Wood, true);
+            let p = &mut self.players[i];
+            p.gadgets[slot].count -= 1;
+            p.gadget_cooldown = gadgets::USE_COOLDOWN;
+            return;
+        }
+        if self.gadgets.len() >= gadgets::MAX_GADGET_ENTITIES {
             return;
         }
         let entity = if def.kind.is_grenade() || def.kind == GadgetKind::Drone {
@@ -1250,6 +1324,7 @@ impl GameWorld {
         let weapon = 0x80 | def.id;
         match def.kind {
             GadgetKind::Drone
+            | GadgetKind::Barricade
             | GadgetKind::Camera
             | GadgetKind::MotionSensor
             | GadgetKind::Jammer => {}
@@ -1325,6 +1400,103 @@ impl GameWorld {
         }
         self.trace_buf = obs;
         out
+    }
+
+    /// Rounds bounds to millimetres, exactly as clients will reconstruct
+    /// them from a SolidAdded message.
+    fn quantized(&self, b: tfps_sim::Aabb) -> tfps_sim::Aabb {
+        let q = |v: f32| tfps_protocol::snapshot::dequantize_mm(quantize_mm(v));
+        tfps_sim::Aabb {
+            min: Vec3::new(q(b.min.x), q(b.min.y), q(b.min.z)),
+            max: Vec3::new(q(b.max.x), q(b.max.y), q(b.max.z)),
+        }
+    }
+
+    /// Adds a runtime solid (deployable barricade) to the collision world.
+    /// Its bounds must already be millimetre-quantized.
+    pub fn add_solid(
+        &mut self,
+        b: tfps_sim::Aabb,
+        material: tfps_sim::Material,
+        destructible: bool,
+    ) {
+        let index = self.collision.solids.len();
+        self.collision.push_solid(b, material, destructible);
+        self.destruction.extend(&self.collision);
+        self.added_solids.push(AddedSolid {
+            index: index as u16,
+            min_mm: [
+                quantize_mm(b.min.x),
+                quantize_mm(b.min.y),
+                quantize_mm(b.min.z),
+            ],
+            max_mm: [
+                quantize_mm(b.max.x),
+                quantize_mm(b.max.y),
+                quantize_mm(b.max.z),
+            ],
+            material: material as u8,
+            destructible,
+        });
+        self.solids_added_this_tick
+            .push(self.added_solids.len() - 1);
+    }
+
+    /// Defenders hold USE on a destructible wall (not glass) to reinforce it.
+    fn update_reinforcing(&mut self, i: usize, cmd: &MoveInput, remote: bool) {
+        let p = &self.players[i];
+        let holding = cmd.buttons & buttons::USE != 0 && !remote && p.alive && p.reinforcements > 0;
+        let target = if holding {
+            let eye = p.state.eye_position(cmd.yaw_q);
+            let dir = combat::direction(
+                tfps_sim::math::dequantize_yaw_deg(cmd.yaw_q),
+                tfps_sim::math::dequantize_pitch_deg(cmd.pitch_q),
+            );
+            let mut obs = std::mem::take(&mut self.trace_buf);
+            destruction::trace(
+                &self.collision,
+                eye,
+                dir,
+                gadgets::REINFORCE_REACH,
+                &mut obs,
+            );
+            let t = obs.first().map(|o| o.solid).filter(|&si| {
+                let s = &self.collision.solids[si];
+                s.grid.is_some()
+                    && matches!(
+                        s.material,
+                        tfps_sim::Material::Wood
+                            | tfps_sim::Material::Drywall
+                            | tfps_sim::Material::Brick
+                    )
+            });
+            self.trace_buf = obs;
+            t
+        } else {
+            None
+        };
+        let dt = self.dt;
+        let need = self.rules.reinforce_time;
+        let p = &mut self.players[i];
+        match target {
+            Some(si) if p.reinforce_target == Some(si) => p.reinforce_progress += dt,
+            Some(si) => {
+                p.reinforce_target = Some(si);
+                p.reinforce_progress = dt;
+            }
+            None => {
+                p.reinforce_target = None;
+                p.reinforce_progress = 0.0;
+            }
+        }
+        if let Some(si) = p.reinforce_target.filter(|_| p.reinforce_progress >= need) {
+            p.reinforcements -= 1;
+            p.reinforce_target = None;
+            p.reinforce_progress = 0.0;
+            self.collision.solids[si].material = tfps_sim::Material::Reinforced;
+            self.reinforced.push(si as u16);
+            self.reinforced_this_tick.push(si as u16);
+        }
     }
 
     /// Cells destroyed during the last tick (to replicate).
@@ -2217,5 +2389,115 @@ mod tests {
             1,
         );
         assert_eq!(charges(&a.w), 0);
+    }
+
+    /// Wall at x = 18.8..19 with a 1 m doorway (y = -0.5..0.5, 2.1 m high).
+    const DOORWAY: &str = r#",{"min":[18.8,-6,0],"max":[19,-0.5,3],"material":"concrete"},{"min":[18.8,0.5,0],"max":[19,6,3],"material":"concrete"},{"min":[18.8,-0.5,2.1],"max":[19,0.5,3],"material":"concrete"}"#;
+
+    #[test]
+    fn barricade_fills_a_doorway_blocks_movement_and_can_be_shot_through() {
+        let mut a = Arena::new(DOORWAY, MatchRules::default());
+        let solids = a.w.collision.solids.len();
+        defender_places(&mut a, 0); // barricade (defender gadget slot 0)
+        assert_eq!(a.w.collision.solids.len(), solids + 1, "barricade added");
+        assert_eq!(a.w.solids_added_this_tick.len(), 0, "cleared next tick");
+        assert_eq!(a.w.added_solids.len(), 1);
+        assert_eq!(a.w.player(2).unwrap().gadgets[0].count, 1);
+        let b = a.w.collision.solids[solids].bounds;
+        assert!(
+            (b.min.y + 0.5).abs() < 0.01 && (b.max.y - 0.5).abs() < 0.01,
+            "{b:?}"
+        );
+        // The replicated millimetre bounds rebuild exactly the same box.
+        let added = &a.w.added_solids[0];
+        assert_eq!(quantize_mm(b.min.x), added.min_mm[0]);
+        assert_eq!(
+            tfps_protocol::snapshot::dequantize_mm(added.max_mm[2]),
+            b.max.z
+        );
+        // The defender cannot walk through it any more.
+        let walk = MoveInput {
+            buttons: buttons::FORWARD,
+            yaw_q: quantize_yaw_deg(180.0),
+            pitch_q: 0,
+            slot: 0,
+        };
+        a.step(cmd(0), walk, 64 * 2);
+        assert!(
+            a.w.player(2).unwrap().state.pos.x > b.max.x,
+            "blocked by the barricade"
+        );
+        // The attacker taps it (it is soft cover: bullets also go through to
+        // whoever stands behind). Wooden cells break.
+        let aim_only = aim_at(buttons::AIM, 18.9, 0.0, 1.2);
+        let tap = aim_at(buttons::AIM | buttons::FIRE, 18.9, 0.0, 1.2);
+        a.step(aim_only, cmd(0), 32);
+        let mut broken = 0;
+        for _ in 0..10 {
+            a.step(tap, cmd(0), 1);
+            broken += a.w.destroyed_this_tick().len();
+            a.step(aim_only, cmd(0), 24);
+        }
+        assert!(broken > 0, "bullets break barricade cells");
+    }
+
+    #[test]
+    fn barricade_needs_an_opening_and_never_traps_a_player() {
+        let mut a = Arena::new("", MatchRules::default());
+        let solids = a.w.collision.solids.len();
+        defender_places(&mut a, 0);
+        assert_eq!(
+            a.w.collision.solids.len(),
+            solids,
+            "open field: nothing placed"
+        );
+        assert_eq!(a.w.player(2).unwrap().gadgets[0].count, 2);
+        let mut a = Arena::new(DOORWAY, MatchRules::default());
+        // The attacker stands in the doorway.
+        a.w.player_mut(1).unwrap().state.pos = Vec3::new(18.9, 0.0, 0.0);
+        let solids = a.w.collision.solids.len();
+        defender_places(&mut a, 0);
+        assert_eq!(a.w.collision.solids.len(), solids, "someone is in the way");
+    }
+
+    #[test]
+    fn defenders_reinforce_walls_which_then_resist_explosives() {
+        let wall = r#",{"min":[18.8,-3,0],"max":[19,3,3],"material":"brick"}"#;
+        let mut a = Arena::new(wall, MatchRules::default());
+        assert_eq!(
+            a.w.player(1).unwrap().reinforcements,
+            0,
+            "attackers cannot reinforce"
+        );
+        assert_eq!(a.w.player(2).unwrap().reinforcements, 2);
+        let si = a.w.collision.solids.len() - 1;
+        let hold = MoveInput {
+            buttons: buttons::USE,
+            yaw_q: quantize_yaw_deg(180.0),
+            pitch_q: 0,
+            slot: 0,
+        };
+        a.step(cmd(0), hold, 64 + 20); // 1.3 s
+        assert_eq!(a.w.collision.solids[si].material, tfps_sim::Material::Brick);
+        assert!(a.w.player(2).unwrap().reinforce_progress > 1.2);
+        a.step(cmd(0), hold, 20);
+        assert_eq!(
+            a.w.collision.solids[si].material,
+            tfps_sim::Material::Reinforced
+        );
+        assert_eq!(a.w.reinforced, vec![si as u16]);
+        assert_eq!(a.w.player(2).unwrap().reinforcements, 1);
+        // A breaching charge's blast no longer breaks it.
+        a.w.explode(Vec3::new(18.7, 0.0, 1.2), 1.4, 90.0, 2500.0, Some(1), 0x84);
+        assert!(
+            a.w.destroyed_this_tick().is_empty(),
+            "reinforced walls resist charges"
+        );
+        // Letting go resets the progress.
+        let mut b = Arena::new(wall, MatchRules::default());
+        b.step(cmd(0), hold, 64);
+        b.step(cmd(0), cmd(0), 1);
+        b.step(cmd(0), hold, 40);
+        assert_eq!(b.w.collision.solids[si].material, tfps_sim::Material::Brick);
     }
 }

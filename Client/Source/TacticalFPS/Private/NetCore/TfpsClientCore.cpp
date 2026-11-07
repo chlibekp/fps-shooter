@@ -404,6 +404,28 @@ namespace tfps
 			E.Health = M.Health;
 			E.From = Vec3(DequantizeMm(M.FromMm[0]), DequantizeMm(M.FromMm[1]), DequantizeMm(M.FromMm[2]));
 			break;
+		case MsgType::SolidAdded:
+			// Applied in order so cell ids match the server's.
+			if (M.SolidIndex == Collision.Solids.size())
+			{
+				Aabb B;
+				B.Min = Vec3(DequantizeMm(M.MinMm[0]), DequantizeMm(M.MinMm[1]), DequantizeMm(M.MinMm[2]));
+				B.Max = Vec3(DequantizeMm(M.MaxMm[0]), DequantizeMm(M.MaxMm[1]), DequantizeMm(M.MaxMm[2]));
+				Collision.PushSolid(B, M.Material <= static_cast<uint8_t>(EMaterial::Dirt) ? static_cast<EMaterial>(M.Material) : EMaterial::Wood, M.bDestructible);
+				AddedSolids.push_back(M.SolidIndex);
+			}
+			else if (M.SolidIndex > Collision.Solids.size())
+			{
+				++SolidDesyncCount;
+			}
+			return;
+		case MsgType::SolidReinforced:
+			if (M.SolidIndex < Collision.Solids.size())
+			{
+				Collision.Solids[M.SolidIndex].Material = EMaterial::Reinforced;
+				ReinforcedSolids.push_back(M.SolidIndex);
+			}
+			return;
 		case MsgType::CellsDestroyed:
 			for (uint32_t Cell : M.Cells)
 			{
@@ -511,6 +533,8 @@ namespace tfps
 		bAlive = H.bAlive;
 		RespawnSeconds = H.RespawnIn;
 		GadgetEntities.swap(GadgetBuf);
+		LocalReinforcements = H.Reinforcements;
+		LocalReinforceProgress = H.ReinforceProgress;
 		for (int I = 0; I < kGadgetSlots; ++I) { LocalGadgets[I] = H.Gadgets[I]; }
 		NetStats.ServerInputDepth = H.InputBufferDepth;
 		Reconcile(H.LastCmdSeq, H.Local, H.Weapon);
@@ -631,5 +655,21 @@ namespace tfps
 			P.Flags = B.second.Flags;
 			P.Health = B.second.Health;
 		}
+	}
+
+	bool ClientCore::PollAddedSolid(uint32_t& OutSolidIndex)
+	{
+		if (AddedSolids.empty()) { return false; }
+		OutSolidIndex = AddedSolids.front();
+		AddedSolids.pop_front();
+		return true;
+	}
+
+	bool ClientCore::PollReinforcedSolid(uint32_t& OutSolidIndex)
+	{
+		if (ReinforcedSolids.empty()) { return false; }
+		OutSolidIndex = ReinforcedSolids.front();
+		ReinforcedSolids.pop_front();
+		return true;
 	}
 }

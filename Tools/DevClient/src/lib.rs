@@ -186,6 +186,8 @@ pub struct NetStats {
     pub packets_no_address: u64,
     /// Length of the last such datagram.
     pub last_no_address_len: usize,
+    /// SolidAdded messages that skipped an index (must stay 0).
+    pub solid_desyncs: u64,
     pub bytes_sent: u64,
     pub bytes_received: u64,
     pub snapshots_received: u64,
@@ -239,6 +241,8 @@ pub struct Client {
     pub local_shots: u64,
     /// Cells destroyed in this client's collision world (from the server).
     pub destroyed_cells: u64,
+    /// Solids added at runtime (barricades) applied to the collision world.
+    pub solids_added: u64,
     pub remote_shot_events: Vec<ShotEvent>,
     shot_decode: Vec<ShotEvent>,
     /// Gadget entities in the newest snapshot (grenades, charges, smoke).
@@ -325,6 +329,7 @@ impl Client {
             local_shots: 0,
             destroyed_cells: 0,
             remote_shot_events: Vec::new(),
+            solids_added: 0,
             gadgets: Vec::new(),
             gadget_stock: Default::default(),
             shot_decode: Vec::new(),
@@ -826,6 +831,33 @@ impl Client {
                     amount,
                     health,
                 });
+            }
+            Message::SolidAdded {
+                index,
+                min_mm,
+                max_mm,
+                material,
+                destructible,
+            } => {
+                // Applied in order: the index must be the next solid.
+                if index as usize == self.world.solids.len() {
+                    let q = snapshot::dequantize_mm;
+                    let b = tfps_sim::Aabb {
+                        min: Vec3::new(q(min_mm[0]), q(min_mm[1]), q(min_mm[2])),
+                        max: Vec3::new(q(max_mm[0]), q(max_mm[1]), q(max_mm[2])),
+                    };
+                    let m =
+                        tfps_sim::Material::from_u8(material).unwrap_or(tfps_sim::Material::Wood);
+                    self.world.push_solid(b, m, destructible);
+                    self.solids_added += 1;
+                } else if index as usize > self.world.solids.len() {
+                    self.stats.solid_desyncs += 1;
+                }
+            }
+            Message::SolidReinforced { index } => {
+                if let Some(s) = self.world.solids.get_mut(index as usize) {
+                    s.material = tfps_sim::Material::Reinforced;
+                }
             }
             Message::CellsDestroyed { cells } => {
                 for c in cells {

@@ -87,6 +87,8 @@ public:
 	TArray<tfps::FxShot>& GetPendingShots() { return PendingShots; }
 	/** Destroyed cell ids since last drained (ATfpsArenaBuilder removes them and spawns debris). */
 	TArray<uint32>& GetPendingDestroyedCells() { return PendingDestroyedCells; }
+	/** Solids reinforced since last drained (ATfpsArenaBuilder re-tints them). */
+	TArray<uint32>& GetPendingReinforced() { return PendingReinforced; }
 	/** Explosions to visualise: centre (meters) and radius (meters). */
 	TArray<TPair<FVector, float>>& GetPendingExplosions() { return PendingExplosions; }
 	FString PlayerName(uint16 PlayerId) const;
@@ -117,6 +119,7 @@ private:
 	FFlash Flash;
 	TArray<FVector> PendingFlashes;
 	TArray<FSpotMarker> SpotMarkers;
+	TArray<uint32> PendingReinforced;
 	tfps::MoveInput LastInput;
 	TArray<FKillFeedEntry> KillFeed;
 	FHitMarker HitMarker;

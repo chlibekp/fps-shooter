@@ -307,6 +307,76 @@ pub fn drone_box(pos: Vec3, half: f32) -> Aabb {
     }
 }
 
+/// How far a defender can reach a wall to reinforce it (m).
+pub const REINFORCE_REACH: f32 = 1.8;
+/// Thickness of a deployed barricade (m).
+pub const BARRICADE_THICKNESS: f32 = 0.08;
+/// Height of a barricade when the opening has no lintel within reach.
+pub const BARRICADE_MAX_HEIGHT: f32 = 2.2;
+
+/// Bounds of a barricade filling the doorway or window in front of a
+/// player standing at `feet` and looking along `yaw_q`: the first point
+/// along the dominant view axis (0.6 m to `reach`) that is free and has
+/// solids on both sides at most `2 * max_half` apart. The panel spans that
+/// gap, from the floor (or sill) below to the lintel above.
+pub fn barricade_bounds(
+    world: &CollisionWorld,
+    feet: Vec3,
+    yaw_q: u16,
+    reach: f32,
+    max_half: f32,
+) -> Option<Aabb> {
+    let (s, c) = tfps_sim::math::yaw_sin_cos(yaw_q);
+    let (axis, sign) = if c.abs() >= s.abs() {
+        (0usize, c.signum())
+    } else {
+        (1usize, s.signum())
+    };
+    let perp = 1 - axis;
+    let ray = |from: Vec3, a: usize, dir: f32, len: f32| {
+        let mut d = Vec3::ZERO;
+        d.set(a, dir * len);
+        sweep(world, from, d, 0.0).map(|(t, _, _)| t * len)
+    };
+    let mut dist = 0.6f32;
+    while dist <= reach + 1e-4 {
+        let mut q = Vec3::new(feet.x, feet.y, feet.z + 1.0);
+        q.set(axis, feet.get(axis) + sign * dist);
+        dist += 0.1;
+        let probe = Aabb {
+            min: Vec3::new(q.x - 0.01, q.y - 0.01, q.z - 0.01),
+            max: Vec3::new(q.x + 0.01, q.y + 0.01, q.z + 0.01),
+        };
+        if world.overlaps_any(&probe) {
+            continue;
+        }
+        let (Some(l), Some(r)) = (
+            ray(q, perp, -1.0, 2.0 * max_half),
+            ray(q, perp, 1.0, 2.0 * max_half),
+        ) else {
+            continue;
+        };
+        if l + r > 2.0 * max_half || l + r < 0.5 {
+            continue;
+        }
+        let Some(down) = ray(q, 2, -1.0, 1.5) else {
+            continue; // nothing to stand the panel on
+        };
+        let floor = q.z - down;
+        let top = ray(q, 2, 1.0, BARRICADE_MAX_HEIGHT)
+            .map_or(floor + BARRICADE_MAX_HEIGHT, |u| q.z + u)
+            .min(floor + BARRICADE_MAX_HEIGHT + 0.4);
+        let mut min = Vec3::new(0.0, 0.0, floor + 0.001);
+        let mut max = Vec3::new(0.0, 0.0, top - 0.001);
+        min.set(axis, q.get(axis) - BARRICADE_THICKNESS * 0.5);
+        max.set(axis, q.get(axis) + BARRICADE_THICKNESS * 0.5);
+        min.set(perp, q.get(perp) - l + 0.001);
+        max.set(perp, q.get(perp) + r - 0.001);
+        return Some(Aabb { min, max });
+    }
+    None
+}
+
 /// Where a charge placed from `eye` looking along unit `dir` would attach:
 /// `(position just off the surface, attached cell)`.
 pub fn placement(
@@ -463,6 +533,45 @@ mod tests {
         }
         assert!(peak > z0 + 0.3, "hop height {}", peak - z0);
         assert!((g.pos.z - z0).abs() < 0.01, "landed again");
+    }
+
+    #[test]
+    fn barricade_fills_the_doorway_in_front() {
+        // A wall at x = 3..3.2 with a 1 m wide, 2.1 m high doorway at y = -0.5..0.5.
+        let mut w = room();
+        for b in [
+            Aabb {
+                min: Vec3::new(3.0, -6.0, 0.0),
+                max: Vec3::new(3.2, -0.5, 3.0),
+            },
+            Aabb {
+                min: Vec3::new(3.0, 0.5, 0.0),
+                max: Vec3::new(3.2, 6.0, 3.0),
+            },
+            Aabb {
+                min: Vec3::new(3.0, -0.5, 2.1),
+                max: Vec3::new(3.2, 0.5, 3.0),
+            },
+        ] {
+            w.push_box(b);
+        }
+        let b =
+            barricade_bounds(&w, Vec3::new(1.8, 0.1, 0.0), 0, 1.6, 0.95).expect("doorway found");
+        assert!(
+            b.min.x >= 3.0 - BARRICADE_THICKNESS && b.max.x <= 3.2 + BARRICADE_THICKNESS,
+            "{b:?}"
+        );
+        assert!(
+            (b.min.y + 0.5).abs() < 0.01 && (b.max.y - 0.5).abs() < 0.01,
+            "{b:?}"
+        );
+        assert!(
+            b.min.z.abs() < 0.01 && (b.max.z - 2.1).abs() < 0.01,
+            "{b:?}"
+        );
+        assert!(!w.overlaps_any(&b), "fits without overlapping the frame");
+        // Open field: nothing to fill.
+        assert!(barricade_bounds(&w, Vec3::new(-5.0, 0.0, 0.0), 0, 1.6, 0.95).is_none());
     }
 
     #[test]

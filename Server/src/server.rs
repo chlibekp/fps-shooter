@@ -357,7 +357,16 @@ impl ServerCore {
         .encode(&mut conn.accepted_packet);
         self.send(addr, &conn.accepted_packet);
 
-        // Current destruction state of the map.
+        // Runtime geometry first (cell ids of later messages depend on it),
+        // then reinforcements and the current destruction state of the map.
+        for s in &self.game.added_solids {
+            let m = solid_added_message(s);
+            let _ = conn.rel_tx.queue(m.msg_type(), m.encode_payload());
+        }
+        for &index in &self.game.reinforced {
+            let m = Message::SolidReinforced { index };
+            let _ = conn.rel_tx.queue(m.msg_type(), m.encode_payload());
+        }
         let destroyed: Vec<u32> = self.game.collision.destroyed_cells().collect();
         for chunk in destroyed.chunks(MAX_CELLS_PER_MESSAGE) {
             let m = Message::CellsDestroyed {
@@ -600,6 +609,20 @@ impl ServerCore {
             }
             self.recent_shots.push_back((*tick, *ev));
         }
+        // Runtime geometry and reinforcements before destruction (order matters).
+        let added: Vec<Message> = self
+            .game
+            .solids_added_this_tick
+            .iter()
+            .map(|&i| solid_added_message(&self.game.added_solids[i]))
+            .collect();
+        for m in &added {
+            self.broadcast_except(u16::MAX, m);
+        }
+        let reinforced = self.game.reinforced_this_tick.clone();
+        for index in reinforced {
+            self.broadcast_except(u16::MAX, &Message::SolidReinforced { index });
+        }
         // Destruction: replicate events, never debris.
         let destroyed: Vec<u32> = self.game.destroyed_this_tick().to_vec();
         for chunk in destroyed.chunks(MAX_CELLS_PER_MESSAGE) {
@@ -788,6 +811,10 @@ impl ServerCore {
                 } else {
                     player.respawn_timer.max(0.0)
                 },
+                reinforcements: player.reinforcements,
+                reinforce_progress: ((player.reinforce_progress / self.game.rules.reinforce_time)
+                    .clamp(0.0, 1.0)
+                    * 255.0) as u8,
                 gadgets: player.gadgets,
             };
             // Shots by other players since the last snapshot sent to this client.
@@ -899,6 +926,16 @@ fn sanitize_name(raw: &str) -> Option<String> {
         return Some("Operator".to_string());
     }
     Some(name.to_string())
+}
+
+fn solid_added_message(s: &crate::game::AddedSolid) -> Message {
+    Message::SolidAdded {
+        index: s.index,
+        min_mm: s.min_mm,
+        max_mm: s.max_mm,
+        material: s.material,
+        destructible: s.destructible,
+    }
 }
 
 #[cfg(test)]

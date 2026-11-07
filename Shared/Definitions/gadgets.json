@@ -17,10 +17,12 @@
     { "id": 7, "name": "Motion Sensor", "kind": "motion_sensor",
       "reach": 1.8, "arm_time": 1.0, "radius": 6.0, "speed": 1.9, "duration": 1.5 },
     { "id": 8, "name": "Signal Jammer", "kind": "jammer",
-      "reach": 1.8, "arm_time": 1.0, "radius": 5.0 }
+      "reach": 1.8, "arm_time": 1.0, "radius": 5.0 },
+    { "id": 9, "name": "Deployable Barricade", "kind": "barricade",
+      "reach": 1.6, "radius": 0.95 }
   ],
   "team_loadouts": [
-    [ { "id": 1, "count": 2 }, { "id": 4, "count": 3 }, { "id": 5, "count": 2 }, { "id": 3, "count": 2 } ],
-    [ { "id": 2, "count": 2 }, { "id": 6, "count": 2 }, { "id": 7, "count": 2 }, { "id": 8, "count": 1 } ]
+    [ { "id": 1, "count": 2 }, { "id": 4, "count": 3 }, { "id": 5, "count": 2 }, { "id": 2, "count": 2 } ],
+    [ { "id": 9, "count": 2 }, { "id": 6, "count": 2 }, { "id": 7, "count": 2 }, { "id": 8, "count": 1 } ]
   ]
 }

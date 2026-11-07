@@ -244,3 +244,20 @@ than a walk through walls, once per second. Jammers stop enemy drones and
 block enemy charge detonation within their radius. Loadouts are four gadget
 slots per team, set in `gadgets.json` until the Phase 6 lobby makes them
 selectable.
+
+## Decision 13 — Deployable barricades are replicated geometry
+
+A barricade changes what players collide with, so client prediction must
+know about it exactly. The server works out the panel (the doorway or
+window in front of the defender, from the floor to the lintel), rounds its
+bounds to millimetres, and adds it to its own collision world from those
+rounded values. Clients rebuild the identical f32 box from the same
+millimetres. It is appended as a new solid and subdivided into cells by the
+shared rule, so cell ids stay consistent on both sides. `SolidAdded`
+messages are reliable and ordered. They reach joining players before the
+destroyed-cell list that may reference their cells. A barricade is never
+placed over a player.
+
+Wall reinforcement only changes a solid's material to Reinforced. Collision
+is unchanged, so prediction is unaffected; bullets and explosives simply
+stop affecting it on the server. Clients are told for the visuals.

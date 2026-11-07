@@ -4,12 +4,14 @@ A realistic, tactical multiplayer first-person shooter: an **Unreal Engine 5**
 client and an authoritative **Rust** dedicated server, with original assets
 built procedurally in **Blender**.
 
-**Status: Phase 3 (Destruction).** Players connect to the Rust server, move
+**Status: Phase 4 (Gadgets).** Players connect to the Rust server, move
 (run, sprint, crouch, prone, lean, ADS) with client-side prediction, and
 fight with data-driven weapons. The server resolves shots with
 lag-compensated hitscan, bullet penetration and damage. Walls, windows,
 doors, barricades and floors break, both into cells that every client's
-collision agrees on and through explosions. All of this was verified end-to-end with the
+collision agrees on and through explosions. Attackers carry frag grenades,
+flashbangs, breaching charges and recon drones. Defenders deploy barricades,
+reinforce walls, and place cameras, motion sensors and jammers. All of this was verified end-to-end with the
 headless Rust and C++ clients. The Unreal client code has **not been
 compiled in Unreal yet**, because the development machine had no Unreal
 Engine; see [`Documentation/STATUS.md`](Documentation/STATUS.md).
@@ -20,6 +22,7 @@ Engine; see [`Documentation/STATUS.md`](Documentation/STATUS.md).
 | [MILESTONE_1.md](Documentation/MILESTONE_1.md) | Milestone 1 report: foundation, netcode, performance numbers |
 | [MILESTONE_2.md](Documentation/MILESTONE_2.md) | Phase 2 report: gunplay, combat, lag compensation |
 | [MILESTONE_3.md](Documentation/MILESTONE_3.md) | Phase 3 report: destruction, penetration, explosions |
+| [MILESTONE_4.md](Documentation/MILESTONE_4.md) | Phase 4 report: gadgets, drones, barricades, reinforcement |
 | [ARCHITECTURE.md](Documentation/ARCHITECTURE.md) | Architecture decisions and their reasons |
 | [PROTOCOL.md](Shared/Protocol/PROTOCOL.md) | Wire protocol v1 (byte level) |
 | [ASSET_PIPELINE.md](Documentation/ASSET_PIPELINE.md) | Blender → Unreal pipeline |

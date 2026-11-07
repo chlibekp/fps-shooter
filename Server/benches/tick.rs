@@ -30,6 +30,41 @@ fn world(players: u16) -> GameWorld {
 }
 
 fn bench(c: &mut Criterion) {
+    // Gadget load: 32 players keep throwing grenades (team 0: frags in gadget
+    // slot 0, team 1: barricades are not thrown, so they hold slot 0 and
+    // re-stock); the world stays at the 24-entity gadget cap with grenades
+    // bouncing and exploding.
+    {
+        let n = 32u16;
+        let mut w = world(n);
+        let mut seq = 1u32;
+        let (mut gadgets, mut ticks) = (0u64, 0u64);
+        c.bench_function("world_tick_32_players_grenades", |b| {
+            b.iter(|| {
+                for id in 1..=n {
+                    let pressed = seq % 8 == 0;
+                    let input = MoveInput {
+                        buttons: buttons::FORWARD | if pressed { buttons::FIRE } else { 0 },
+                        yaw_q: (id as u32 * 2000 + seq * 13) as u16,
+                        pitch_q: 3000,
+                        slot: 2,
+                    };
+                    let rt = w.tick.saturating_sub(4) * 256;
+                    let pm = w.player_mut(id).unwrap();
+                    pm.gadgets[0].count = 2; // endless grenades for the benchmark
+                    pm.cmds.push(seq, input, rt);
+                }
+                seq += 1;
+                w.tick();
+                gadgets += w.gadgets.len() as u64;
+                ticks += 1;
+            })
+        });
+        eprintln!(
+            "  32 players throwing: {:.1} gadget entities alive per tick",
+            gadgets as f64 / ticks.max(1) as f64
+        );
+    }
     for n in [2u16, 10, 32] {
         let mut w = world(n);
         let mut seq = 1u32;

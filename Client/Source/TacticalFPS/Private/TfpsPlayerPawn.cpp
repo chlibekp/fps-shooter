@@ -51,10 +51,11 @@ void ATfpsPlayerPawn::UpdateFromNetwork(const UTfpsNetSubsystem& Net, const FRot
 	}
 	// Remote-controlling a drone: the camera rides on the drone (snapshot
 	// positions, smoothed; drones are not predicted). The body stays put.
-	if (const tfps::GadgetEntityState* Drone = Net.GetControlledDrone())
+	if (const tfps::GadgetEntityState* Device = Net.GetControlledDevice())
 	{
-		const tfps::Vec3 D = Drone->Position();
-		const FVector Target = FVector(D.X, D.Y, D.Z + 0.1f) * TfpsMetersToUnreal;
+		const tfps::Vec3 D = Device->Position();
+		const float CamUp = Net.KindOf(*Device) == tfps::EGadgetKind::Drone ? 0.1f : 0.0f;
+		const FVector Target = FVector(D.X, D.Y, D.Z + CamUp) * TfpsMetersToUnreal;
 		DroneCamera = bDroneCamera ? FMath::Lerp(DroneCamera, Target, FMath::Min(1.0f, DeltaTime * 20.0f)) : Target;
 		bDroneCamera = true;
 		Camera->SetWorldLocation(DroneCamera);

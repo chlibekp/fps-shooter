@@ -19,7 +19,7 @@ use serde::Deserialize;
 pub const SLOTS: usize = 2;
 /// Gadget slots follow the weapon slots: input slot `SLOTS + i` holds
 /// gadget `i` (the weapon is holstered; gadget use is resolved by the server).
-pub const GADGET_SLOTS: usize = 3;
+pub const GADGET_SLOTS: usize = 4;
 /// Flag in `MoveInput::slot`: the player is remote-controlling a device
 /// (drone). The body only keeps its stance; movement, lean and the weapon are
 /// disabled (the server routes the command to the device).

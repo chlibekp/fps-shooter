@@ -719,9 +719,9 @@ fn thrown_flashbang_is_replicated_and_blinds_the_player_facing_it() {
     .unwrap();
     connect_all(&mut [&mut a, &mut b]);
     run(&mut [&mut a, &mut b], Duration::from_millis(400));
-    // Team 1 (b) carries smoke + flash; the flash is gadget slot 1 = input slot 3.
-    assert_eq!(b.gadget_stock[1].id, 2);
-    assert_eq!(b.gadget_stock[1].count, 2);
+    // Team 1 (b) carries the flash in gadget slot 0 = input slot 2.
+    assert_eq!(b.gadget_stock[0].id, 2);
+    assert_eq!(b.gadget_stock[0].count, 2);
     assert_eq!(a.gadget_stock[0].id, 1, "team 0 carries frags");
     // a looks at b; b lobs the flash towards a, slightly upwards.
     let (ya, pa) = aim(a.predicted.eye_position(0), b.predicted.eye_position(0));
@@ -738,7 +738,7 @@ fn thrown_flashbang_is_replicated_and_blinds_the_player_facing_it() {
         buttons: 0,
         yaw_q: yb,
         pitch_q: pb,
-        slot: 3,
+        slot: 2,
     };
     b.set_input(hold);
     run(&mut [&mut a, &mut b], Duration::from_millis(600)); // equip
@@ -779,7 +779,7 @@ fn thrown_flashbang_is_replicated_and_blinds_the_player_facing_it() {
     let fb = b_flash.expect("b must get the flash event");
     assert!(fa > 60, "a faces the flash: {fa}");
     assert!(fb < fa, "b turned away from the flash: {fb} vs {fa}");
-    assert_eq!(b.gadget_stock[1].count, 1);
+    assert_eq!(b.gadget_stock[0].count, 1);
     assert!(a.gadgets.is_empty(), "flash is gone after going off");
 }
 

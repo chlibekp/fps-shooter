@@ -156,9 +156,18 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 		DrawText(FString::Printf(TEXT("x%d"), static_cast<int32>(Stock.Count)), Stock.Count == 0 ? FLinearColor(0.9f, 0.3f, 0.2f) : Text, AX, AY, Font, Scale * 1.6f);
 		if (GDef != nullptr)
 		{
-			const bool bPlaced = GDef->Kind == tfps::EGadgetKind::Breach;
+			const TCHAR* Hint = TEXT("[LMB] throw   [RMB+LMB] lob");
+			switch (GDef->Kind)
+			{
+			case tfps::EGadgetKind::Breach: Hint = TEXT("[LMB] place   [RMB+LMB] detonate"); break;
+			case tfps::EGadgetKind::Drone: Hint = TEXT("[LMB] deploy (then drive it)"); break;
+			case tfps::EGadgetKind::Camera: Hint = TEXT("[LMB] place on a wall (then view it)"); break;
+			case tfps::EGadgetKind::MotionSensor:
+			case tfps::EGadgetKind::Jammer: Hint = TEXT("[LMB] place"); break;
+			default: break;
+			}
 			DrawText(UTF8_TO_TCHAR(GDef->Name.c_str()), Text, AX + 70.0f * Scale, AY + 12.0f * Scale, Font, Scale);
-			DrawText(bPlaced ? TEXT("[LMB] place   [RMB+LMB] detonate") : TEXT("[LMB] throw   [RMB+LMB] lob"), Dim, AX, AY + 42.0f * Scale, Small, Scale);
+			DrawText(Hint, Dim, AX, AY + 42.0f * Scale, Small, Scale);
 		}
 	}
 	else
@@ -189,13 +198,13 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 	const ATfpsPlayerController* SpotPC = Cast<ATfpsPlayerController>(GetOwningPlayerController());
 	if (SpotPC != nullptr && Net.GetSpotMarkers().Num() > 0)
 	{
-		const tfps::GadgetEntityState* Drone = Net.GetControlledDrone();
+		const tfps::GadgetEntityState* Drone = Net.GetControlledDevice();
 		const FRotator ViewRot = SpotPC->GetControlRotation();
 		FVector Origin;
 		if (Drone != nullptr)
 		{
 			const tfps::Vec3 D = Drone->Position();
-			Origin = FVector(D.X, D.Y, D.Z + 0.1f);
+			Origin = FVector(D.X, D.Y, D.Z + (Net.KindOf(*Drone) == tfps::EGadgetKind::Drone ? 0.1f : 0.0f));
 		}
 		else
 		{
@@ -234,9 +243,10 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 		}
 	}
 
-	// Drone view overlay.
-	if (Net.GetControlledDrone() != nullptr)
+	// Drone / camera view overlay.
+	if (const tfps::GadgetEntityState* Device = Net.GetControlledDevice())
 	{
+		const bool bCamera = Net.KindOf(*Device) == tfps::EGadgetKind::Camera;
 		const FLinearColor Ov(0.55f, 0.95f, 0.6f, 0.85f);
 		const float M = 40.0f * Scale;
 		const float L = 60.0f * Scale;
@@ -244,8 +254,9 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 		DrawLine(W - M, M, W - M - L, M, Ov, 2.0f * Scale); DrawLine(W - M, M, W - M, M + L, Ov, 2.0f * Scale);
 		DrawLine(M, H - M, M + L, H - M, Ov, 2.0f * Scale); DrawLine(M, H - M, M, H - M - L, Ov, 2.0f * Scale);
 		DrawLine(W - M, H - M, W - M - L, H - M, Ov, 2.0f * Scale); DrawLine(W - M, H - M, W - M, H - M - L, Ov, 2.0f * Scale);
-		DrawText(TEXT("DRONE"), Ov, M + 10.0f * Scale, M + 10.0f * Scale, Font, Scale);
-		DrawText(TEXT("[WASD] drive   [Space] hop   [LMB] spot   [1/2] back to body"), Ov, M + 10.0f * Scale, H - M - 30.0f * Scale, Small, Scale);
+		DrawText(bCamera ? TEXT("CAMERA") : TEXT("DRONE"), Ov, M + 10.0f * Scale, M + 10.0f * Scale, Font, Scale);
+		DrawText(bCamera ? TEXT("[mouse] look   [LMB] spot   [1/2] back to body") : TEXT("[WASD] drive   [Space] hop   [LMB] spot   [1/2] back to body"), Ov, M + 10.0f * Scale,
+			H - M - 30.0f * Scale, Small, Scale);
 	}
 
 	// Flashbang: white-out that holds, then fades (drawn under the rest of the HUD text that follows).

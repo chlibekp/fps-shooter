@@ -58,6 +58,9 @@ private:
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SmokeMaterial;
 
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> DeviceMaterial;
+
 	TArray<FSlot> Slots;
 	float FlashLife = 0.0f;
 };

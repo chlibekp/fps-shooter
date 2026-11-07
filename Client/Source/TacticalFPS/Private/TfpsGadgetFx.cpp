@@ -39,6 +39,7 @@ void ATfpsGadgetFx::BeginPlay()
 	ChargeMaterial = FTfpsPlaceholderAssets::MakeTinted(this, FLinearColor(0.35f, 0.28f, 0.12f));
 	ArmedMaterial = FTfpsPlaceholderAssets::MakeTinted(this, FLinearColor(2.5f, 0.15f, 0.08f));
 	SmokeMaterial = FTfpsPlaceholderAssets::MakeTinted(this, FLinearColor(0.62f, 0.62f, 0.6f));
+	DeviceMaterial = FTfpsPlaceholderAssets::MakeTinted(this, FLinearColor(0.1f, 0.9f, 1.4f));
 	for (int32 I = 0; I < SlotCount; ++I)
 	{
 		UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
@@ -104,6 +105,23 @@ void ATfpsGadgetFx::Tick(float DeltaSeconds)
 				// Engine sphere is 100 cm across; flatten slightly so the cloud hugs the floor.
 				M->SetWorldScale3D(FVector(2.0f * RadiusCm / 100.0f * Grow, 2.0f * RadiusCm / 100.0f * Grow, 1.4f * RadiusCm / 100.0f * Grow));
 				M->SetWorldLocation(Slot->PosCm + FVector(0.0f, 0.0f, 0.4f * RadiusCm * Grow));
+			}
+			else if (Def != nullptr && Def->Kind != tfps::EGadgetKind::Breach && tfps::IsPlacedGadget(Def->Kind))
+			{
+				// Camera / motion sensor / jammer: small box, armed = lit.
+				Slot->SmokeAge = 0.0f;
+				M->SetStaticMesh(FTfpsPlaceholderAssets::Cube());
+				M->SetMaterial(0, G.Phase == tfps::GadgetPhase::Armed ? DeviceMaterial : ChargeMaterial);
+				M->SetWorldScale3D(FVector(0.16f));
+				M->SetWorldLocation(Slot->PosCm);
+			}
+			else if (Def != nullptr && Def->Kind == tfps::EGadgetKind::Drone)
+			{
+				Slot->SmokeAge = 0.0f;
+				M->SetStaticMesh(FTfpsPlaceholderAssets::Cube());
+				M->SetMaterial(0, DeviceMaterial);
+				M->SetWorldScale3D(FVector(0.3f, 0.3f, 0.12f));
+				M->SetWorldLocation(Slot->PosCm);
 			}
 			else if (G.Phase == tfps::GadgetPhase::Planted || G.Phase == tfps::GadgetPhase::Armed)
 			{

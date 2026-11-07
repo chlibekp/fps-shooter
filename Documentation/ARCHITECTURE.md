@@ -235,3 +235,12 @@ latency to drone motion. One enemy bullet or any explosion destroys a
 drone. Spotting is decided by the server (view cone, range, line of sight),
 and only the spotter's team learns the position. The spotted player is not
 told, as in comparable games.
+
+Defender devices (wall cameras, motion sensors, jammers) are placed like
+breaching charges and are electronic devices like drones: one enemy bullet
+or any explosion destroys them. Cameras use the same remote-control path as
+drones (look and spot only). Motion sensors report enemies moving faster
+than a walk through walls, once per second. Jammers stop enemy drones and
+block enemy charge detonation within their radius. Loadouts are four gadget
+slots per team, set in `gadgets.json` until the Phase 6 lobby makes them
+selectable.

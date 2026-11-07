@@ -63,6 +63,9 @@ namespace tfps
 			else if (Kind == "smoke") { G.Kind = EGadgetKind::Smoke; }
 			else if (Kind == "breach") { G.Kind = EGadgetKind::Breach; }
 			else if (Kind == "drone") { G.Kind = EGadgetKind::Drone; }
+			else if (Kind == "camera") { G.Kind = EGadgetKind::Camera; }
+			else if (Kind == "motion_sensor") { G.Kind = EGadgetKind::MotionSensor; }
+			else if (Kind == "jammer") { G.Kind = EGadgetKind::Jammer; }
 			else { OutError = "unknown gadget kind '" + Kind + "'"; return false; }
 			G.ThrowSpeed = F(J, "throw_speed"); G.Fuse = F(J, "fuse"); G.Radius = F(J, "radius"); G.Damage = F(J, "damage");
 			G.CellDamage = F(J, "cell_damage"); G.Duration = F(J, "duration"); G.Reach = F(J, "reach"); G.ArmTime = F(J, "arm_time");
@@ -73,8 +76,8 @@ namespace tfps
 				bFinite = bFinite && std::isfinite(V) && V >= 0.0f;
 			}
 			const bool bOk = G.Id != 0 && G.Id < 0x80 && bFinite && G.Radius > 0.0f
-				&& (G.Kind == EGadgetKind::Breach ? G.Reach > 0.0f
-					: (G.Kind == EGadgetKind::Drone ? (G.ThrowSpeed > 0.0f && G.Speed > 0.0f) : G.ThrowSpeed > 0.0f));
+				&& (G.Kind == EGadgetKind::Drone ? (G.ThrowSpeed > 0.0f && G.Speed > 0.0f)
+					: (IsPlacedGadget(G.Kind) ? G.Reach > 0.0f : G.ThrowSpeed > 0.0f));
 			if (!bOk) { OutError = "gadget '" + G.Name + "' has invalid values"; return false; }
 			Set.Gadgets.push_back(G);
 		}

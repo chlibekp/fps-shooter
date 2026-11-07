@@ -20,9 +20,38 @@ pub enum GadgetKind {
     Breach,
     /// Small remote-controlled ground drone; spots enemies for the team.
     Drone,
+    /// Placed on a surface; its owner can look through it and spot.
+    Camera,
+    /// Placed; spots enemies moving faster than `speed` within `radius`,
+    /// through walls.
+    MotionSensor,
+    /// Placed; enemy drones within `radius` stop working and enemy charges
+    /// within it cannot be detonated.
+    Jammer,
 }
 
 impl GadgetKind {
+    /// Gadgets placed on a surface within reach.
+    pub fn is_placed(self) -> bool {
+        matches!(
+            self,
+            GadgetKind::Breach | GadgetKind::Camera | GadgetKind::MotionSensor | GadgetKind::Jammer
+        )
+    }
+
+    /// Electronic devices: destroyed by one bullet or any explosion.
+    pub fn is_device(self) -> bool {
+        matches!(
+            self,
+            GadgetKind::Drone | GadgetKind::Camera | GadgetKind::MotionSensor | GadgetKind::Jammer
+        )
+    }
+
+    /// Devices the owner can look through (remote control).
+    pub fn is_remote_viewable(self) -> bool {
+        matches!(self, GadgetKind::Drone | GadgetKind::Camera)
+    }
+
     /// Grenades that leave the hand and go off on a fuse.
     pub fn is_grenade(self) -> bool {
         matches!(
@@ -129,8 +158,8 @@ impl GadgetSet {
                 && finite
                 && g.radius > 0.0
                 && match g.kind {
-                    GadgetKind::Breach => g.reach > 0.0,
                     GadgetKind::Drone => g.throw_speed > 0.0 && g.speed > 0.0,
+                    k if k.is_placed() => g.reach > 0.0,
                     _ => g.throw_speed > 0.0,
                 };
             if !ok {
@@ -211,10 +240,11 @@ mod tests {
             "/../../Definitions/gadgets.json"
         ))
         .unwrap();
-        assert_eq!(s.gadgets.len(), 5);
+        assert_eq!(s.gadgets.len(), 8);
+        assert_eq!(s.get(7).unwrap().kind, GadgetKind::MotionSensor);
         assert_eq!(s.get(5).unwrap().kind, GadgetKind::Drone);
         assert_eq!(s.get(4).unwrap().kind, GadgetKind::Breach);
         assert_eq!(s.loadout(0)[1].id, 4);
-        assert!(GadgetSet::from_json(r#"{"version":1,"gadgets":[],"team_loadouts":[[{"id":9,"count":1},{"id":0,"count":0},{"id":0,"count":0}],[{"id":0,"count":0},{"id":0,"count":0},{"id":0,"count":0}]]}"#).is_err());
+        assert!(GadgetSet::from_json(r#"{"version":1,"gadgets":[],"team_loadouts":[[{"id":9,"count":1},{"id":0,"count":0},{"id":0,"count":0},{"id":0,"count":0}],[{"id":0,"count":0},{"id":0,"count":0},{"id":0,"count":0},{"id":0,"count":0}]]}"#).is_err());
     }
 }

@@ -11,10 +11,16 @@
       "reach": 1.8, "arm_time": 1.0, "radius": 1.4, "damage": 90.0, "cell_damage": 2500.0 },
     { "id": 5, "name": "Recon Drone", "kind": "drone",
       "throw_speed": 5.0, "radius": 0.15, "speed": 3.2, "jump_speed": 3.0,
-      "spot_range": 40.0, "duration": 4.0 }
+      "spot_range": 40.0, "duration": 4.0 },
+    { "id": 6, "name": "Wall Camera", "kind": "camera",
+      "reach": 1.8, "arm_time": 0.5, "radius": 0.08, "spot_range": 40.0, "duration": 4.0 },
+    { "id": 7, "name": "Motion Sensor", "kind": "motion_sensor",
+      "reach": 1.8, "arm_time": 1.0, "radius": 6.0, "speed": 1.9, "duration": 1.5 },
+    { "id": 8, "name": "Signal Jammer", "kind": "jammer",
+      "reach": 1.8, "arm_time": 1.0, "radius": 5.0 }
   ],
   "team_loadouts": [
-    [ { "id": 1, "count": 2 }, { "id": 4, "count": 3 }, { "id": 5, "count": 2 } ],
-    [ { "id": 3, "count": 2 }, { "id": 2, "count": 2 }, { "id": 0, "count": 0 } ]
+    [ { "id": 1, "count": 2 }, { "id": 4, "count": 3 }, { "id": 5, "count": 2 }, { "id": 3, "count": 2 } ],
+    [ { "id": 2, "count": 2 }, { "id": 6, "count": 2 }, { "id": 7, "count": 2 }, { "id": 8, "count": 1 } ]
   ]
 }

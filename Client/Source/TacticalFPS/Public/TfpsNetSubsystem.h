@@ -75,10 +75,12 @@ public:
 	const FDamageIndicator& GetDamageIndicator() const { return DamageIndicator; }
 	const FFlash& GetFlash() const { return Flash; }
 	const TArray<FSpotMarker>& GetSpotMarkers() const { return SpotMarkers; }
-	/** The local player's newest live drone, or nullptr. */
-	const tfps::GadgetEntityState* GetMyDrone() const;
-	/** The drone being remote-controlled this frame (local input has the remote flag), or nullptr. */
-	const tfps::GadgetEntityState* GetControlledDrone() const { return (LastInput.Slot & tfps::kRemoteControl) ? GetMyDrone() : nullptr; }
+	/** The local player's newest usable device for gadget slot GadgetSlot (live drone or armed camera), or nullptr. */
+	const tfps::GadgetEntityState* GetMyRemoteDevice(int32 GadgetSlot) const;
+	/** The device being remote-viewed this frame (local input has the remote flag), or nullptr. */
+	const tfps::GadgetEntityState* GetControlledDevice() const;
+	/** Kind of a gadget entity's definition (Frag if unknown). */
+	tfps::EGadgetKind KindOf(const tfps::GadgetEntityState& G) const;
 	/** Flashbang detonations to visualise (position in meters), drained by ATfpsGadgetFx. */
 	TArray<FVector>& GetPendingFlashes() { return PendingFlashes; }
 	/** Shots to visualise this frame (drained by ATfpsShotFx). */

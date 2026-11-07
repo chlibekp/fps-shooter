@@ -287,9 +287,14 @@ FString UTfpsNetSubsystem::ItemName(uint8 ItemId) const
 	return W != nullptr ? FString(UTF8_TO_TCHAR(W->Name.c_str())) : FString(TEXT("?"));
 }
 
-const tfps::GadgetEntityState* UTfpsNetSubsystem::GetMyDrone() const
+const tfps::GadgetEntityState* UTfpsNetSubsystem::GetMyRemoteDevice(int32 GadgetSlot) const
 {
 	if (!Core)
+	{
+		return nullptr;
+	}
+	const tfps::GadgetDef* SlotDef = Gadgets.Get(Core->LocalGadget(GadgetSlot).Id);
+	if (SlotDef == nullptr || !tfps::IsRemoteViewable(SlotDef->Kind))
 	{
 		return nullptr;
 	}
@@ -297,10 +302,27 @@ const tfps::GadgetEntityState* UTfpsNetSubsystem::GetMyDrone() const
 	for (const tfps::GadgetEntityState& G : Core->Gadgets())
 	{
 		const tfps::GadgetDef* Def = Gadgets.Get(G.Gadget);
-		if (G.Owner == Core->PlayerId() && Def != nullptr && Def->Kind == tfps::EGadgetKind::Drone && (Best == nullptr || G.Id > Best->Id))
+		const bool bUsable = SlotDef->Kind == tfps::EGadgetKind::Drone || G.Phase == tfps::GadgetPhase::Armed;
+		if (G.Owner == Core->PlayerId() && Def != nullptr && Def->Kind == SlotDef->Kind && bUsable && (Best == nullptr || G.Id > Best->Id))
 		{
 			Best = &G;
 		}
 	}
 	return Best;
+}
+
+const tfps::GadgetEntityState* UTfpsNetSubsystem::GetControlledDevice() const
+{
+	const uint8 Slot = LastInput.Slot & static_cast<uint8>(~tfps::kRemoteControl);
+	if ((LastInput.Slot & tfps::kRemoteControl) == 0 || !tfps::IsGadgetSlot(Slot))
+	{
+		return nullptr;
+	}
+	return GetMyRemoteDevice(Slot - tfps::kWeaponSlots);
+}
+
+tfps::EGadgetKind UTfpsNetSubsystem::KindOf(const tfps::GadgetEntityState& G) const
+{
+	const tfps::GadgetDef* Def = Gadgets.Get(G.Gadget);
+	return Def != nullptr ? Def->Kind : tfps::EGadgetKind::Frag;
 }

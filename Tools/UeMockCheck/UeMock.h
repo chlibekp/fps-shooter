@@ -275,8 +275,8 @@ class APawn : public AActor { public: bool bUseControllerRotationYaw = true, bUs
 class AController : public AActor { public: void Possess(APawn*) {} APawn* GetPawn() const { return nullptr; } FRotator GetControlRotation() const { return FRotator(); } void SetControlRotation(const FRotator&) {} bool IsLocalController() const { return true; } };
 struct FInputModeGameOnly {}; struct FInputModeGameAndUI {};
 struct FKey { FKey() = default; FKey(const char*) {} bool IsValid() const { return true; } };
-struct EKeys { static const FKey W, S, A, D, SpaceBar, LeftControl, C, LeftShift, LeftAlt, Q, E, RightMouseButton, LeftMouseButton, Z, R, F, F3, Escape, One, Two, Three, Four, Five, MouseScrollUp, MouseScrollDown; };
-inline const FKey EKeys::One{"1"}, EKeys::Two{"2"}, EKeys::Three{"3"}, EKeys::Four{"4"}, EKeys::Five{"5"}, EKeys::MouseScrollUp{"WU"}, EKeys::MouseScrollDown{"WD"};
+struct EKeys { static const FKey W, S, A, D, SpaceBar, LeftControl, C, LeftShift, LeftAlt, Q, E, RightMouseButton, LeftMouseButton, Z, R, F, F3, Escape, One, Two, Three, Four, Five, Six, MouseScrollUp, MouseScrollDown; };
+inline const FKey EKeys::One{"1"}, EKeys::Two{"2"}, EKeys::Three{"3"}, EKeys::Four{"4"}, EKeys::Five{"5"}, EKeys::Six{"6"}, EKeys::MouseScrollUp{"WU"}, EKeys::MouseScrollDown{"WD"};
 inline const FKey EKeys::W{"W"}, EKeys::S{"S"}, EKeys::A{"A"}, EKeys::D{"D"}, EKeys::SpaceBar{"Sp"}, EKeys::LeftControl{"LC"}, EKeys::C{"C"}, EKeys::LeftShift{"LS"}, EKeys::LeftAlt{"LA"}, EKeys::Q{"Q"}, EKeys::E{"E"}, EKeys::RightMouseButton{"RMB"}, EKeys::LeftMouseButton{"LMB"}, EKeys::Z{"Z"}, EKeys::R{"R"}, EKeys::F{"F"}, EKeys::F3{"F3"}, EKeys::Escape{"Esc"};
 class APlayerController : public AController
 {

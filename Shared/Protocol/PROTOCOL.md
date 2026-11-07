@@ -1,9 +1,10 @@
-# TacticalFPS wire protocol — version 5
+# TacticalFPS wire protocol — version 6
 
 Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
 stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions),
 v4 (Phase 4: gadget slots, gadget entities in snapshots, flashbangs),
-v5 (three gadget slots, drone remote control, Spotted).
+v5 (three gadget slots, drone remote control, Spotted),
+v6 (four gadget slots; cameras, motion sensors, jammers).
 
 Implementations:
 
@@ -26,7 +27,7 @@ both sides.
 | Field | Type | Value |
 |-------|------|-------|
 | magic | u16 | `0x4654` (bytes `54 46`, "TF") |
-| version | u16 | `5` |
+| version | u16 | `6` |
 | type | u8 | packet type |
 
 Packet types: 1 ConnectRequest, 2 Challenge, 3 ChallengeResponse,
@@ -129,11 +130,12 @@ count × { u16 buttons, u16 yaw_q, i16 pitch_q, u8 weapon_slot, u32 render_time 
                          cmds[i] has seq newest_seq - i
 ```
 
-`weapon_slot`: 0 = primary, 1 = secondary, 2 / 3 / 4 = gadget slot 0 / 1 / 2.
+`weapon_slot`: 0 = primary, 1 = secondary, 2..5 = gadget slot 0..3.
 Bit 7 (`0x80`, REMOTE_CONTROL) means the player is driving a drone: the
 shared simulation keeps only the body's stance buttons (no movement or lean)
 and holsters the weapon, and the server applies the command to the player's
-newest drone instead (movement keys drive it relative to the view yaw, JUMP
+newest drone or armed camera of the kind in the selected gadget slot
+instead (cameras only look and spot; for drones, movement keys drive it relative to the view yaw, JUMP
 hops, FIRE spots the enemy closest to the view centre within ~5°, in range
 and in line of sight). With a
 gadget in hand the weapon is holstered by the shared simulation (no aiming,
@@ -179,7 +181,7 @@ f32 cooldown, f32 reload_timer, u8 reload_empty, f32 equip_timer
 u8  burst_left, u8 trigger_prev, u16 shots_fired
 f32 recoil_pitch, f32 recoil_yaw, f32 recover_timer, u32 shot_counter
 u8  health, u8 alive, f32 respawn_in
-3 × { u8 gadget_id, u8 count }      the local player's gadget slots
+4 × { u8 gadget_id, u8 count }      the local player's gadget slots
 -- other entities (≤ 64), sorted by id ascending, all present entities listed --
 u8  entity_count
   u16 id, u16 mask, fields in mask order:

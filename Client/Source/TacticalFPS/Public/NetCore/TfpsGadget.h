@@ -12,7 +12,11 @@
 
 namespace tfps
 {
-	enum class EGadgetKind : uint8_t { Frag = 0, Flash = 1, Smoke = 2, Breach = 3, Drone = 4 };
+	enum class EGadgetKind : uint8_t { Frag = 0, Flash = 1, Smoke = 2, Breach = 3, Drone = 4, Camera = 5, MotionSensor = 6, Jammer = 7 };
+
+	inline bool IsPlacedGadget(EGadgetKind K) { return K == EGadgetKind::Breach || K == EGadgetKind::Camera || K == EGadgetKind::MotionSensor || K == EGadgetKind::Jammer; }
+	inline bool IsGrenade(EGadgetKind K) { return K == EGadgetKind::Frag || K == EGadgetKind::Flash || K == EGadgetKind::Smoke; }
+	inline bool IsRemoteViewable(EGadgetKind K) { return K == EGadgetKind::Drone || K == EGadgetKind::Camera; }
 
 	struct GadgetDef
 	{

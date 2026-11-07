@@ -598,16 +598,30 @@ impl GameWorld {
                 p.body_pitch_q = cmd.pitch_q;
             }
             if remote {
-                // Drive the player's newest drone with this command.
+                // Drive / look through the player's newest device of the kind
+                // in the selected gadget slot (drone, or an armed camera).
                 let owner = p.id;
-                if let Some(d) = self
-                    .gadgets
-                    .iter()
-                    .filter(|g| g.owner == owner && g.kind == GadgetKind::Drone)
-                    .map(|g| g.id)
-                    .max()
-                {
-                    self.drone_cmds.push((d, cmd, pressed));
+                let stock = (p.weapon.active as usize)
+                    .checked_sub(SLOTS)
+                    .and_then(|s| p.gadgets.get(s).copied());
+                let kind = stock
+                    .and_then(|st| self.gadget_defs.get(st.id))
+                    .map(|d| d.kind)
+                    .filter(|k| k.is_remote_viewable());
+                if let Some(kind) = kind {
+                    if let Some(d) = self
+                        .gadgets
+                        .iter()
+                        .filter(|g| {
+                            g.owner == owner
+                                && g.kind == kind
+                                && (kind == GadgetKind::Drone || g.phase == phase::ARMED)
+                        })
+                        .map(|g| g.id)
+                        .max()
+                    {
+                        self.drone_cmds.push((d, cmd, pressed));
+                    }
                 }
             } else if pressed & buttons::FIRE != 0
                 && is_gadget_slot(p.weapon.active)
@@ -683,7 +697,7 @@ impl GameWorld {
         }
         player_hits.sort_by(|a, b| a.0.total_cmp(&b.0));
         // An enemy drone in the way stops the bullet (and is destroyed).
-        let drone = self.drone_hit(origin, dir, def.range, shooter_team);
+        let drone = self.device_hit(origin, dir, def.range, shooter_team);
         let range = drone.map_or(def.range, |d| d.0);
         player_hits.retain(|h| h.0 < range);
 
@@ -870,9 +884,9 @@ impl GameWorld {
         }
         self.destruction
             .explode_cells(&mut self.collision, center, radius, cell_damage);
-        // Drones in the blast are destroyed.
+        // Electronic devices in the blast are destroyed.
         self.gadgets
-            .retain(|g| g.kind != GadgetKind::Drone || g.pos.distance(&center) >= radius);
+            .retain(|g| !g.kind.is_device() || g.pos.distance(&center) >= radius);
         self.explosions.push((center, radius));
     }
 
@@ -894,10 +908,20 @@ impl GameWorld {
 
         // Detonating placed charges does not consume a charge or need stock.
         if def.kind == GadgetKind::Breach && aiming {
+            // Charges inside an enemy jammer's radius do not respond.
+            let jammers: Vec<(Vec3, f32)> = self
+                .gadgets
+                .iter()
+                .filter(|g| {
+                    g.kind == GadgetKind::Jammer && g.phase == phase::ARMED && g.team != team
+                })
+                .filter_map(|g| self.gadget_defs.get(g.def).map(|d| (g.pos, d.radius)))
+                .collect();
             let ready: Vec<u16> = self
                 .gadgets
                 .iter()
                 .filter(|g| g.owner == owner && g.def == def.id && g.phase == phase::ARMED)
+                .filter(|g| !jammers.iter().any(|(p, r)| p.distance(&g.pos) < *r))
                 .map(|g| g.id)
                 .collect();
             for id in ready {
@@ -973,13 +997,33 @@ impl GameWorld {
         let mut due: Vec<u16> = Vec::new();
         let mut gone: Vec<u16> = Vec::new();
         let mut spots: Vec<(u16, MoveInput)> = Vec::new();
+        let mut scans: Vec<u16> = Vec::new();
         let drone_cmds = std::mem::take(&mut self.drone_cmds);
+        // Armed jammers: (position, radius, team).
+        let jammers: Vec<(Vec3, f32, u8)> = self
+            .gadgets
+            .iter()
+            .filter(|g| g.kind == GadgetKind::Jammer && g.phase == phase::ARMED)
+            .filter_map(|g| {
+                self.gadget_defs
+                    .get(g.def)
+                    .map(|d| (g.pos, d.radius, g.team))
+            })
+            .collect();
+        let jammed = |pos: &Vec3, team: u8| {
+            jammers
+                .iter()
+                .any(|(jp, r, jt)| *jt != team && jp.distance(pos) < *r)
+        };
         for g in self.gadgets.iter_mut() {
             if g.kind == GadgetKind::Drone {
                 let Some(def) = self.gadget_defs.get(g.def) else {
                     continue;
                 };
-                let ctl = drone_cmds.iter().find(|c| c.0 == g.id);
+                let ctl = drone_cmds
+                    .iter()
+                    .find(|c| c.0 == g.id)
+                    .filter(|_| !jammed(&g.pos, g.team));
                 let (wish, jump) = match ctl {
                     Some((_, cmd, pressed)) => (drone_wish(cmd), pressed & buttons::JUMP != 0),
                     None => ((0.0, 0.0), false),
@@ -1024,7 +1068,30 @@ impl GameWorld {
                         g.timer -= dt;
                         if g.timer <= 0.0 {
                             g.phase = phase::ARMED;
+                            g.timer = 0.0;
                         }
+                        continue;
+                    }
+                    // Armed: the timer becomes the device's action cooldown.
+                    g.timer = (g.timer - dt).max(0.0);
+                    match g.kind {
+                        GadgetKind::Camera => {
+                            let ctl = drone_cmds.iter().find(|c| c.0 == g.id);
+                            if let Some((_, cmd, pressed)) = ctl {
+                                if pressed & buttons::FIRE != 0
+                                    && g.timer <= 0.0
+                                    && !jammed(&g.pos, g.team)
+                                {
+                                    g.timer = gadgets::SPOT_COOLDOWN;
+                                    spots.push((g.id, *cmd));
+                                }
+                            }
+                        }
+                        GadgetKind::MotionSensor if g.timer <= 0.0 => {
+                            g.timer = gadgets::SENSOR_INTERVAL;
+                            scans.push(g.id);
+                        }
+                        _ => {}
                     }
                 }
                 phase::SMOKING => {
@@ -1042,24 +1109,54 @@ impl GameWorld {
         self.gadgets.retain(|g| !gone.contains(&g.id));
         self.drone_cmds = drone_cmds;
         self.drone_cmds.clear();
-        for (drone, cmd) in spots {
-            self.drone_spot(drone, &cmd);
+        for (device, cmd) in spots {
+            self.device_spot(device, &cmd);
+        }
+        for sensor in scans {
+            self.sensor_scan(sensor);
         }
         for id in due {
             self.detonate(id);
         }
     }
 
-    /// A drone pings: the nearest enemy close to the centre of its camera
-    /// view, within range and in line of sight, is spotted for the team.
-    fn drone_spot(&mut self, drone: u16, cmd: &MoveInput) {
-        let Some(g) = self.gadgets.iter().find(|g| g.id == drone).cloned() else {
+    /// A motion sensor reports every enemy moving faster than its threshold
+    /// within its radius, through walls.
+    fn sensor_scan(&mut self, sensor: u16) {
+        let Some(g) = self.gadgets.iter().find(|g| g.id == sensor).cloned() else {
             return;
         };
         let Some(def) = self.gadget_defs.get(g.def).cloned() else {
             return;
         };
-        let cam = Vec3::new(g.pos.x, g.pos.y, g.pos.z + gadgets::DRONE_CAMERA_HEIGHT);
+        for p in &self.players {
+            let horiz = (p.state.vel.x * p.state.vel.x + p.state.vel.y * p.state.vel.y).sqrt();
+            if p.alive
+                && p.team != g.team
+                && horiz > def.speed
+                && p.state.pos.distance(&g.pos) < def.radius
+            {
+                self.events.push(GameEvent::Spotted {
+                    spotter: g.owner,
+                    team: g.team,
+                    target: p.id,
+                    pos: p.state.pos,
+                    duration: def.duration,
+                });
+            }
+        }
+    }
+
+    /// A drone or camera pings: the nearest enemy close to the centre of its
+    /// view, within range and in line of sight, is spotted for the team.
+    fn device_spot(&mut self, device: u16, cmd: &MoveInput) {
+        let Some(g) = self.gadgets.iter().find(|g| g.id == device).cloned() else {
+            return;
+        };
+        let Some(def) = self.gadget_defs.get(g.def).cloned() else {
+            return;
+        };
+        let cam = gadgets::device_camera(&g);
         let view = combat::direction(
             tfps_sim::math::dequantize_yaw_deg(cmd.yaw_q),
             tfps_sim::math::dequantize_pitch_deg(cmd.pitch_q),
@@ -1111,8 +1208,9 @@ impl GameWorld {
         }
     }
 
-    /// Nearest enemy drone hit by a ray within `max_t`: (t, drone id).
-    fn drone_hit(
+    /// Nearest enemy device (drone, camera, sensor, jammer) hit by a ray
+    /// within `max_t`: (t, gadget id).
+    fn device_hit(
         &self,
         origin: Vec3,
         dir: Vec3,
@@ -1121,12 +1219,15 @@ impl GameWorld {
     ) -> Option<(f32, u16)> {
         let mut best: Option<(f32, u16)> = None;
         for g in &self.gadgets {
-            if g.kind != GadgetKind::Drone || (!self.rules.friendly_fire && g.team == shooter_team)
-            {
+            if !g.kind.is_device() || (!self.rules.friendly_fire && g.team == shooter_team) {
                 continue;
             }
-            let half = self.gadget_defs.get(g.def).map_or(0.15, |d| d.radius);
-            let b = gadgets::drone_box(g.pos, half);
+            let b = if g.kind == GadgetKind::Drone {
+                let half = self.gadget_defs.get(g.def).map_or(0.15, |d| d.radius);
+                gadgets::drone_box(g.pos, half)
+            } else {
+                gadgets::device_box(g.pos)
+            };
             if let Some((t, _)) = combat::ray_aabb_interval(origin, dir, &b) {
                 if t <= max_t && best.is_none_or(|x| t < x.0) {
                     best = Some((t, g.id));
@@ -1148,7 +1249,10 @@ impl GameWorld {
         };
         let weapon = 0x80 | def.id;
         match def.kind {
-            GadgetKind::Drone => {}
+            GadgetKind::Drone
+            | GadgetKind::Camera
+            | GadgetKind::MotionSensor
+            | GadgetKind::Jammer => {}
             GadgetKind::Smoke => {
                 let s = &mut self.gadgets[idx];
                 s.phase = phase::SMOKING;
@@ -1905,5 +2009,213 @@ mod tests {
         assert_eq!(a.w.gadgets.len(), 1);
         a.w.remove_player(1);
         assert!(a.w.gadgets.is_empty());
+    }
+
+    /// Player 2 (team 1, defender) faces -X from x = 20. Places the gadget of
+    /// gadget slot `gslot` on a wall 1 m in front of it (x = 18.9..19).
+    fn defender_places(a: &mut Arena, gslot: u8) {
+        let at = |b: u16| MoveInput {
+            buttons: b,
+            yaw_q: quantize_yaw_deg(180.0),
+            pitch_q: quantize_pitch_deg(-10.0),
+            slot: 2 + gslot,
+        };
+        a.step(cmd(0), at(0), 30);
+        a.step(cmd(0), at(buttons::FIRE), 1);
+        a.step(cmd(0), at(0), 1);
+    }
+
+    const DEFENDER_WALL: &str = r#",{"min":[18.8,-3,0],"max":[19.0,3,3],"material":"concrete"}"#;
+
+    #[test]
+    fn wall_camera_is_placed_viewed_and_spots_but_one_bullet_kills_it() {
+        let mut a = Arena::new(DEFENDER_WALL, MatchRules::default());
+        defender_places(&mut a, 1); // camera
+        assert_eq!(a.w.gadgets.len(), 1, "camera placed on the wall");
+        let cam = a.w.gadgets[0].clone();
+        assert_eq!(cam.kind, GadgetKind::Camera);
+        assert!((cam.pos.x - 19.03).abs() < 0.01, "{cam:?}");
+        a.step(cmd(0), cmd(0), 40); // arm
+        assert_eq!(a.w.gadgets[0].phase, phase::ARMED);
+        // The camera is on the wall face at x = 19, facing the defender's side:
+        // put the attacker in front of it, at x = 22.
+        a.w.player_mut(1).unwrap().state.pos = Vec3::new(22.0, 0.0, 0.0);
+        let (dx, dz) = (22.0 - cam.pos.x, 1.08 - cam.pos.z);
+        let view = MoveInput {
+            buttons: 0,
+            yaw_q: 0,
+            pitch_q: quantize_pitch_deg(dz.atan2(dx).to_degrees()),
+            slot: 3 | REMOTE_CONTROL,
+        };
+        a.step(cmd(0), view, 1);
+        a.step(
+            cmd(0),
+            MoveInput {
+                buttons: buttons::FIRE,
+                ..view
+            },
+            1,
+        );
+        assert!(a.w.events.iter().any(|e| matches!(
+            e,
+            GameEvent::Spotted {
+                spotter: 2,
+                team: 1,
+                target: 1,
+                ..
+            }
+        )));
+        // The attacker shoots the camera (the defender steps out of the line of fire).
+        a.w.player_mut(2).unwrap().state.pos = Vec3::new(20.0, 2.5, 0.0);
+        let eye = Vec3::new(22.0, 0.0, movement::STAND_EYE);
+        let (ex, ez) = (cam.pos.x - eye.x, cam.pos.z - eye.z);
+        let shoot = MoveInput {
+            buttons: buttons::AIM,
+            yaw_q: quantize_yaw_deg(180.0),
+            pitch_q: quantize_pitch_deg(ez.atan2(-ex).to_degrees()),
+            slot: 0,
+        };
+        a.step(shoot, view, 32);
+        a.step(
+            MoveInput {
+                buttons: buttons::AIM | buttons::FIRE,
+                ..shoot
+            },
+            view,
+            1,
+        );
+        assert!(a.w.gadgets.is_empty(), "camera destroyed");
+    }
+
+    #[test]
+    fn motion_sensor_reports_running_enemies_through_walls_but_not_walking_ones() {
+        let mut a = Arena::new(DEFENDER_WALL, MatchRules::default());
+        defender_places(&mut a, 2); // motion sensor, on the defender's side of the wall
+        assert_eq!(a.w.gadgets[0].kind, GadgetKind::MotionSensor);
+        a.step(cmd(0), cmd(0), 70);
+        // Attacker walks on the other side of the concrete wall, 3 m away: not reported.
+        a.w.player_mut(1).unwrap().state.pos = Vec3::new(16.0, -2.0, 0.0);
+        let mut spotted = 0;
+        let walk = MoveInput {
+            buttons: buttons::RIGHT | buttons::WALK,
+            ..cmd(0)
+        };
+        for _ in 0..64 * 2 {
+            a.step(walk, cmd(0), 1);
+            spotted +=
+                a.w.events
+                    .iter()
+                    .filter(|e| matches!(e, GameEvent::Spotted { target: 1, .. }))
+                    .count();
+        }
+        assert_eq!(spotted, 0, "walking is silent");
+        a.w.player_mut(1).unwrap().state.pos = Vec3::new(16.0, -2.0, 0.0);
+        let run = MoveInput {
+            buttons: buttons::RIGHT,
+            ..cmd(0)
+        };
+        for _ in 0..64 * 2 {
+            a.step(run, cmd(0), 1);
+            spotted +=
+                a.w.events
+                    .iter()
+                    .filter(|e| {
+                        matches!(
+                            e,
+                            GameEvent::Spotted {
+                                target: 1,
+                                team: 1,
+                                ..
+                            }
+                        )
+                    })
+                    .count();
+        }
+        assert!(spotted >= 1, "running is detected through the wall");
+    }
+
+    #[test]
+    fn jammer_stops_enemy_drones_and_blocks_charge_detonation() {
+        let mut a = Arena::new("", MatchRules::default());
+        // A defender jammer (gadget id 8) in the middle of the arena.
+        let kind = a.w.gadget_defs.get(8).unwrap().kind;
+        a.w.spawn_gadget(GadgetEntity {
+            id: 0,
+            def: 8,
+            kind,
+            owner: 2,
+            team: 1,
+            pos: Vec3::new(4.0, 0.0, 0.05),
+            vel: Vec3::ZERO,
+            phase: phase::ARMED,
+            timer: 0.0,
+            attached_cell: None,
+        });
+        // Attacker deploys a drone right in front of itself (inside the 5 m radius).
+        let hold = slot_cmd(aim_at(0, 2.0, 0.0, 0.0), 4);
+        a.step(hold, cmd(0), 30);
+        a.step(slot_cmd(aim_at(buttons::FIRE, 2.0, 0.0, 0.0), 4), cmd(0), 1);
+        a.step(hold, cmd(0), 64);
+        let drone =
+            a.w.gadgets
+                .iter()
+                .find(|g| g.kind == GadgetKind::Drone)
+                .unwrap()
+                .pos;
+        let drive = MoveInput {
+            buttons: buttons::FORWARD,
+            yaw_q: 0,
+            pitch_q: 0,
+            slot: 4 | REMOTE_CONTROL,
+        };
+        a.step(drive, cmd(0), 64);
+        let after =
+            a.w.gadgets
+                .iter()
+                .find(|g| g.kind == GadgetKind::Drone)
+                .unwrap()
+                .pos;
+        assert!(
+            after.distance(&drone) < 0.05,
+            "jammed drone does not move: {drone:?} -> {after:?}"
+        );
+        // A breaching charge placed inside the radius cannot be detonated.
+        let wall = &mut a.w;
+        wall.collision.push_solid(
+            tfps_sim::Aabb {
+                min: Vec3::new(1.5, -3.0, 0.0),
+                max: Vec3::new(1.7, 3.0, 3.0),
+            },
+            tfps_sim::Material::Brick,
+            true,
+        );
+        a.w.destruction = Destruction::new(&a.w.collision);
+        let bh = slot_cmd(aim_at(0, 1.5, 0.0, 1.2), 3);
+        a.step(bh, cmd(0), 30);
+        a.step(slot_cmd(aim_at(buttons::FIRE, 1.5, 0.0, 1.2), 3), cmd(0), 1);
+        a.step(slot_cmd(aim_at(buttons::AIM, 1.5, 0.0, 1.2), 3), cmd(0), 70);
+        let charges = |w: &GameWorld| {
+            w.gadgets
+                .iter()
+                .filter(|g| g.kind == GadgetKind::Breach)
+                .count()
+        };
+        assert_eq!(charges(&a.w), 1);
+        a.step(
+            slot_cmd(aim_at(buttons::AIM | buttons::FIRE, 1.5, 0.0, 1.2), 3),
+            cmd(0),
+            1,
+        );
+        assert_eq!(charges(&a.w), 1, "jammed charge does not go off");
+        // Destroy the jammer with an explosion: now it works.
+        a.w.explode(Vec3::new(4.0, 0.0, 0.3), 1.0, 0.0, 0.0, Some(1), 0x81);
+        assert!(a.w.gadgets.iter().all(|g| g.kind != GadgetKind::Jammer));
+        a.step(slot_cmd(aim_at(buttons::AIM, 1.5, 0.0, 1.2), 3), cmd(0), 1);
+        a.step(
+            slot_cmd(aim_at(buttons::AIM | buttons::FIRE, 1.5, 0.0, 1.2), 3),
+            cmd(0),
+            1,
+        );
+        assert_eq!(charges(&a.w), 0);
     }
 }

@@ -38,6 +38,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Gadget2 = EKeys::Four;
 	/** Third gadget slot (attackers: drones; Fire deploys, then the drone is driven while the slot is held). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Gadget3 = EKeys::Five;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey Gadget4 = EKeys::Six;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey NextWeapon = EKeys::MouseScrollDown;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey PrevWeapon = EKeys::MouseScrollUp;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Keys") FKey ToggleNetStats = EKeys::F3;
@@ -95,5 +96,5 @@ private:
 	uint8 SelectedSlot = 0;
 	/** Weapon slot to return to after throwing a grenade. */
 	uint8 LastWeaponSlot = 0;
-	uint8 LastGadgetCount[tfps::kGadgetSlots] = {0, 0};
+	uint8 LastGadgetCount[tfps::kGadgetSlots] = {};
 };

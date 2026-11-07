@@ -20,7 +20,9 @@
 use crate::map::CollisionWorld;
 use crate::math::Vec3;
 use crate::movement::{buttons, simulate, MoveInput, MoveState};
-use crate::weapon::{simulate_player, ShotBuffer, WeaponDef, WeaponSet, WeaponState, SLOTS};
+use crate::weapon::{
+    simulate_player, ShotBuffer, WeaponDef, WeaponSet, WeaponState, GADGET_SLOTS, SLOTS,
+};
 use std::fmt::Write;
 
 pub const FORMAT_VERSION: u32 = 4;
@@ -190,7 +192,7 @@ pub fn generate(
                     }
                     if (r >> 45) & 31 == 0 {
                         // Gadget in hand (weapon holstered), sometimes remote-controlling.
-                        input.slot = (SLOTS as u64 + ((r >> 50) % 3)) as u8;
+                        input.slot = (SLOTS as u64 + ((r >> 50) % GADGET_SLOTS as u64)) as u8;
                         if (r >> 53) & 1 == 1 {
                             input.slot |= crate::weapon::REMOTE_CONTROL;
                         }

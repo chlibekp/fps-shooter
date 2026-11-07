@@ -4,7 +4,7 @@ Legend: ✅ implemented and tested · 🟡 partially implemented / implemented b
 not verified end-to-end · ❌ not started · 🔒 placeholder (explicitly marked
 temporary).
 
-Last updated: Phase 4, parts 1–2 (grenades, breaching charges, drones). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
+Last updated: Phase 4, parts 1–3 (grenades, breaching charges, drones, cameras, motion sensors, jammers). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
 
 ## Verification environment caveat
 
@@ -148,7 +148,7 @@ result:
 | Gadget entities replicated in snapshots; Flash message | ✅ | Protocol v4, Rust and C++ golden vectors |
 | Unreal: gadget keys (3/4), HUD gadget panel, flash white-out, gadget visuals | 🟡 🔒 | `ATfpsGadgetFx` uses engine shapes; mock-checked, not run |
 | Drones: deploy, remote control (body frozen by the shared simulation), hop, spot for the team, destroyed by one bullet or any explosion | ✅ server and NetCore / 🟡 🔒 Unreal | Unit and e2e tests. Drone motion is not predicted (camera follows snapshots). The Unreal drone camera, overlay and spot markers are only mock-checked. |
-| Cameras, motion sensors, jammers | ❌ | |
+| Wall cameras (place, view, spot), motion sensors (spot running enemies through walls), jammers (stop enemy drones, block charge detonation); all destroyed by one bullet or any explosion | ✅ server / 🟡 🔒 Unreal | Unit-tested; the camera view reuses the drone remote-control path |
 | Barricades (placeable), wall reinforcement | ❌ | |
 
 ## Frontend / UI (spec §11)

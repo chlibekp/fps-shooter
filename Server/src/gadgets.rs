@@ -197,8 +197,36 @@ pub const DRONE_CAMERA_HEIGHT: f32 = 0.1;
 /// Ground acceleration of a drone (m/s²); air control is much weaker.
 pub const DRONE_ACCEL: f32 = 25.0;
 pub const DRONE_AIR_ACCEL: f32 = 3.0;
-/// Seconds between two spot pings of the same drone.
+/// Seconds between two spot pings of the same drone or camera.
 pub const SPOT_COOLDOWN: f32 = 0.5;
+/// Seconds between two motion-sensor scans.
+pub const SENSOR_INTERVAL: f32 = 1.0;
+/// Half size of the hit box of placed devices (camera, sensor, jammer).
+pub const DEVICE_HALF: f32 = 0.08;
+
+/// Hit box of a placed device.
+pub fn device_box(pos: Vec3) -> Aabb {
+    Aabb {
+        min: Vec3::new(
+            pos.x - DEVICE_HALF,
+            pos.y - DEVICE_HALF,
+            pos.z - DEVICE_HALF,
+        ),
+        max: Vec3::new(
+            pos.x + DEVICE_HALF,
+            pos.y + DEVICE_HALF,
+            pos.z + DEVICE_HALF,
+        ),
+    }
+}
+
+/// Where a remote-viewable device looks from.
+pub fn device_camera(g: &GadgetEntity) -> Vec3 {
+    match g.kind {
+        GadgetKind::Drone => Vec3::new(g.pos.x, g.pos.y, g.pos.z + DRONE_CAMERA_HEIGHT),
+        _ => g.pos,
+    }
+}
 
 /// True if a drone at `pos` stands on something.
 pub fn drone_on_ground(world: &CollisionWorld, pos: Vec3) -> bool {

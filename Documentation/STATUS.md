@@ -4,7 +4,7 @@ Legend: ✅ implemented and tested · 🟡 partially implemented / implemented b
 not verified end-to-end · ❌ not started · 🔒 placeholder (explicitly marked
 temporary).
 
-Last updated: Milestone 1 (Phase 1 — Foundation).
+Last updated: Phase 2 (Gunplay) — server-side and NetCore complete, Unreal presentation mock-checked only.
 
 ## Verification environment caveat
 
@@ -56,8 +56,8 @@ result:
 | Server-side movement validation | ✅ | Movement is computed on the server from inputs only |
 | Map geometry hash check | ✅ | Client refuses mismatching map data |
 | Tick / packet / bandwidth statistics | ✅ | Logged periodically |
-| Lag compensation / server rewind | ❌ | Phase 2 (needs shooting) |
-| Server-side hit validation & damage | ❌ | Phase 2 |
+| Lag compensation / server rewind | ✅ | Phase 2 |
+| Server-side hit validation & damage | ✅ | Phase 2 |
 | Encryption | ❌ | Planned (X25519 + ChaCha20-Poly1305), see PROTOCOL.md |
 | Interest management / snapshot prioritisation | ❌ | Needed beyond about 60 entities per snapshot |
 | Multiple independent server instances | ✅ | Each process is self-contained (port per instance); orchestration ❌ |
@@ -68,26 +68,53 @@ result:
 |---------|--------|
 | Walk / run / sprint / slow walk | ✅ |
 | Crouch (with head-room check) | ✅ |
-| Jump (limited height ~0.49 m, 0.9 s cooldown) | ✅ |
+| Prone (0.8 s transitions; no moving or firing during them; head-room check to get up) | ✅ Prone collision is a low square box, a simplification noted in movement.rs |
+| Lean left/right (head clamped out of walls, blocked while sprinting/prone) | ✅ |
+| ADS (per-weapon ADS time; 60% movement speed at full ADS; blocks sprint) | ✅ |
+| Jump (limited height ~0.49 m, 0.9 s cooldown, not while crouched/prone) | ✅ |
 | Steps (≤ 0.35 m) and ground snapping | ✅ |
-| Prone | ❌ (input bit reserved) |
-| Lean left/right | ❌ (input bits reserved and sent) |
-| Vaulting, window climbing | ❌ |
-| ADS | ❌ (input bit reserved) |
-| Smooth camera transitions (stance, corrections) | 🟡 (Unreal pawn, not run) |
-| First/third-person animation | ❌ (no character assets yet) |
+| Vaulting, window climbing | ❌ (Phase 3, together with destructible openings) |
+| Camera: eye height smoothing, lean offset + roll, ADS FOV, correction smoothing | 🟡 (Unreal pawn, not run) |
+| First/third-person animation | ❌ No character assets. Remote players use 🔒 pose approximations (lean tilt, lying when prone or dead). |
 
-## Gunplay, destruction, gadgets, maps, audio, VFX (spec §4–§9)
+## Gunplay (spec §4) — Phase 2
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Data-driven weapons | ✅ | `Shared/Definitions/weapons.json`: AR-7 Carbine, K-9 SMG, M-308 Marksman, P-9 Pistol, SG-12 Breacher. Hash verified at connect. |
+| Fire modes auto / semi / 3-round burst, exact fire rate | ✅ | Burst is implemented and unit-tested via the state machine. No shipped weapon uses it yet. |
+| Magazine + chambered round, tactical (n+1) and empty reloads | ✅ | |
+| Weapon switching with equip time (two slots) | ✅ | |
+| Recoil: per-weapon pattern, seeded randomness, ADS/stance multipliers, recovery | ✅ | Deterministic: the server applies the same kick the client shows (no-recoil cheats gain nothing) |
+| Spread: hip/ADS cone, stance, movement and jump penalties | ✅ | Deterministic per shot |
+| Shotgun pellets | ✅ | |
+| Client prediction of weapon state (ammo, recoil, reload) | ✅ | Bit-exact with the server; 0 corrections in network tests |
+| Hitscan hit detection, server-side only | ✅ | |
+| Lag compensation (rewind to client render time, clamped to 250 ms) | ✅ | Unit-tested hit-when-rewound and clamp |
+| Hitboxes: head / torso / limbs; stance, lean and prone aware | ✅ | |
+| Damage falloff, head/limb multipliers, damage multiplier rule | ✅ | |
+| Health, death, respawn (configurable delay), kills/deaths | ✅ | |
+| Friendly fire rule | ✅ | Off by default |
+| Hit confirm, damage direction, kill feed messages | ✅ | |
+| Bullet penetration, material resistance | ❌ | Phase 3 (needs destructible materials) |
+| Armor | ❌ | Needs operator/loadout system |
+| Suppression effects | ❌ | |
+| Attachments (affect recoil/spread) | ❌ | The data model has room for multipliers |
+| Weapon inspection, shell ejection, weapon-specific animations, sound variation | ❌ | Needs art and audio assets |
+| Muzzle flash, tracers, impacts | 🟡 🔒 | Pooled engine-shape placeholders plus a point-light flash (`ATfpsShotFx`) |
+| HUD: health, ammo/mag/reserve, weapon, reload prompt, hit marker, damage direction, kill feed, death/respawn timer | 🟡 | Canvas HUD, not run |
+
+## Destruction, gadgets, maps, audio, VFX (spec §5–§9)
 
 | Area | Status |
 |------|--------|
-| Weapons, recoil, ballistics | ❌ Phase 2 |
 | Destruction | ❌ Phase 3. Map solids already carry materials. |
 | Gadgets / drones | ❌ Phase 4 |
 | Three production maps | ❌ Phase 5. `test_arena` is a graybox. |
-| Blender asset pipeline | ✅ Procedural, headless; 3 props (crate, jersey barrier, container) with LOD1, UCX collision and baked PBR maps |
+| Blender asset pipeline | ✅ Procedural, headless. 3 props (crate, jersey barrier, container) with LOD1, UCX collision and baked PBR maps. |
 | Props placed in the Unreal level | ❌ Needs editor import (documented in ASSET_PIPELINE.md) |
-| Audio, VFX | ❌ |
+| Weapon models | ❌ The viewmodel is a 🔒 placeholder box |
+| Audio | ❌ |
 
 ## Frontend / UI (spec §11)
 
@@ -103,7 +130,9 @@ result:
 | Placeholder | Where | Replaced by |
 |-------------|-------|-------------|
 | Engine `/Engine/BasicShapes/Cube` tinted per material for all map geometry | `ATfpsArenaBuilder` | Modular Blender kit + authored `.umap` (Phase 5) |
-| Engine cylinder/sphere/cube "mannequin" for remote players | `ATfpsRemotePlayer` | Rigged character + animation (Phase 2/7) |
+| Engine cylinder/sphere/cube "mannequin" for remote players, with pose approximations | `ATfpsRemotePlayer` | Rigged character + animation (Phase 7) |
+| Box viewmodel weapon | `ATfpsPlayerPawn::ViewWeapon` | Blender weapon models + first-person animations |
+| Tracers, impacts and muzzle flash from engine shapes and a point light | `ATfpsShotFx` | Niagara effects, decals, audio (Phase 7) |
 | Engine `Entry` map as the boot map, with the level built at runtime | `DefaultEngine.ini` | Authored maps (Phase 5) |
 | Canvas debug HUD | `ATfpsHUD` | UMG tactical HUD (Phase 7) |
 
@@ -119,6 +148,12 @@ result:
 * Downstream bandwidth grows with the number of moving players. With 31
   visible movers it is about 420 kbit/s per client at 128 snapshots/s. Smaller
   position deltas and a lower snapshot rate at 128 TPS are planned.
+* Upstream is about 123 kbit/s at 128 TPS: 11-byte commands × 8 redundancy.
+  Plan: adaptive redundancy based on measured loss, and delta-coding the
+  render time.
+* Shot events for remote players use the shooter's interpolated eye as the
+  tracer origin, so the tracer can start a few centimetres off the muzzle.
+  This is cosmetic only.
 * `ShippingContainer` corner castings bake dark (tiny UV islands).
 * The Unreal client has no main menu, so all settings come from the command
   line or `.ini` files.

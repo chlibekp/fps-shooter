@@ -129,3 +129,38 @@ geometry than the server.
 
 Final art is layered on top of this blockout (modular meshes from the Blender
 pipeline placed to match the gameplay volumes).
+
+## Decision 9 — Weapons are simulated deterministically on both sides; hits only on the server
+
+Weapon state (ammo, chamber, reload/equip timers, fire cooldown, recoil,
+spread) is part of the shared deterministic simulation, like movement. The
+client predicts it, so muzzle flashes, ammo counters and recoil react instantly.
+The server runs the identical code from the same inputs, so fire-rate,
+magazine and reload cheats are impossible: the server simply does not fire.
+
+Recoil is a *view kick* added to the aim angles by both sides. The client
+shows it on the camera; the server adds the same kick to the shot direction.
+A "no recoil" cheat that hides the kick only makes the camera disagree with
+where bullets go. The client sends its own view angles, so aiming itself is
+client-controlled, as in every shooter; aim-assist detection is a separate,
+statistical problem.
+
+Spread uses an integer hash of the per-player shot counter, so it is
+deterministic too, but the client cannot choose it.
+
+Hit detection is not predicted. The client draws a tracer immediately, and
+only the server decides hits (hit markers arrive with the next packet).
+Predicting hits would allow clients to claim them.
+
+## Decision 10 — Lag compensation by rewinding replicated state
+
+Each input command carries the client's render time (the server tick at which
+it was drawing other players). The server keeps a one-second history of the
+replicated (quantized) player states and interpolates targets to that time,
+exactly as the client did. Hitboxes are built from that state, including
+stance, lean and prone. The rewind is clamped to 250 ms and never into the
+future, which bounds "shot around the corner" situations and prevents
+clients from claiming arbitrary past states. World geometry is not rewound;
+it is static until destruction in Phase 3. Destruction events will need to
+be checked at the rewound time: a wall destroyed after the render time must
+still block the shot.

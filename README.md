@@ -4,17 +4,20 @@ A realistic, tactical multiplayer first-person shooter: an **Unreal Engine 5**
 client and an authoritative **Rust** dedicated server, with original assets
 built procedurally in **Blender**.
 
-**Status: Milestone 1 (Phase 1 — Foundation).** Players connect to the Rust
-server, move with client-side prediction and server reconciliation, and see
-each other move in a shared arena. This was verified end-to-end with the
-headless Rust and C++ clients. The Unreal client code has **not been compiled
-in Unreal yet**, because the development machine had no Unreal Engine; see
-[`Documentation/STATUS.md`](Documentation/STATUS.md).
+**Status: Phase 2 (Gunplay).** Players connect to the Rust server, move
+(run, sprint, crouch, prone, lean, ADS) with client-side prediction, and
+fight with data-driven weapons. The server resolves shots with
+lag-compensated hitscan, applies damage, kills and respawns, and reports hit
+confirms and a kill feed. All of this was verified end-to-end with the
+headless Rust and C++ clients. The Unreal client code has **not been
+compiled in Unreal yet**, because the development machine had no Unreal
+Engine; see [`Documentation/STATUS.md`](Documentation/STATUS.md).
 
 | Document | Contents |
 |----------|----------|
 | [STATUS.md](Documentation/STATUS.md) | Implemented / partial / missing features, placeholders, known issues |
-| [MILESTONE_1.md](Documentation/MILESTONE_1.md) | Milestone report: what was built and tested, performance numbers |
+| [MILESTONE_1.md](Documentation/MILESTONE_1.md) | Milestone 1 report: foundation, netcode, performance numbers |
+| [MILESTONE_2.md](Documentation/MILESTONE_2.md) | Phase 2 report: gunplay, combat, lag compensation |
 | [ARCHITECTURE.md](Documentation/ARCHITECTURE.md) | Architecture decisions and their reasons |
 | [PROTOCOL.md](Shared/Protocol/PROTOCOL.md) | Wire protocol v1 (byte level) |
 | [ASSET_PIPELINE.md](Documentation/ASSET_PIPELINE.md) | Blender → Unreal pipeline |
@@ -120,9 +123,10 @@ python3 Tools/AssetPipeline/build_assets.py
 
 ## In-game controls (Unreal client)
 
-WASD move · Mouse look · Shift sprint · Alt slow walk · Ctrl/C crouch · Space
-jump · F3 net stats · Esc release mouse. Lean (Q/E), aim, fire, prone, reload
-and use are sampled and sent to the server, but they have no effect yet
-(later phases).
+WASD move · Mouse look · Shift sprint · Alt slow walk · C toggle crouch (Ctrl
+hold) · Z toggle prone · Space jump · Q/E lean · Right mouse aim (ADS) · Left
+mouse fire · R reload · 1/2 or mouse wheel switch weapon · F3 net stats · Esc
+release mouse. Key bindings are in `[/Script/TacticalFPS.TfpsPlayerController]`
+of the input config.
 
 Client command line: `-connect=host:port -name=Name -map=test_arena`.

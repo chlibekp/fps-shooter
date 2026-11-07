@@ -1,4 +1,7 @@
-# TacticalFPS wire protocol — version 1
+# TacticalFPS wire protocol — version 2
+
+Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
+stance/lean/ADS, shot events).
 
 Implementations:
 
@@ -21,7 +24,7 @@ both sides.
 | Field | Type | Value |
 |-------|------|-------|
 | magic | u16 | `0x4654` (bytes `54 46`, "TF") |
-| version | u16 | `1` |
+| version | u16 | `2` |
 | type | u8 | packet type |
 
 Packet types: 1 ConnectRequest, 2 Challenge, 3 ChallengeResponse,
@@ -52,7 +55,9 @@ Client resends each step every 250 ms, gives up after 10 s.
   Phase 6 lobbies will require it).
 * **ConnectAccepted** (S→C): `u64 client_nonce, u64 session_key, u16 player_id,
   u16 tick_rate, u8 snapshot_interval, u32 server_tick, u64 reconnect_token,
-  u64 map_hash, str8 map_name`.
+  u64 map_hash, str8 map_name, u64 weapons_hash, u8 loadout[2]` (weapon ids of
+  the player's primary and secondary slot). The client refuses to play if its
+  `Shared/Definitions/weapons.json` hashes differently.
 * **ConnectRejected** (S→C): `u64 client_nonce, u8 reason`
   (1 ServerFull, 2 VersionMismatch, 3 InvalidChallenge, 4 InvalidName, 5 Unauthorized).
 
@@ -97,6 +102,9 @@ Message types (S→C):
 | 1 | PlayerJoined | `u16 player_id, u8 team, str8 name` |
 | 2 | PlayerLeft | `u16 player_id, u8 reason` (DisconnectReason) |
 | 3 | PlayerConnState | `u16 player_id, u8 state` (0 connected, 1 interrupted, 2 reconnecting) |
+| 4 | HitConfirm | `u16 victim, u8 damage, u8 flags` (bit0 headshot, bit1 killed) — to the shooter |
+| 5 | Damaged | `u16 attacker, u8 amount, u8 health, i32 from_mm[3]` (attacker position) — to the victim |
+| 6 | Kill | `u16 killer, u16 victim, u8 weapon_id, u8 headshot` — to everyone |
 
 ### Input body (kind 1, C→S)
 
@@ -104,21 +112,27 @@ Message types (S→C):
 u32 ack_snapshot_tick    newest snapshot the client decoded (delta baseline), 0 = none
 u32 newest_seq           sequence number of cmds[0] (starts at 1, +1 per client tick)
 u8  count                1..16
-count × { u16 buttons, u16 yaw_q, i16 pitch_q }   cmds[i] has seq newest_seq - i
+count × { u16 buttons, u16 yaw_q, i16 pitch_q, u8 weapon_slot, u32 render_time }
+                         cmds[i] has seq newest_seq - i
 ```
+
+`render_time` is the server tick (24.8 fixed point) at which the client was
+rendering remote players when it sampled the command. The server rewinds
+other players to that time when resolving the command's shots, clamped to
+at most `max_rewind` (default 250 ms) in the past and never into the future.
 
 The client sends one packet per simulation tick containing its newest
 commands (default 8, i.e. redundancy against loss).
 
-Buttons: bit0 forward, 1 back, 2 left, 3 right, 4 jump, 5 crouch, 6 sprint,
-7 walk, 8 lean left, 9 lean right, 10 aim, 11 fire, 12 prone, 13 reload, 14 use.
-Bit 15 is invalid and stripped.
+Buttons: bit0 forward, 1 back, 2 left, 3 right, 4 jump, 5 crouch (desired
+stance), 6 sprint, 7 walk, 8 lean left, 9 lean right, 10 aim, 11 fire,
+12 prone (desired stance), 13 reload, 14 use. Bit 15 is invalid and stripped.
 
 **Server processing rules (anti speed-hack):**
 the server simulates exactly one command per player per tick, in sequence
 order. If the expected command is missing, the previous command is repeated
 and the missing sequence number is skipped (it will be ignored if it arrives
-later). At most 16 future commands are buffered; when more than 6 are
+later). A repeated command never contains FIRE or RELOAD. At most 16 future commands are buffered; when more than 6 are
 buffered the oldest are dropped to bound latency.
 
 ### Snapshot body (kind 2, S→C)
@@ -128,18 +142,30 @@ u32 server_tick
 u32 baseline_tick        0 = full snapshot
 u32 last_cmd_seq         last command simulated for this client
 i8  input_buffer_depth   commands still queued for this client (-1 = starved this tick)
-f32×6 local pos, vel     exact authoritative state of the receiving player
-u8  local move flags     bit0 on_ground, bit1 crouched
-f32 local jump_timer
-u8  local health
-u8  entity_count (≤ 64), sorted by id ascending, all present entities listed:
-  u16 id, u8 mask, fields in mask order:
+-- local player, exact (prediction reconciliation) --
+f32×6 pos, vel
+u8  move flags           bit0 on_ground, bit1 crouched, bit2 prone
+f32 jump_timer, stance_timer, lean, aim
+u8  active weapon slot
+2 × { u16 ammo, u8 chambered, u16 reserve }
+f32 cooldown, f32 reload_timer, u8 reload_empty, f32 equip_timer
+u8  burst_left, u8 trigger_prev, u16 shots_fired
+f32 recoil_pitch, f32 recoil_yaw, f32 recover_timer, u32 shot_counter
+u8  health, u8 alive, f32 respawn_in
+-- other entities (≤ 64), sorted by id ascending, all present entities listed --
+u8  entity_count
+  u16 id, u16 mask, fields in mask order:
     bit0 i32 pos_x_mm, bit1 i32 pos_y_mm, bit2 i32 pos_z_mm,
     bit3 u16 yaw_q, bit4 i16 pitch_q, bit5 u8 flags, bit6 u8 health,
-    bit7 FULL (not in baseline: all fields present)
+    bit7 i8 lean (-127..127), bit8 u8 weapon_id, bit9 u8 aim (0..255),
+    bit15 FULL (not in baseline: all fields present)
+-- shot events (≤ 32): shots by other players since the previous snapshot --
+u8  shot_count
+  u16 shooter, u8 weapon_id, i32 end_mm[3], u8 surface   (0..7 map material, 0xFE player, 0xFF nothing)
 ```
 
-Entity flags: bit0 on_ground, bit1 crouched, bit2 sprinting, bit3 alive.
+Entity flags: bit0 on_ground, bit1 crouched, bit2 sprinting, bit3 alive,
+bit4 prone, bit5 reloading.
 
 Delta compression: the server keeps the last 32 snapshots sent to each client.
 If `ack_snapshot_tick` from the client is one of them, the next snapshot is
@@ -153,8 +179,10 @@ snapshot (and keeps acking an older one, so the server falls back).
 server needs them.
 
 **Prediction reconciliation:** on each snapshot, the client resets its
-predicted state to the `local` state at `last_cmd_seq`, then re-simulates all
-of its stored commands with seq > `last_cmd_seq`.
+predicted movement *and weapon* state to the `local` state at `last_cmd_seq`,
+then re-simulates all of its stored commands with seq > `last_cmd_seq`
+(shots are not re-emitted during replay). While dead the client does not
+predict.
 
 ## Disconnect (type 7)
 
@@ -174,7 +202,9 @@ of its stored commands with seq > `last_cmd_seq`.
 
 ## Security notes
 
-* The client never sends positions, hits or damage — only inputs.
+* The client never sends positions, hits or damage — only inputs. Fire rate,
+  ammunition, reload and switch times, recoil and spread are simulated by the
+  server from those inputs; the client's claimed render time is clamped.
 * Floats from the network are rejected if not finite.
 * View angles are quantized and validated by construction (u16/i16).
 * Session keys are random 64-bit values; reconnect tokens are random 64-bit

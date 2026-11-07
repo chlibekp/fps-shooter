@@ -693,13 +693,24 @@ impl Client {
     }
 
     fn reconcile(&mut self, acked_seq: u32, server: MoveState) {
-        if acked_seq == 0 || acked_seq > self.cmd_seq {
-            // Server has not simulated any of our commands yet (or we just
-            // reconnected): adopt its state.
-            if acked_seq == 0 {
-                self.predicted = server;
-                self.have_authoritative = true;
+        if acked_seq > self.cmd_seq {
+            return;
+        }
+        if acked_seq == 0 {
+            // Server has not simulated any of our commands yet: `server` is the
+            // spawn state. Re-predict every pending command from it so their
+            // stored predictions are not based on the pre-spawn origin.
+            let mut state = server;
+            for seq in 1..=self.cmd_seq {
+                let rec = &mut self.history[seq as usize % CMD_HISTORY];
+                if rec.seq != seq {
+                    continue;
+                }
+                simulate(&mut state, &rec.input, self.dt, &self.world);
+                rec.after = state;
             }
+            self.predicted = state;
+            self.have_authoritative = true;
             return;
         }
         let rec = self.history[acked_seq as usize % CMD_HISTORY];

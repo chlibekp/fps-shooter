@@ -388,14 +388,27 @@ namespace tfps
 
 	void ClientCore::Reconcile(uint32_t AckedSeq, const MoveState& Server)
 	{
-		if (AckedSeq == 0 || AckedSeq > CmdSeq)
+		if (AckedSeq > CmdSeq)
 		{
-			if (AckedSeq == 0)
+			return;
+		}
+		if (AckedSeq == 0)
+		{
+			// Server has not simulated any of our commands yet: Server is the
+			// spawn state. Re-predict every pending command from it so their
+			// stored predictions are not based on the pre-spawn origin.
+			MoveState State = Server;
+			PrevPredictedState = Server;
+			for (uint32_t Seq = 1; Seq <= CmdSeq; ++Seq)
 			{
-				PredictedState = Server;
-				PrevPredictedState = Server;
-				bHaveAuthoritative = true;
+				FCmdRecord& Rec = History[Seq % kCmdHistory];
+				if (Rec.Seq != Seq) { continue; }
+				PrevPredictedState = State;
+				Simulate(State, Rec.Input, Dt, Collision);
+				Rec.After = State;
 			}
+			PredictedState = State;
+			bHaveAuthoritative = true;
 			return;
 		}
 		const FCmdRecord Acked = History[AckedSeq % kCmdHistory];

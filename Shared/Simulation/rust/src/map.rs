@@ -492,7 +492,7 @@ mod tests {
         for id in ids {
             destroyed += w.destroy_cell(id) as u32;
         }
-        assert!(destroyed >= 2 && destroyed <= 6, "{destroyed}");
+        assert!((2..=6).contains(&destroyed), "{destroyed}");
         assert!(!w.overlaps_any(&probe));
         let first = w.destroyed_cells().next().unwrap();
         assert!(!w.destroy_cell(first));

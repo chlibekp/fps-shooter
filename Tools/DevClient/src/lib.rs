@@ -180,8 +180,12 @@ pub struct RemotePlayer {
 pub struct NetStats {
     pub packets_sent: u64,
     pub packets_received: u64,
-    /// Datagrams from other addresses (or without a usable address), ignored.
+    /// Datagrams from other addresses, ignored.
     pub packets_foreign: u64,
+    /// Receives that returned no usable source address (ignored; seen on macOS).
+    pub packets_no_address: u64,
+    /// Length of the last such datagram.
+    pub last_no_address_len: usize,
     pub bytes_sent: u64,
     pub bytes_received: u64,
     pub snapshots_received: u64,
@@ -599,9 +603,20 @@ impl Client {
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(_) => break, // e.g. ICMP unreachable on Windows; keep going next frame
             };
-            if from != Some(self.cfg.server) {
-                self.stats.packets_foreign += 1;
-                continue;
+            match from {
+                None => {
+                    // macOS can report a datagram without a usable source
+                    // address, repeatedly; stop for this update instead of
+                    // spinning on it.
+                    self.stats.packets_no_address += 1;
+                    self.stats.last_no_address_len = n;
+                    break;
+                }
+                Some(a) if a != self.cfg.server => {
+                    self.stats.packets_foreign += 1;
+                    continue;
+                }
+                Some(_) => {}
             }
             if self.lose() {
                 continue;

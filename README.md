@@ -4,7 +4,7 @@ A realistic, tactical multiplayer first-person shooter: an **Unreal Engine 5**
 client and an authoritative **Rust** dedicated server, with original assets
 built procedurally in **Blender**.
 
-**Status: Phase 6 (Lobby and game modes).** Players connect to the Rust server, move
+**Status: Phase 7 (polish): menus, procedural audio, particle effects, release packaging.** All seven roadmap phases are implemented; the Unreal client is still only mock-compiled (see [MILESTONE_7.md](Documentation/MILESTONE_7.md)). Players connect to the Rust server, move
 (run, sprint, crouch, prone, lean, ADS) with client-side prediction, and
 fight with data-driven weapons. The server resolves shots with
 lag-compensated hitscan, bullet penetration and damage. Walls, windows,
@@ -29,6 +29,7 @@ Engine; see [`Documentation/STATUS.md`](Documentation/STATUS.md).
 | [MILESTONE_4.md](Documentation/MILESTONE_4.md) | Phase 4 report: gadgets, drones, barricades, reinforcement |
 | [MILESTONE_5.md](Documentation/MILESTONE_5.md) | Phase 5 report: three maps, map validation, asset kit and gadget models |
 | [MILESTONE_6.md](Documentation/MILESTONE_6.md) | Phase 6 report: game modes, rounds, lobby with invite codes |
+| [MILESTONE_7.md](Documentation/MILESTONE_7.md) | Phase 7 report: packet budget, menus, audio, particles, playable releases |
 | [LOBBY.md](Documentation/LOBBY.md) | Lobby service, menus, API and console commands |
 | [AUDIO.md](Documentation/AUDIO.md) | Procedural sound synthesis, tests and playback |
 | [VFX.md](Documentation/VFX.md) | Particle effects: impacts, explosions, smoke clouds, breaking |

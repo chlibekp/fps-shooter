@@ -4,7 +4,7 @@ Legend: ✅ implemented and tested · 🟡 partially implemented / implemented b
 not verified end-to-end · ❌ not started · 🔒 placeholder (explicitly marked
 temporary).
 
-Last updated: Phase 6 (game modes, match flow, lobby with invite codes). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
+Last updated: Phase 7 (snapshot byte budget, menus and settings, procedural audio, particle effects, playable release downloads). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
 
 ## Verification environment caveat
 
@@ -180,7 +180,7 @@ result:
 | Placeholder | Where | Replaced by |
 |-------------|-------|-------------|
 | Engine `/Engine/BasicShapes/Cube` tinted per material for all map geometry | `ATfpsArenaBuilder` | Modular Blender kit + authored `.umap` (Phase 5) |
-| Engine cylinder/sphere/cube "mannequin" for remote players, with pose approximations | `ATfpsRemotePlayer` | Rigged character + animation (Phase 7) |
+| Engine cylinder/sphere/cube "mannequin" for remote players, with pose approximations | `ATfpsRemotePlayer` | Rigged character + animation (not started) |
 | Box viewmodel weapon | `ATfpsPlayerPawn::ViewWeapon` | Blender weapon models + first-person animations |
 | Tracers, impacts and muzzle flash from engine shapes and a point light | `ATfpsShotFx` | Niagara effects, decals |
 | Particles drawn as tinted engine spheres / cubes (opaque; fading shown by shrinking), plus the sphere-and-light explosion | `ATfpsParticleFx`, `ATfpsShotFx` | Niagara systems with authored textures; Chaos fracture |

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdarg>
 #include <cwchar>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <set>
@@ -48,6 +49,8 @@ template <typename T> struct TArray : std::vector<T>
 	void Reset() { this->clear(); }
 	bool IsValidIndex(int32 I) const { return I >= 0 && I < Num(); }
 	T& Last() { return this->back(); }
+	void SetNumUninitialized(int32 N) { this->resize(static_cast<size_t>(N)); }
+	T* GetData() { return this->data(); } const T* GetData() const { return this->data(); }
 };
 constexpr int32 INDEX_NONE = -1;
 struct FString
@@ -78,8 +81,10 @@ struct FText { static FText FromString(const FString&) { return FText(); } };
 struct FName { std::wstring N; FName() = default; FName(const TCHAR* In) : N(In ? In : L"") {} FString ToString() const { return FString(N.c_str()); } bool operator<(const FName& O) const { return N < O.N; } bool operator==(const FName& O) const { return N == O.N; } };
 static const FName NAME_None; static const FName NAME_DGram;
 enum class ESPMode { NotThreadSafe, ThreadSafe };
-template <typename T, ESPMode M = ESPMode::ThreadSafe> struct TSharedRef : std::shared_ptr<T> { using std::shared_ptr<T>::shared_ptr; };
-template <typename T, ESPMode M = ESPMode::ThreadSafe> struct TSharedPtr : std::shared_ptr<T> { TSharedPtr() = default; TSharedPtr(const TSharedRef<T, M>& R) : std::shared_ptr<T>(R) {} bool IsValid() const { return this->get() != nullptr; } };
+template <typename T, ESPMode M = ESPMode::ThreadSafe> struct TSharedRef : std::shared_ptr<T> { using std::shared_ptr<T>::shared_ptr; TSharedRef(std::shared_ptr<T> P) : std::shared_ptr<T>(std::move(P)) {} };
+template <typename T, ESPMode M = ESPMode::ThreadSafe> struct TSharedPtr : std::shared_ptr<T> { TSharedPtr() = default; TSharedPtr(const TSharedRef<T, M>& R) : std::shared_ptr<T>(R) {} template <typename U> TSharedPtr(const TSharedPtr<U, M>& O) : std::shared_ptr<T>(O) {} template <typename U> TSharedPtr(const TSharedRef<U, M>& O) : std::shared_ptr<T>(O) {} bool IsValid() const { return this->get() != nullptr; } };
+template <typename T, ESPMode M = ESPMode::ThreadSafe, typename... A> TSharedRef<T, M> MakeShared(A&&... Args) { return TSharedRef<T, M>(std::make_shared<T>(std::forward<A>(Args)...)); }
+struct FMemory { static void* Memcpy(void* D, const void* S, size_t N) { return std::memcpy(D, S, N); } };
 struct FCString { static int32 Atoi(const TCHAR* S) { return static_cast<int32>(std::wcstol(S, nullptr, 10)); } static float Atof(const TCHAR* S) { return std::wcstof(S, nullptr); } };
 template <typename A, typename B> struct TPair { A Key; B Value; TPair() = default; TPair(const A& InA, const B& InB) : Key(InA), Value(InB) {} };
 template <typename K, typename V> struct TMap
@@ -112,6 +117,7 @@ template <typename K, typename V> struct TMap
 	RangeIt begin() const { return RangeIt{M.begin()}; }
 	RangeIt end() const { return RangeIt{M.end()}; }
 };
+template <typename T> struct TWeakObjectPtr { T* P = nullptr; TWeakObjectPtr() = default; TWeakObjectPtr(T* In) : P(In) {} bool IsValid() const { return P != nullptr; } T* Get() const { return P; } T* operator->() const { return P; } void Reset() { P = nullptr; } };
 template <typename T> struct TSet { std::set<T> S; void Add(const T& V) { S.insert(V); } bool Contains(const T& V) const { return S.count(V) != 0; } };
 template <typename T> struct TObjectPtr
 {
@@ -127,6 +133,7 @@ struct FVector
 	double X = 0, Y = 0, Z = 0;
 	static const FVector ZeroVector;
 	static double DotProduct(const FVector& A, const FVector& B) { return A.X * B.X + A.Y * B.Y + A.Z * B.Z; }
+	bool Equals(const FVector& O, double Tol = 1e-4) const { return std::abs(X - O.X) <= Tol && std::abs(Y - O.Y) <= Tol && std::abs(Z - O.Z) <= Tol; }
 	FVector() = default; FVector(double A, double B, double C) : X(A), Y(B), Z(C) {} explicit FVector(double A) : X(A), Y(A), Z(A) {}
 	FVector operator+(const FVector& O) const { return {X + O.X, Y + O.Y, Z + O.Z}; }
 	FVector operator-(const FVector& O) const { return {X - O.X, Y - O.Y, Z - O.Z}; }
@@ -363,7 +370,30 @@ public:
 	virtual bool IsTickableWhenPaused() const { return false; }
 	virtual ETickableTickType GetTickableTickType() const { return ETickableTickType::Conditional; }
 };
-struct UGameplayStatics { static APlayerCameraManager* GetPlayerCameraManager(const UObject*, int32) { return nullptr; } };
+// ---- Audio --------------------------------------------------------------------
+#define INDEFINITELY_LOOPING_DURATION 10000.0f
+enum ESoundGroup { SOUNDGROUP_Default };
+class USoundBase : public UObject { public: float Duration = 0.0f; };
+class USoundWave : public USoundBase { public: int32 NumChannels = 0; uint8 bLooping : 1; ESoundGroup SoundGroup = SOUNDGROUP_Default; void SetSampleRate(int32) {} };
+class USoundWaveProcedural;
+struct FOnSoundWaveProceduralUnderflow
+{
+	std::function<void(USoundWaveProcedural*, int32)> F;
+	template <typename L> static FOnSoundWaveProceduralUnderflow CreateLambda(L&& Fn) { FOnSoundWaveProceduralUnderflow D; D.F = Fn; return D; }
+};
+class USoundWaveProcedural : public USoundWave { public: FOnSoundWaveProceduralUnderflow OnSoundWaveProceduralUnderflow; void QueueAudio(const uint8*, const int32) {} };
+enum class EAttenuationShape { Sphere };
+enum class EAttenuationDistanceModel { Linear, NaturalSound };
+struct FSoundAttenuationSettings { bool bAttenuate = true, bSpatialize = true; EAttenuationShape AttenuationShape = EAttenuationShape::Sphere; FVector AttenuationShapeExtents; float FalloffDistance = 3600.0f; EAttenuationDistanceModel DistanceAlgorithm = EAttenuationDistanceModel::Linear; };
+class USoundAttenuation : public UObject { public: FSoundAttenuationSettings Attenuation; };
+class UAudioComponent : public USceneComponent { public: void Stop() {} void SetVolumeMultiplier(float) {} bool IsPlaying() const { return false; } };
+struct UGameplayStatics
+{
+	static APlayerCameraManager* GetPlayerCameraManager(const UObject*, int32) { return nullptr; }
+	static void PlaySoundAtLocation(const UObject*, USoundBase*, FVector, float = 1.f, float = 1.f, float = 0.f, USoundAttenuation* = nullptr) {}
+	static void PlaySound2D(const UObject*, USoundBase*, float = 1.f, float = 1.f, float = 0.f) {}
+	static UAudioComponent* SpawnSoundAtLocation(const UObject*, USoundBase*, FVector, FRotator = FRotator::ZeroRotator, float = 1.f, float = 1.f, float = 0.f, USoundAttenuation* = nullptr) { return nullptr; }
+};
 
 // ---- Sockets ----------------------------------------------------------------
 enum ESocketErrors { SE_NO_ERROR, SE_ERROR };

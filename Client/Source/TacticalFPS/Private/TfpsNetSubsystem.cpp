@@ -1,5 +1,6 @@
 // Copyright TacticalFPS project.
 #include "TfpsNetSubsystem.h"
+#include "TfpsAudioSubsystem.h"
 #include "TacticalFPS.h"
 #include "TfpsMapLoader.h"
 
@@ -181,6 +182,7 @@ void UTfpsNetSubsystem::PushEvent(const FString& Text)
 
 void UTfpsNetSubsystem::HandleEvents()
 {
+	UTfpsAudioSubsystem* Audio = GetGameInstance() ? GetGameInstance()->GetSubsystem<UTfpsAudioSubsystem>() : nullptr;
 	tfps::ClientEvent Event;
 	while (Core && Core->PollEvent(Event))
 	{
@@ -209,11 +211,13 @@ void UTfpsNetSubsystem::HandleEvents()
 			HitMarker.Time = FPlatformTime::Seconds();
 			HitMarker.bHeadshot = Event.bHeadshot;
 			HitMarker.bKill = Event.bKilled;
+			if (Audio) { Audio->Play2D(Event.bKilled ? tfps::audio::Cue::KillConfirm : tfps::audio::Cue::HitMarker); }
 			break;
 		case tfps::ClientEvent::EType::Damaged:
 			DamageIndicator.Time = FPlatformTime::Seconds();
 			DamageIndicator.FromMeters = FVector(Event.From.X, Event.From.Y, Event.From.Z);
 			DamageIndicator.Amount = Event.Amount;
+			if (Audio) { Audio->Play2D(tfps::audio::Cue::ImpactFlesh, 0.8f); }
 			break;
 		case tfps::ClientEvent::EType::Explosion:
 			if (PendingExplosions.Num() < 32)
@@ -226,10 +230,12 @@ void UTfpsNetSubsystem::HandleEvents()
 			const tfps::MatchInfo& M = Core->Match();
 			if (M.Phase == tfps::MatchPhase::Prep)
 			{
+				if (Audio) { Audio->Play2D(tfps::audio::Cue::RoundStart); }
 				PushEvent(FString::Printf(TEXT("Round %d: %s"), static_cast<int32>(M.Round), Core->Side() == 0 ? TEXT("attack") : TEXT("defend")));
 			}
 			else if ((M.Phase == tfps::MatchPhase::RoundEnd || M.Phase == tfps::MatchPhase::MatchOver) && M.LastWinner != 255)
 			{
+				if (Audio) { Audio->Play2D(M.LastWinner == Core->Squad() ? tfps::audio::Cue::RoundWin : tfps::audio::Cue::RoundLose); }
 				PushEvent(FString::Printf(TEXT("%s %d - %d"), M.LastWinner == Core->Squad() ? TEXT("Round won") : TEXT("Round lost"),
 					static_cast<int32>(M.Score[Core->Squad()]), static_cast<int32>(M.Score[Core->Squad() ^ 1])));
 			}
@@ -253,6 +259,14 @@ void UTfpsNetSubsystem::HandleEvents()
 			if (PendingFlashes.Num() < 16)
 			{
 				PendingFlashes.Add(FVector(Event.From.X, Event.From.Y, Event.From.Z));
+			}
+			if (Audio)
+			{
+				Audio->PlayAt(tfps::audio::Cue::Flashbang, FVector(Event.From.X, Event.From.Y, Event.From.Z) * TfpsMetersToUnreal);
+				if (Event.Intensity > 0.3f)
+				{
+					Audio->Play2D(tfps::audio::Cue::Tinnitus, Event.Intensity);
+				}
 			}
 			if (Event.Intensity > 0.0f)
 			{

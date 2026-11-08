@@ -60,6 +60,7 @@ void ATfpsGameMode::SyncRemotePlayers()
 	const UTfpsNetSubsystem* Net = GetGameInstance() ? GetGameInstance()->GetSubsystem<UTfpsNetSubsystem>() : nullptr;
 	const tfps::ClientCore* Core = Net ? Net->GetCore() : nullptr;
 
+	UTfpsAudioSubsystem* Audio = GetGameInstance() ? GetGameInstance()->GetSubsystem<UTfpsAudioSubsystem>() : nullptr;
 	TSet<int32> Alive;
 	if (Core != nullptr && Core->IsConnected())
 	{
@@ -81,8 +82,31 @@ void ATfpsGameMode::SyncRemotePlayers()
 			if (Actor != nullptr)
 			{
 				const tfps::EntityState& Latest = P.Samples.back().second;
-				Actor->ApplyState(FVector(P.RenderPos.X, P.RenderPos.Y, P.RenderPos.Z), P.RenderYawDeg, P.RenderPitchDeg, P.Flags,
+				const FVector Feet(P.RenderPos.X, P.RenderPos.Y, P.RenderPos.Z);
+				Actor->ApplyState(Feet, P.RenderYawDeg, P.RenderPitchDeg, P.Flags,
 					Latest.Lean(), Latest.Weapon, UTF8_TO_TCHAR(P.Name.c_str()), P.Team, P.ConnState != tfps::EConnState::Connected);
+				FRemoteSound& Snd = RemoteSounds.FindOrAdd(P.Id);
+				const bool bAliveNow = (P.Flags & tfps::EntityFlags::Alive) != 0;
+				if (Audio != nullptr && bAliveNow)
+				{
+					// Sprinting is loud, crouching quiet (sound tells where enemies are).
+					const bool bSprint = (P.Flags & tfps::EntityFlags::Sprinting) != 0;
+					const bool bQuiet = (P.Flags & (tfps::EntityFlags::Crouched | tfps::EntityFlags::Prone)) != 0;
+					bool bLanded = false;
+					if (Snd.Steps.Update(Feet, (P.Flags & tfps::EntityFlags::OnGround) != 0, bSprint ? 2.2f : 1.7f, bLanded))
+					{
+						Audio->Footstep(Net->GetMap(), Feet, bSprint ? 1.0f : (bQuiet ? 0.35f : 0.7f), false);
+					}
+					if (bLanded)
+					{
+						Audio->PlayAt(tfps::audio::Cue::Land, Feet * TfpsMetersToUnreal);
+					}
+					if ((P.Flags & tfps::EntityFlags::Reloading) != 0 && (Snd.Flags & tfps::EntityFlags::Reloading) == 0)
+					{
+						Audio->PlayAt(tfps::audio::Cue::MagOut, Feet * TfpsMetersToUnreal + FVector(0.0, 0.0, 120.0));
+					}
+				}
+				Snd.Flags = P.Flags;
 			}
 		}
 	}
@@ -94,6 +118,7 @@ void ATfpsGameMode::SyncRemotePlayers()
 			{
 				It.Value()->Destroy();
 			}
+			RemoteSounds.Remove(It.Key());
 			It.RemoveCurrent();
 		}
 	}

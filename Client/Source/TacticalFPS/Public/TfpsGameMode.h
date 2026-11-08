@@ -4,6 +4,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 
+#include "TfpsAudioSubsystem.h"
+
 #include "TfpsGameMode.generated.h"
 
 class ATfpsRemotePlayer;
@@ -30,4 +32,7 @@ private:
 
 	UPROPERTY()
 	TMap<int32, TObjectPtr<ATfpsRemotePlayer>> RemoteActors;
+	/** Footstep / reload sound state per remote player. */
+	struct FRemoteSound { FTfpsStepTracker Steps; uint8 Flags = 0; };
+	TMap<int32, FRemoteSound> RemoteSounds;
 };

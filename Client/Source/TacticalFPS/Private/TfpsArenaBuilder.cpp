@@ -1,5 +1,6 @@
 // Copyright TacticalFPS project.
 #include "TfpsArenaBuilder.h"
+#include "TfpsAudioSubsystem.h"
 
 #include <cstring>
 #include "TacticalFPS.h"
@@ -47,25 +48,36 @@ void ATfpsArenaBuilder::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	UTfpsAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UTfpsAudioSubsystem>();
 	if (Net->GetMap() != nullptr && Net->GetMapRevision() != BuiltRevision)
 	{
 		BuiltRevision = Net->GetMapRevision();
 		Rebuild();
+		// The map's own solids are not "placed" barricades: no sound for them.
+		Audio = nullptr;
 	}
 	// Solids added at runtime (barricades) must exist before their cells can be destroyed.
 	if (const tfps::ClientCore* Core = Net->GetCore())
 	{
 		const tfps::CollisionWorld& World = Core->World();
+		auto Centre = [](const tfps::WorldSolid& S)
+		{
+			return FVector((S.Bounds.Min.X + S.Bounds.Max.X) * 0.5f, (S.Bounds.Min.Y + S.Bounds.Max.Y) * 0.5f,
+				(S.Bounds.Min.Z + S.Bounds.Max.Z) * 0.5f) * TfpsMetersToUnreal;
+		};
 		while (BuiltRevision >= 0 && BuiltSolids < static_cast<int32>(World.Solids.size()))
 		{
-			AddSolid(World.Solids[static_cast<size_t>(BuiltSolids)]);
+			const tfps::WorldSolid& Added = World.Solids[static_cast<size_t>(BuiltSolids)];
+			AddSolid(Added);
 			++BuiltSolids;
+			if (Audio != nullptr) { Audio->PlayAt(tfps::audio::Cue::BarricadePlace, Centre(Added)); }
 		}
 		for (const uint32 Index : Net->GetPendingReinforced())
 		{
 			if (Index < World.Solids.size())
 			{
 				ReinforceSolid(World.Solids[Index]);
+				if (Audio != nullptr) { Audio->PlayAt(tfps::audio::Cue::Reinforce, Centre(World.Solids[Index])); }
 			}
 		}
 	}
@@ -75,6 +87,26 @@ void ATfpsArenaBuilder::Tick(float DeltaSeconds)
 		RemoveCell(Cell);
 	}
 	Net->GetPendingDestroyedCells().Reset();
+	// One breaking sound per material per frame, at the middle of what broke.
+	UTfpsAudioSubsystem* BreakAudio = GetGameInstance()->GetSubsystem<UTfpsAudioSubsystem>();
+	for (const TPair<uint8, FBreakSound>& B : BreakSounds)
+	{
+		if (BreakAudio == nullptr || B.Value.Count == 0)
+		{
+			continue;
+		}
+		tfps::audio::Cue Cue = tfps::audio::Cue::WallBreak;
+		switch (static_cast<tfps::EMaterial>(B.Key))
+		{
+		case tfps::EMaterial::Glass: Cue = tfps::audio::Cue::GlassBreak; break;
+		case tfps::EMaterial::Wood: Cue = tfps::audio::Cue::WoodBreak; break;
+		case tfps::EMaterial::Metal:
+		case tfps::EMaterial::Reinforced: Cue = tfps::audio::Cue::ImpactMetal; break;
+		default: break;
+		}
+		BreakAudio->PlayAt(Cue, B.Value.Sum / static_cast<double>(B.Value.Count), FMath::Min(1.0f, 0.6f + 0.05f * B.Value.Count));
+	}
+	BreakSounds.Reset();
 	for (int32 I = 0; I < Debris.Num(); ++I)
 	{
 		if (DebrisLife[I] > 0.0f)
@@ -291,7 +323,11 @@ void ATfpsArenaBuilder::RemoveCell(uint32 Cell)
 	// Collapse the instance instead of removing it (keeps instance indices stable).
 	ISM->UpdateInstanceTransform(Where->Value, FTransform(FRotator::ZeroRotator, Center, FVector(0.001)), /*bWorldSpace=*/true,
 		/*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
-	SpawnDebris(Center, Size, MeshMaterial.IsValidIndex(Where->Key) ? MeshMaterial[Where->Key] : 0);
+	const uint8 Material = MeshMaterial.IsValidIndex(Where->Key) ? MeshMaterial[Where->Key] : 0;
+	SpawnDebris(Center, Size, Material);
+	FBreakSound& Break = BreakSounds.FindOrAdd(Material);
+	Break.Sum = Break.Sum + Center;
+	++Break.Count;
 	CellInstances.Remove(Cell);
 }
 

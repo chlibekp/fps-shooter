@@ -152,6 +152,10 @@ void ATfpsPlayerController::ApplyUserSettings()
 	{
 		TfpsPawn->FieldOfView = Prefs.FieldOfView;
 	}
+	if (UTfpsAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UTfpsAudioSubsystem>())
+	{
+		Audio->SetVolumes(Prefs.MasterVolume, Prefs.EffectsVolume);
+	}
 }
 
 void ATfpsPlayerController::SetMenuInputMode(bool bOpen)
@@ -277,15 +281,30 @@ void ATfpsPlayerController::TickMenu()
 			if (WasInputKeyJustPressed(EKeys::LeftMouseButton)) { Menu.OnClick(X, Y); }
 		}
 	}
-	HandleMenuActions();
+	const int32 Actions = HandleMenuActions();
+	// Interface clicks: moving the focus ticks, confirming / changing screens blips.
+	if (UTfpsAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UTfpsAudioSubsystem>())
+	{
+		if (Menu.IsOpen() && Menu.Current() == LastMenuScreen && Menu.Focus() != LastMenuFocus)
+		{
+			Audio->Play2D(tfps::audio::Cue::UiMove);
+		}
+		if (Actions > 0 || (Menu.Current() != LastMenuScreen && LastMenuScreen != tfps::ui::Screen::None && Menu.IsOpen()))
+		{
+			Audio->Play2D(tfps::audio::Cue::UiAccept);
+		}
+	}
+	LastMenuScreen = Menu.Current();
+	LastMenuFocus = Menu.Focus();
 	SetMenuInputMode(Menu.IsOpen());
 }
 
-void ATfpsPlayerController::HandleMenuActions()
+int32 ATfpsPlayerController::HandleMenuActions()
 {
 	UTfpsLobbySubsystem* L = Lobby();
 	UTfpsNetSubsystem* Net = GetGameInstance()->GetSubsystem<UTfpsNetSubsystem>();
-	for (const tfps::ui::Action& A : Menu.TakeActions())
+	const std::vector<tfps::ui::Action> Actions = Menu.TakeActions();
+	for (const tfps::ui::Action& A : Actions)
 	{
 		const FString Key = UTF8_TO_TCHAR(A.Key.c_str());
 		const FString Value = UTF8_TO_TCHAR(A.Value.c_str());
@@ -310,6 +329,64 @@ void ATfpsPlayerController::HandleMenuActions()
 				L->SetService(UTF8_TO_TCHAR(Menu.Settings().LobbyUrl.c_str()));
 			}
 			break;
+		}
+	}
+	// Typing a name saves on every key: that is not a "click".
+	int32 Count = 0;
+	for (const tfps::ui::Action& A : Actions)
+	{
+		Count += A.Kind == tfps::ui::ActionKind::SettingsChanged && Menu.IsEditingText() ? 0 : 1;
+	}
+	return Count;
+}
+
+void ATfpsPlayerController::PlayLocalSounds()
+{
+	UTfpsAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UTfpsAudioSubsystem>();
+	const UTfpsNetSubsystem* Net = GetGameInstance()->GetSubsystem<UTfpsNetSubsystem>();
+	const tfps::ClientCore* Core = Net != nullptr ? Net->GetCore() : nullptr;
+	if (Audio == nullptr || Core == nullptr || !Core->IsConnected() || Core->Health() == 0)
+	{
+		return;
+	}
+	const tfps::MoveState& M = Core->Predicted();
+	const FVector Feet(M.Pos.X, M.Pos.Y, M.Pos.Z);
+	const bool bSprint = !Menu.IsOpen() && KeyDown(Keys.Sprint);
+	const bool bQuiet = M.bCrouched || M.bProne || (!Menu.IsOpen() && KeyDown(Keys.Walk));
+	bool bLanded = false;
+	if (LocalSteps.Update(Feet, M.bOnGround, bSprint ? 2.2f : 1.7f, bLanded))
+	{
+		Audio->Footstep(Net->GetMap(), Feet, bQuiet ? 0.4f : 0.8f, true);
+	}
+	if (bLanded)
+	{
+		Audio->Play2D(tfps::audio::Cue::Land, 0.7f);
+	}
+	// Reload: magazine out when it starts, in when it completes on the same weapon.
+	const tfps::WeaponState& W = Core->Weapon();
+	const bool bReloading = W.IsReloading();
+	if (bReloading && !bWasReloading)
+	{
+		Audio->Play2D(tfps::audio::Cue::MagOut);
+		bReloadWasEmpty = W.bReloadEmpty;
+		ReloadSlot = W.Active;
+	}
+	else if (!bReloading && bWasReloading && W.Active == ReloadSlot)
+	{
+		Audio->Play2D(tfps::audio::Cue::MagIn);
+		if (bReloadWasEmpty)
+		{
+			Audio->Play2D(tfps::audio::Cue::BoltRack);
+		}
+	}
+	bWasReloading = bReloading;
+	// Dry fire: trigger pulled on an empty gun.
+	if (!Menu.IsOpen() && !bFireHeldFromMenu && WasInputKeyJustPressed(Keys.Fire) && W.Active < tfps::kWeaponSlots && !bReloading)
+	{
+		const tfps::SlotAmmo& A = W.Slots[W.Active];
+		if (A.Ammo == 0 && !A.bChambered)
+		{
+			Audio->Play2D(tfps::audio::Cue::DryFire);
 		}
 	}
 }
@@ -488,6 +565,7 @@ void ATfpsPlayerController::PlayerTick(float DeltaTime)
 	}
 	Net->SetLocalInput(Input);
 	Net->Pump();
+	PlayLocalSounds();
 
 	if (ATfpsPlayerPawn* TfpsPawn = Cast<ATfpsPlayerPawn>(GetPawn()))
 	{

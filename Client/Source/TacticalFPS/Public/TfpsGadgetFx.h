@@ -39,6 +39,13 @@ private:
 		bool bShown = false;
 		FVector PosCm = FVector::ZeroVector;
 		float SmokeAge = 0.0f;
+		// Sound state.
+		uint8 LastPhase = 255;
+		FVector LastTarget = FVector::ZeroVector;
+		double LastMoveTime = 0.0;
+		float LastVz = 0.0f;
+		/** Drone motor loop (stopped when the entity goes away). */
+		TWeakObjectPtr<class UAudioComponent> Loop;
 	};
 
 	UPROPERTY()

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs every automated test that does not need Unreal Engine:
 #  1. Rust unit + integration tests (server, protocol, simulation, golden/conformance files)
-#  2. C++ NetCore unit, golden-vector and movement-conformance tests
+#  2. C++ NetCore unit, golden-vector and movement-conformance tests, menu and
+#     sound synthesis tests, and a render of every sound to build/sounds
 #  3. C++ NetCore live tests against a freshly started Rust server
 #  4. Unreal glue code compile check against the UE API mock (needs clang++)
 source "$(dirname "$0")/common.sh"
@@ -13,6 +14,9 @@ echo "== C++ NetCore build"
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build/netcore}"
 echo "== C++ NetCore tests (offline)"
 "$BUILD_DIR/tfps_netcore_tests"
+echo "== Procedural sounds render to WAV"
+mkdir -p "$REPO_ROOT/build/sounds"
+"$BUILD_DIR/tfps_render_sounds" "$REPO_ROOT/build/sounds"
 echo "== C++ NetCore live tests against the Rust server"
 PORT="${TFPS_TEST_PORT:-17777}"
 target/release/tfps-server --bind "127.0.0.1:$PORT" --tick-rate 64 --stats-interval 3600 > "$REPO_ROOT/build/test_server.log" 2>&1 &

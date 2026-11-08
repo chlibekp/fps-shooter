@@ -1,5 +1,8 @@
 // Copyright TacticalFPS project.
 #include "TfpsGadgetFx.h"
+#include "TfpsAudioSubsystem.h"
+#include "Components/AudioComponent.h"
+#include "HAL/PlatformTime.h"
 #include "TacticalFPS.h"
 #include "TfpsNetSubsystem.h"
 #include "TfpsPlaceholderAssets.h"
@@ -69,6 +72,8 @@ void ATfpsGadgetFx::Tick(float DeltaSeconds)
 	UTfpsNetSubsystem* Net = GetGameInstance() ? GetGameInstance()->GetSubsystem<UTfpsNetSubsystem>() : nullptr;
 	const tfps::ClientCore* Core = Net != nullptr ? Net->GetCore() : nullptr;
 
+	UTfpsAudioSubsystem* Audio = GetGameInstance() ? GetGameInstance()->GetSubsystem<UTfpsAudioSubsystem>() : nullptr;
+	const double Now = FPlatformTime::Seconds();
 	for (FSlot& S : Slots)
 	{
 		S.bActive = false;
@@ -101,6 +106,52 @@ void ATfpsGadgetFx::Tick(float DeltaSeconds)
 			const FVector Target = FVector(P.X, P.Y, P.Z) * TfpsMetersToUnreal;
 			Slot->PosCm = bNew ? Target : FMath::Lerp(Slot->PosCm, Target, FMath::Min(1.0f, DeltaSeconds * 25.0f));
 			const tfps::GadgetDef* Def = Net->GetGadgets().Get(G.Gadget);
+			if (bNew)
+			{
+				Slot->LastPhase = 255;
+				Slot->LastTarget = Target;
+				Slot->LastMoveTime = Now;
+				Slot->LastVz = 0.0f;
+			}
+			if (Audio != nullptr && Def != nullptr)
+			{
+				const bool bPhaseChanged = G.Phase != Slot->LastPhase;
+				if (bPhaseChanged && G.Phase == tfps::GadgetPhase::Smoking)
+				{
+					Audio->PlayAt(tfps::audio::Cue::SmokeHiss, Target);
+				}
+				if (bPhaseChanged && Slot->LastPhase != 255 && G.Phase == tfps::GadgetPhase::Armed && tfps::IsPlacedGadget(Def->Kind))
+				{
+					Audio->PlayAt(tfps::audio::Cue::DeviceBeep, Target);
+				}
+				if (tfps::IsGrenade(Def->Kind))
+				{
+					// Snapshots move the entity in steps: estimate vertical speed between changes.
+					if (!Target.Equals(Slot->LastTarget, 0.1f))
+					{
+						const float Dt = static_cast<float>(FMath::Max(0.001, Now - Slot->LastMoveTime));
+						const float Vz = static_cast<float>(Target.Z - Slot->LastTarget.Z) / Dt;
+						const bool bBounce = G.Phase == tfps::GadgetPhase::Flying && Slot->LastVz < -150.0f && Vz > 50.0f;
+						if (bBounce)
+						{
+							Audio->PlayAt(tfps::audio::Cue::GrenadeBounce, Target, 0.8f);
+						}
+						Slot->LastVz = Vz;
+						Slot->LastTarget = Target;
+						Slot->LastMoveTime = Now;
+					}
+					if (bPhaseChanged && Slot->LastPhase == tfps::GadgetPhase::Flying && G.Phase == tfps::GadgetPhase::Resting)
+					{
+						Audio->PlayAt(tfps::audio::Cue::GrenadeBounce, Target, 0.6f);
+					}
+				}
+				if (Def->Kind == tfps::EGadgetKind::Drone)
+				{
+					if (!Slot->Loop.IsValid()) { Slot->Loop = Audio->StartLoop(tfps::audio::Cue::DroneHum, Target, 0.8f); }
+					else { Slot->Loop->SetWorldLocation(Target); }
+				}
+			}
+			Slot->LastPhase = G.Phase;
 			UStaticMeshComponent* M = Slot->Mesh;
 			const int32 KindIndex = Def != nullptr ? static_cast<int32>(Def->Kind) : -1;
 			UStaticMesh* Imported = ImportedMeshes.IsValidIndex(KindIndex) ? ImportedMeshes[KindIndex].Get() : nullptr;
@@ -170,6 +221,11 @@ void ATfpsGadgetFx::Tick(float DeltaSeconds)
 		{
 			S.Mesh->SetVisibility(false);
 			S.bShown = false;
+		}
+		if (!S.bActive && S.Loop.IsValid())
+		{
+			S.Loop->Stop();
+			S.Loop.Reset();
 		}
 	}
 

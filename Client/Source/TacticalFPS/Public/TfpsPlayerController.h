@@ -6,6 +6,7 @@
 #include "InputCoreTypes.h"
 #include "NetCore/TfpsWeapon.h"
 #include "Ui/TfpsMenu.h"
+#include "TfpsAudioSubsystem.h"
 
 #include "TfpsPlayerController.generated.h"
 
@@ -125,11 +126,20 @@ private:
 	void ApplyUserSettings();
 	/** Syncs the menu with the lobby / match state and feeds it this frame's input. */
 	void TickMenu();
-	void HandleMenuActions();
+	/** Performs the menu's queued actions; returns how many there were. */
+	int32 HandleMenuActions();
+	/** Own footsteps, reload and dry-fire sounds from the predicted state. */
+	void PlayLocalSounds();
 	void SetMenuInputMode(bool bOpen);
 
 	tfps::ui::Menu Menu;
 	bool bMenuInputMode = false;
+	FTfpsStepTracker LocalSteps;
+	bool bWasReloading = false;
+	bool bReloadWasEmpty = false;
+	uint8 ReloadSlot = 0;
+	int32 LastMenuFocus = -1;
+	tfps::ui::Screen LastMenuScreen = tfps::ui::Screen::None;
 	bool bFireHeldFromMenu = false;
 	float LastMouseX = -1.0f;
 	float LastMouseY = -1.0f;

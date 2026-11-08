@@ -100,7 +100,7 @@ result:
 | Armor | ❌ | Needs operator/loadout system |
 | Suppression effects | ❌ | |
 | Attachments (affect recoil/spread) | ❌ | The data model has room for multipliers |
-| Weapon inspection, shell ejection, weapon-specific animations, sound variation | ❌ | Needs art and audio assets |
+| Weapon inspection, shell ejection, weapon-specific animations, sound variation | 🟡 | Per-weapon gunshots with 3–4 variations each, reload and dry-fire sounds; no inspection, shell ejection or animations |
 | Muzzle flash, tracers, impacts | 🟡 🔒 | Pooled engine-shape placeholders plus a point-light flash (`ATfpsShotFx`) |
 | HUD: health, ammo/mag/reserve, weapon, reload prompt, hit marker, damage direction, kill feed, death/respawn timer | 🟡 | Canvas HUD, not run |
 
@@ -114,7 +114,7 @@ result:
 | Blender asset pipeline | ✅ Procedural and headless. 10 assets with LOD1, UCX collision and baked PBR maps: 3 props (crate, jersey barrier, container); a map kit (wooden door, window frame, brick wall panel); 4 gadgets (recon drone, breaching charge, frag grenade, wall camera). Multi-surface paint system with per-texel metallic. |
 | Props placed in the Unreal level | 🟡 `unreal_import.py` imports all exports (not yet run in an editor). The arena builder then dresses crates, barriers, doors and window frames, and the gadget FX use the gadget models (mock-checked). |
 | Weapon models | ❌ The viewmodel is a 🔒 placeholder box |
-| Audio | ❌ |
+| Audio | 🟡 Procedural synthesis (`tfps::audio`, 38 cues, 98 variations; unit tested, rendered to WAV by `tfps_render_sounds`). Unreal playback through `UTfpsAudioSubsystem` with distance attenuation: gunshots, impacts by surface, footsteps by floor material (sprint loud, crouch quiet), landing, reloads, destruction, explosions, flashbang and tinnitus, smoke, grenade bounces, drone motor loop, reinforcement, barricades, hit and kill confirmation, round and menu sounds. Playback is mock-checked only (not heard in the engine yet); no occlusion or reverb zones. |
 
 ## Destruction (spec §5) — Phase 3
 
@@ -128,7 +128,7 @@ result:
 | Destroy windows, doors, barricades, floors | ✅ | Test arena: glass panes, two wooden doors, a plank barricade, a wooden floor hatch |
 | Movement through new holes, client prediction collides with holes | ✅ | Conformance vectors include 1,876 destroyed cells |
 | Replication of destruction events, full state for joiners | ✅ | CellsDestroyed messages; e2e-tested |
-| Local debris, dust, destruction sounds | 🟡 🔒 | Physics debris from engine cubes (pooled); no dust or sound yet |
+| Local debris, dust, destruction sounds | 🟡 🔒 | Physics debris from engine cubes (pooled); one breaking sound per material per frame; no dust yet |
 | Chaos Destruction (fracture meshes) | ❌ | Cosmetic layer for Phase 5 assets; gameplay stays cell-based |
 | Shot-time rewind of destruction for lag compensation | ❌ | Shots use the current destruction state (documented in ARCHITECTURE.md) |
 | Doors that open/close (USE) | ❌ | Doors can only be destroyed for now |
@@ -181,7 +181,7 @@ result:
 | Engine `/Engine/BasicShapes/Cube` tinted per material for all map geometry | `ATfpsArenaBuilder` | Modular Blender kit + authored `.umap` (Phase 5) |
 | Engine cylinder/sphere/cube "mannequin" for remote players, with pose approximations | `ATfpsRemotePlayer` | Rigged character + animation (Phase 7) |
 | Box viewmodel weapon | `ATfpsPlayerPawn::ViewWeapon` | Blender weapon models + first-person animations |
-| Tracers, impacts and muzzle flash from engine shapes and a point light | `ATfpsShotFx` | Niagara effects, decals, audio (Phase 7) |
+| Tracers, impacts and muzzle flash from engine shapes and a point light | `ATfpsShotFx` | Niagara effects, decals |
 | Debris cubes and the sphere-and-light explosion | `ATfpsArenaBuilder`, `ATfpsShotFx` | Chaos fracture, Niagara dust and fireballs |
 | Engine `Entry` map as the boot map, with the level built at runtime | `DefaultEngine.ini` | Authored maps (Phase 5) |
 | Canvas HUD and Canvas-drawn menus | `ATfpsHUD` | UMG widgets with authored art |

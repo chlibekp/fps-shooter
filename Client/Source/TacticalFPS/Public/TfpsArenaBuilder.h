@@ -56,6 +56,9 @@ private:
 	/** Cell id -> (material mesh index, instance index). */
 	TMap<uint32, TPair<int32, int32>> CellInstances;
 	TMap<uint8, int32> MeshForMaterial;
+	/** Cells broken this frame per material (one sound each, at their average position). */
+	struct FBreakSound { FVector Sum = FVector::ZeroVector; int32 Count = 0; };
+	TMap<uint8, FBreakSound> BreakSounds;
 	TArray<uint8> MeshMaterial;
 
 	/** A destructible solid shown as an imported prop until its first cell breaks. */

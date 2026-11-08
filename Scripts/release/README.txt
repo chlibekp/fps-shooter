@@ -8,7 +8,8 @@ This archive holds the parts of TacticalFPS that run without Unreal Engine:
                      it starts its matches in-process, no tfps-server needed
   tfps-bot           headless Rust bot client(s) for testing a server
   tfps_cli_client    headless C++ client (the Unreal client's netcode)
-  tfps_render_sounds sound renderer tool (only if this build contained it)
+  tfps_render_sounds writes every procedural game sound as WAV files:
+                     tfps_render_sounds <output folder>
   Shared/Definitions maps, weapons and gadgets; the server, lobby and
                      clients read these at runtime - keep them next to
                      the binaries

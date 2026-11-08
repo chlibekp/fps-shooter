@@ -46,7 +46,7 @@ Each archive unpacks to one folder, `tfps-<tag>-<os>-<arch>/`:
 | `tfps-lobby` | lobby service: invite codes, custom matches (HTTP API); runs its matches in-process |
 | `tfps-bot` | headless Rust bot client(s) (`Tools/DevClient`) |
 | `tfps_cli_client` | headless C++ client built from the Unreal client's NetCore (`Client/NetCoreTests`) |
-| `tfps_render_sounds` | sound renderer tool, **only** when the tagged commit's CMake project has that target (the packaging script copies it if it was built and prints a note otherwise) |
+| `tfps_render_sounds` | writes every procedural game sound as WAV files (`tfps_render_sounds <output folder>`). It is packaged when the tagged commit's CMake project has this target (all commits since the procedural audio work); otherwise the packaging script prints a note and skips it |
 | `Shared/Definitions/` | `maps/*.json`, `weapons.json`, `gadgets.json`: what the server, lobby and clients load at runtime |
 | `run_server`, `run_lobby`, `run_bot`, `run_cli_client` | start scripts: `.sh` on Linux/macOS, `.ps1` on Windows. They change to the package folder first, so the relative definition paths resolve from anywhere |
 | `README.txt` | how to run it, ports, unsigned-binary notes |

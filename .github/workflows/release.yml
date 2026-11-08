@@ -6,8 +6,12 @@
 #    definitions and run scripts, and smoke-tests each archive by starting it.
 #  * `publish` uploads the archives plus SHA256SUMS to the release; it only
 #    runs when every platform's package and smoke test passed.
-#  * `unreal-client` (UNTESTED, see the comment on the job) packages the
-#    Unreal game client on a self-hosted runner that has Unreal Engine.
+#  * `game-linux` (UNTESTED, see unreal-linux.yml) builds the playable Linux
+#    download for free on a GitHub runner with Epic's Unreal container image,
+#    when the repository variable TFPS_UE_CONTAINER is 'true'.
+#  * `unreal-client` (UNTESTED, see the comment on the job) builds the
+#    playable download on a self-hosted runner that has Unreal Engine
+#    (the only way to get Windows / macOS builds).
 name: Release
 
 on:
@@ -102,6 +106,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
 
+  game-linux:
+    name: Playable Linux download
+    if: vars.TFPS_UE_CONTAINER == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/unreal-linux.yml
+    with:
+      tag: ${{ github.event.release.tag_name || inputs.tag }}
+    secrets: inherit
+
   # ---------------------------------------------------------------------------
   # Unreal game client. 🔒 UNTESTED: no machine with Unreal Engine was available
   # when this job was written, and the Unreal project itself has never been
@@ -113,8 +127,10 @@ jobs:
   # TFPS_UNREAL_PLATFORMS (JSON list, default ["Win64"]) picks the client
   # platforms; each one runs on a runner labelled `unreal` plus the OS label
   # self-hosted runners get automatically (windows / linux / macos). Each job
-  # runs Scripts/package_client.(sh|ps1) and uploads
-  # tfps-<tag>-client-<platform>.zip to the release. It does not wait for the
+  # runs Scripts/package_client.(sh|ps1), wraps the client with the server,
+  # lobby, bots and Play / Practice launchers (Scripts/package_game.sh, so the
+  # runner needs Rust and, on Windows, Git Bash) and uploads the playable
+  # TacticalFPS-<tag>-<os>-<arch> archive to the release. It does not wait for the
   # server packages and does not touch SHA256SUMS (it uploads its own .sha256).
   # Setup: Documentation/RELEASES.md.
   # ---------------------------------------------------------------------------
@@ -147,10 +163,10 @@ jobs:
           if [[ -n "$UE_ROOT_VAR" ]]; then export UE_ROOT="$UE_ROOT_VAR"; fi
           P="$PLATFORM"
           Scripts/package_client.sh "$P" Shipping
-          NAME="tfps-$TAG-client-$P"
-          (cd Dist && rm -f "$NAME.zip" && zip -qr "$NAME.zip" "client-$P")
-          (cd Dist && shasum -a 256 "$NAME.zip" > "$NAME.zip.sha256")
-          echo "CLIENT_ZIP=Dist/$NAME.zip" >> "$GITHUB_ENV"
+          cargo build --release -p tfps-server -p tfps-lobby -p tfps-devclient
+          ARCHIVE=$(Scripts/package_game.sh "$TAG" "$P" "Dist/client-$P" Dist/game | tail -n 1)
+          (cd Dist/game && shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$ARCHIVE").sha256")
+          echo "CLIENT_ZIP=$ARCHIVE" >> "$GITHUB_ENV"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -159,11 +175,13 @@ jobs:
           if ($env:UE_ROOT_VAR) { $env:UE_ROOT = $env:UE_ROOT_VAR }
           & Scripts\package_client.ps1 -Platform Win64 -Config Shipping
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $name = "tfps-$env:TAG-client-Win64"
-          Compress-Archive -Path "Dist\client-Win64" -DestinationPath "Dist\$name.zip" -Force
-          $hash = (Get-FileHash "Dist\$name.zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash  $name.zip" | Set-Content -NoNewline "Dist\$name.zip.sha256"
-          "CLIENT_ZIP=Dist/$name.zip" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          cargo build --release -p tfps-server -p tfps-lobby -p tfps-devclient
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $archive = (& bash Scripts/package_game.sh $env:TAG Win64 Dist/client-Win64 Dist/game | Select-Object -Last 1)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+          "$hash  $(Split-Path $archive -Leaf)" | Set-Content -NoNewline "$archive.sha256"
+          "CLIENT_ZIP=$archive" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       # A JavaScript action (runs on the runner's bundled Node), so the
       # self-hosted machine does not need the gh CLI.

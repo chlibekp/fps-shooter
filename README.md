@@ -35,7 +35,7 @@ Engine; see [`Documentation/STATUS.md`](Documentation/STATUS.md).
 | [PROTOCOL.md](Shared/Protocol/PROTOCOL.md) | Wire protocol v1 (byte level) |
 | [ASSET_PIPELINE.md](Documentation/ASSET_PIPELINE.md) | Blender → Unreal pipeline |
 | [PLATFORMS.md](Documentation/PLATFORMS.md) | Windows / Linux / macOS feature support |
-| [RELEASES.md](Documentation/RELEASES.md) | Cutting a release: CI builds and smoke-tests server/lobby/client-tool archives for all platforms |
+| [RELEASES.md](Documentation/RELEASES.md) | Releases: playable game downloads (Practice / Play launchers), server archives, CI setup |
 
 ## Repository layout
 

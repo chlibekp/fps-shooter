@@ -4,10 +4,86 @@ Publishing a GitHub release starts `.github/workflows/release.yml`. It builds
 runnable archives for Linux, Windows and macOS, starts each one in a smoke
 test, and attaches the archives and `SHA256SUMS` to the release.
 
-The archives hold everything that runs **without Unreal Engine**: the
-dedicated server, the lobby service and the headless clients. The playable
-Unreal game client is a separate, optional job that needs a self-hosted
-runner with Unreal Engine; it is **untested** (see below).
+The `tfps-*` archives hold everything that runs **without Unreal Engine**:
+the dedicated server, the lobby service and the headless clients.
+
+The **playable download** is `TacticalFPS-<tag>-<os>-<arch>`. It holds the
+Unreal game client together with the server, lobby and bots, plus one-click
+launchers (`Practice` and `Play`), so players unpack it and play. It is
+built in one of two ways, both 🔒 **untested** so far:
+
+* **Linux, free:** on a GitHub-hosted runner with Epic's Unreal container
+  image. See [Playable Linux download](#playable-linux-download-free-github-runner).
+* **Windows / macOS:** Unreal only builds games for these platforms on these
+  platforms. That needs a machine with Unreal Engine registered as a
+  self-hosted runner (free if you have the machine). See
+  [Unreal game client (self-hosted runner)](#unreal-game-client-self-hosted-runner--untested).
+
+The Unreal client has never been compiled with the real engine. Expect the
+first builds to stop at compile errors; their logs are kept as workflow
+artifacts so they can be fixed.
+
+## Playing the download
+
+| Launcher | What it does |
+|----------|--------------|
+| `Practice.sh` / `Practice.bat` | Starts a local server and 4 moving target bots (they do not shoot back yet), then the game, connected. |
+| `Play.sh` / `Play.bat` | Starts a lobby service on this computer and the game's main menu: host a lobby and share the invite code, or join one. |
+| `Play.sh join HOST` | Uses a friend's lobby (the computer running Play). |
+| `Play.sh practice harbor 6` | Map and bot count. |
+
+The launchers stop the server, lobby and bots when the game closes. Logs go
+to `Logs/`.
+
+Over the internet, the host forwards TCP 7700 and the match UDP ports, and
+sets `TFPS_PUBLIC_HOST` to their public address. macOS builds are not
+signed or notarised: open them with right-click > Open, or run
+`xattr -dr com.apple.quarantine TacticalFPS-*`.
+
+`Scripts/smoke_test_game.sh` checks a download the way a player uses it. It
+runs `Practice` and passes when the game client has joined the match with
+both bots. In CI the real Unreal client runs headless (`-nullrhi`). Locally
+the launchers and packaging were checked with a stand-in client that uses
+the same netcode (the C++ CLI client).
+
+## Playable Linux download (free, GitHub runner) 🔒 untested
+
+`.github/workflows/unreal-linux.yml` runs Epic's Unreal Engine container
+image on a free `ubuntu-latest` runner. Standard runners are free for public
+repositories; private repositories spend the free monthly minutes. To make
+room for the image, it first deletes preinstalled toolchains it does not use
+and moves Docker's storage to the larger disk. It then:
+
+1. builds, cooks and packages the client (Linux, Shipping);
+2. wraps it with `Scripts/package_game.sh`;
+3. runs the headless smoke test;
+4. uploads `TacticalFPS-<tag>-linux-x86_64.tar.gz` and its `.sha256`.
+
+One-time setup (all free):
+
+1. Link your GitHub account to an Epic Games account and accept the Unreal
+   Engine EULA (unrealengine.com → Account → Apps and Accounts → GitHub).
+   Accept the invitation to the `EpicGames` GitHub organisation that
+   follows.
+2. Create a classic personal access token with only the `read:packages`
+   scope. Save it as the repository secret `EPIC_GHCR_TOKEN`. If the token's
+   user is not the repository owner, also set the variable
+   `EPIC_GHCR_USER`.
+3. Try it: *Actions → Unreal Linux build → Run workflow*. The package and
+   the logs are kept as artifacts.
+4. Set the repository variable `TFPS_UE_CONTAINER` to `true` so every
+   release also builds the Linux download.
+
+Optional: `TFPS_UE_IMAGE` picks another image tag. The default is
+`ghcr.io/epicgames/unreal-engine:dev-slim-5.4`, matching the project's
+engine version. If Epic does not publish that exact tag, use a full version
+such as `dev-slim-5.4.4`.
+
+Risks:
+* The image needs tens of GB, and a freed runner has roughly 40–70 GB
+  across its two disks. If the pull fails for lack of space, the job log
+  shows `df` before and after the clean-up.
+* Jobs stop after 6 hours.
 
 ## Cutting a release
 

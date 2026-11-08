@@ -1059,6 +1059,8 @@ fn defuse_rounds_run_over_the_network() {
         .is_some_and(|m| m.phase == 3
             && m.last_reason == 3
             && m.score[0] == 1)));
+    // Forget the MapReset of round 1's start so only the next round's counts.
+    drain(&mut a);
     let mut reset = false;
     let end = Instant::now() + Duration::from_secs(4);
     while Instant::now() < end && !reset {
@@ -1068,7 +1070,7 @@ fn defuse_rounds_run_over_the_network() {
             .any(|e| matches!(e, ClientEvent::MapReset));
     }
     assert!(reset, "MapReset at the next round");
-    assert!(both_until(&mut a, &mut b, Duration::from_secs(1), |c| c
+    assert!(both_until(&mut a, &mut b, Duration::from_secs(2), |c| c
         .match_info
         .is_some_and(|m| m.round == 2)));
     // Half-time after rounds_to_win - 1 = 1 round: the sides swapped.

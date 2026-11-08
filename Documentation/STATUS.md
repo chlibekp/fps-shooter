@@ -35,6 +35,7 @@ result:
 | Minimal test arena | ✅ data / 🟡 visuals | `test_arena.json` (87 solids, 2 floors, stairs, doors, windows, cover); Unreal graybox uses 🔒 engine cubes |
 | Two players connect and see each other move | ✅ headless / 🟡 Unreal | Proven with Rust and C++ clients against the real server; Unreal client not yet run |
 | Build/run/package scripts | ✅ server & NetCore / 🟡 Unreal | UE scripts written; they fail with a clear message when `UE_ROOT` is not set |
+| Release workflow (`release.yml`): archives for Linux x86_64, Windows x86_64, macOS arm64 on every published release | ✅ Linux locally / 🟡 Windows, macOS, CI run / 🔒 Unreal client job | Server, lobby, bot, C++ CLI client, definitions and run scripts. Each archive is smoke-tested after it is unpacked (lobby `/health`, clients connect). The Linux package and smoke test pass locally, but the workflow has not run on GitHub yet. The self-hosted Unreal job has never run. See [RELEASES.md](RELEASES.md) |
 
 ## Networking & server (spec §2, §10, §13)
 

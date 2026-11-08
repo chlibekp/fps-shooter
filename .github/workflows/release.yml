@@ -1,0 +1,175 @@
+# Release packaging. See Documentation/RELEASES.md.
+#
+# On a published GitHub release (or a manual run for an existing release tag):
+#  * `package` builds the dedicated server, lobby, bot and the C++ CLI client
+#    on Linux, Windows and macOS (Apple Silicon), packs them with the shared
+#    definitions and run scripts, and smoke-tests each archive by starting it.
+#  * `publish` uploads the archives plus SHA256SUMS to the release; it only
+#    runs when every platform's package and smoke test passed.
+#  * `unreal-client` (UNTESTED, see the comment on the job) packages the
+#    Unreal game client on a self-hosted runner that has Unreal Engine.
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to (re)build and upload, e.g. v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-latest is Apple Silicon (arm64). No Intel macOS build: the
+        # remaining Intel macOS runner images are being retired.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release
+
+      - name: Build and package
+        id: pkg
+        shell: bash
+        run: |
+          Scripts/package_release.sh "$TAG" Dist/release | tee package.log
+          echo "archive=$(tail -n 1 package.log)" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test the archive (Linux / macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: Scripts/smoke_test_package.sh "${{ steps.pkg.outputs.archive }}"
+
+      - name: Smoke test the archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem Dist\release\*.zip | Select-Object -First 1
+          pwsh -NoProfile -File Scripts\smoke_test_package.ps1 $archive.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.os }}
+          path: |
+            Dist/release/*.tar.gz
+            Dist/release/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Upload to the release
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum tfps-* > SHA256SUMS
+          cat SHA256SUMS
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+
+  # ---------------------------------------------------------------------------
+  # Unreal game client. 🔒 UNTESTED: no machine with Unreal Engine was available
+  # when this job was written, and the Unreal project itself has never been
+  # compiled with UnrealBuildTool. GitHub-hosted runners have no Unreal Engine,
+  # so this runs only on a self-hosted runner labelled `unreal`, and only when
+  # the repository variable TFPS_UNREAL_RUNNER is 'true'. The engine location
+  # comes from the repository variable UE_ROOT, else from the runner's own
+  # UE_ROOT environment variable. The repository variable
+  # TFPS_UNREAL_PLATFORMS (JSON list, default ["Win64"]) picks the client
+  # platforms; each one runs on a runner labelled `unreal` plus the OS label
+  # self-hosted runners get automatically (windows / linux / macos). Each job
+  # runs Scripts/package_client.(sh|ps1) and uploads
+  # tfps-<tag>-client-<platform>.zip to the release. It does not wait for the
+  # server packages and does not touch SHA256SUMS (it uploads its own .sha256).
+  # Setup: Documentation/RELEASES.md.
+  # ---------------------------------------------------------------------------
+  unreal-client:
+    name: Unreal client ${{ matrix.platform }} (self-hosted, untested)
+    if: vars.TFPS_UNREAL_RUNNER == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(vars.TFPS_UNREAL_PLATFORMS || '["Win64"]') }}
+    runs-on:
+      - self-hosted
+      - unreal
+      - ${{ matrix.platform == 'Win64' && 'windows' || (matrix.platform == 'Mac' && 'macos' || 'linux') }}
+    timeout-minutes: 240
+    permissions:
+      contents: write
+    env:
+      UE_ROOT_VAR: ${{ vars.UE_ROOT }}
+      PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Package (Linux / macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ -n "$UE_ROOT_VAR" ]]; then export UE_ROOT="$UE_ROOT_VAR"; fi
+          P="$PLATFORM"
+          Scripts/package_client.sh "$P" Shipping
+          NAME="tfps-$TAG-client-$P"
+          (cd Dist && rm -f "$NAME.zip" && zip -qr "$NAME.zip" "client-$P")
+          (cd Dist && shasum -a 256 "$NAME.zip" > "$NAME.zip.sha256")
+          echo "CLIENT_ZIP=Dist/$NAME.zip" >> "$GITHUB_ENV"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($env:UE_ROOT_VAR) { $env:UE_ROOT = $env:UE_ROOT_VAR }
+          & Scripts\package_client.ps1 -Platform Win64 -Config Shipping
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $name = "tfps-$env:TAG-client-Win64"
+          Compress-Archive -Path "Dist\client-Win64" -DestinationPath "Dist\$name.zip" -Force
+          $hash = (Get-FileHash "Dist\$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Set-Content -NoNewline "Dist\$name.zip.sha256"
+          "CLIENT_ZIP=Dist/$name.zip" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      # A JavaScript action (runs on the runner's bundled Node), so the
+      # self-hosted machine does not need the gh CLI.
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: |
+            ${{ env.CLIENT_ZIP }}
+            ${{ env.CLIENT_ZIP }}.sha256

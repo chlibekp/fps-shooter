@@ -48,3 +48,6 @@ cross-platform testing, which is not done yet.
 * Mac client: build on macOS (`Scripts/package_client.sh Mac`). Needs Xcode.
 * Server: `Scripts/package_server.sh [target-triple]` on the target OS, or
   cross-compile with the matching Rust target.
+* Release archives (server, lobby, bot, C++ CLI client) for all three OSes:
+  built by `.github/workflows/release.yml` when a release is published, or
+  locally with `Scripts/package_release.sh <tag>`. See [RELEASES.md](RELEASES.md).

@@ -2,6 +2,10 @@
 // the Unreal client uses, runs a movement script and prints what it sees.
 //
 //   tfps_cli_client [--server host:port] [--name N] [--seconds S] [--pattern circle|idle|square]
+//                   [--definitions DIR] [--map file.json]
+// Definitions (weapons.json, maps/) come from --definitions, else from the
+// source tree this binary was built from, else from ./Shared/Definitions
+// (the layout of a release package).
 #include "UdpTransport.h"
 #include "NetCore/TfpsClientCore.h"
 #include "NetCore/TfpsDeterminism.h"
@@ -18,7 +22,9 @@ int main(int Argc, char** Argv)
 	std::string Server = "127.0.0.1:7777";
 	std::string Name = "CppClient";
 	std::string Pattern = "circle";
-	std::string MapPath = std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/maps/test_arena.json";
+	std::string DefsDir = std::string(TFPS_REPO_ROOT) + "/Shared/Definitions";
+	if (!std::ifstream(DefsDir + "/weapons.json")) { DefsDir = "Shared/Definitions"; }
+	std::string MapPath;
 	double Seconds = 10.0;
 	for (int I = 1; I + 1 < Argc; I += 2)
 	{
@@ -27,7 +33,9 @@ int main(int Argc, char** Argv)
 		else if (!std::strcmp(Argv[I], "--seconds")) { Seconds = std::atof(Argv[I + 1]); }
 		else if (!std::strcmp(Argv[I], "--pattern")) { Pattern = Argv[I + 1]; }
 		else if (!std::strcmp(Argv[I], "--map")) { MapPath = Argv[I + 1]; }
+		else if (!std::strcmp(Argv[I], "--definitions")) { DefsDir = Argv[I + 1]; }
 	}
+	if (MapPath.empty()) { MapPath = DefsDir + "/maps/test_arena.json"; }
 	std::printf("determinism self-test: %s\n", tfps::DeterminismSelfTestPasses() ? "PASS" : "FAIL (prediction will be corrected often)");
 	std::ifstream F(MapPath);
 	std::stringstream SS;
@@ -35,7 +43,7 @@ int main(int Argc, char** Argv)
 	tfps::MapDef Map;
 	std::string Err;
 	if (!tfps::ParseMapJson(SS.str(), Map, Err)) { std::fprintf(stderr, "map: %s\n", Err.c_str()); return 1; }
-	std::ifstream WF(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/weapons.json");
+	std::ifstream WF(DefsDir + "/weapons.json");
 	std::stringstream WS;
 	WS << WF.rdbuf();
 	tfps::WeaponSet Weapons;

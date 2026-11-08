@@ -1,0 +1,4 @@
+# actionlint config: custom labels of self-hosted runners used in workflows.
+self-hosted-runner:
+  labels:
+    - unreal # Unreal Engine build machine, see Documentation/RELEASES.md

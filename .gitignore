@@ -31,3 +31,9 @@ Client/NetCoreTests/build/
 Thumbs.db
 *.swp
 .claude/worktrees/
+
+# Godot client
+Game/bin/
+Game/.godot/
+Game/defs/
+/build/

@@ -351,6 +351,10 @@ fn vectors() -> String {
         "map_hash_test_arena {:016x}\n",
         map.geometry_hash()
     ));
+    for name in ["harbor", "villa", "consulate"] {
+        let m = tfps_sim::MapDef::load(format!("{root}/maps/{name}.json")).unwrap();
+        out.push_str(&format!("map_hash_{name} {:016x}\n", m.geometry_hash()));
+    }
     out.push_str(&format!("weapons_hash {:016x}\n", weapons.hash()));
     let gadgets = tfps_sim::GadgetSet::load(format!("{root}/gadgets.json")).unwrap();
     out.push_str(&format!("gadgets_hash {:016x}\n", gadgets.hash()));

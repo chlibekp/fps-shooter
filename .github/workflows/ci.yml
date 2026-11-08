@@ -70,3 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: Tools/UeMockCheck/check.sh
+      - name: Map JSON is generated from the map scripts
+        run: |
+          python3 Tools/MapTools/build_all.py
+          git diff --exit-code Shared/Definitions/maps

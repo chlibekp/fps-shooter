@@ -1,0 +1,4006 @@
+{
+ "name": "harbor",
+ "kill_z": -30.0,
+ "solids": [
+  {
+   "min": [
+    -42,
+    -34,
+    -0.5
+   ],
+   "max": [
+    42,
+    34,
+    0.0
+   ],
+   "material": "dirt",
+   "tag": "ground"
+  },
+  {
+   "min": [
+    -42,
+    33.6,
+    0
+   ],
+   "max": [
+    42,
+    34,
+    3.5
+   ],
+   "material": "concrete",
+   "tag": "perimeter"
+  },
+  {
+   "min": [
+    -42,
+    -34,
+    0
+   ],
+   "max": [
+    42,
+    -33.6,
+    3.5
+   ],
+   "material": "concrete",
+   "tag": "perimeter"
+  },
+  {
+   "min": [
+    41.6,
+    -33.6,
+    0
+   ],
+   "max": [
+    42,
+    33.6,
+    3.5
+   ],
+   "material": "concrete",
+   "tag": "perimeter"
+  },
+  {
+   "min": [
+    -42,
+    -33.6,
+    0
+   ],
+   "max": [
+    -41.6,
+    33.6,
+    3.5
+   ],
+   "material": "concrete",
+   "tag": "perimeter"
+  },
+  {
+   "min": [
+    -10.0,
+    -12.0,
+    0
+   ],
+   "max": [
+    26.0,
+    12.0,
+    0.02
+   ],
+   "material": "concrete",
+   "tag": "floor"
+  },
+  {
+   "min": [
+    -10.0,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    -9.7,
+    -10.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w"
+  },
+  {
+   "min": [
+    -10.0,
+    -10.0,
+    0.02
+   ],
+   "max": [
+    -9.7,
+    -8.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w"
+  },
+  {
+   "min": [
+    -10.0,
+    -8.0,
+    3.42
+   ],
+   "max": [
+    -9.7,
+    -4.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w_lintel"
+  },
+  {
+   "min": [
+    -10.0,
+    -4.0,
+    0.02
+   ],
+   "max": [
+    -9.7,
+    -1.625,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w"
+  },
+  {
+   "min": [
+    -10.0,
+    -1.625,
+    0.02
+   ],
+   "max": [
+    -9.7,
+    0.75,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w"
+  },
+  {
+   "min": [
+    -10.0,
+    0.75,
+    0.02
+   ],
+   "max": [
+    -9.7,
+    3.125,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w"
+  },
+  {
+   "min": [
+    -10.0,
+    3.125,
+    0.02
+   ],
+   "max": [
+    -9.7,
+    5.5,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w"
+  },
+  {
+   "min": [
+    -10.0,
+    5.5,
+    2.17
+   ],
+   "max": [
+    -9.7,
+    6.5,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w_lintel"
+  },
+  {
+   "min": [
+    -9.875,
+    5.5,
+    0.02
+   ],
+   "max": [
+    -9.825,
+    6.5,
+    2.17
+   ],
+   "material": "wood",
+   "tag": "door"
+  },
+  {
+   "min": [
+    -10.0,
+    6.5,
+    0.02
+   ],
+   "max": [
+    -9.7,
+    8.3333,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w"
+  },
+  {
+   "min": [
+    -10.0,
+    8.3333,
+    0.02
+   ],
+   "max": [
+    -9.7,
+    10.1667,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w"
+  },
+  {
+   "min": [
+    -10.0,
+    10.1667,
+    0.02
+   ],
+   "max": [
+    -9.7,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_w"
+  },
+  {
+   "min": [
+    -9.7,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    -7.725,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    -7.725,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    -5.75,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    -5.75,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    -3.775,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    -3.775,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    -1.8,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    -1.8,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    -0.2,
+    -11.7,
+    1.02
+   ],
+   "material": "brick",
+   "tag": "wall_s_sill"
+  },
+  {
+   "min": [
+    -1.8,
+    -12.0,
+    2.12
+   ],
+   "max": [
+    -0.2,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s_lintel"
+  },
+  {
+   "min": [
+    -1.8,
+    -11.86,
+    1.02
+   ],
+   "max": [
+    -0.2,
+    -11.84,
+    2.12
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    -0.2,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    1.7,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    1.7,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    3.6,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    3.6,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    5.5,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    5.5,
+    -12.0,
+    2.17
+   ],
+   "max": [
+    6.5,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s_lintel"
+  },
+  {
+   "min": [
+    5.5,
+    -11.875,
+    0.02
+   ],
+   "max": [
+    6.5,
+    -11.825,
+    2.17
+   ],
+   "material": "wood",
+   "tag": "door"
+  },
+  {
+   "min": [
+    6.5,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    8.675,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    8.675,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    10.85,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    10.85,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    13.025,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    13.025,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    15.2,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    15.2,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    16.8,
+    -11.7,
+    1.02
+   ],
+   "material": "brick",
+   "tag": "wall_s_sill"
+  },
+  {
+   "min": [
+    15.2,
+    -12.0,
+    2.12
+   ],
+   "max": [
+    16.8,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s_lintel"
+  },
+  {
+   "min": [
+    15.2,
+    -11.86,
+    1.02
+   ],
+   "max": [
+    16.8,
+    -11.84,
+    2.12
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    16.8,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    19.025,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    19.025,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    21.25,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    21.25,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    23.475,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    23.475,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    25.7,
+    -11.7,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_s"
+  },
+  {
+   "min": [
+    -9.7,
+    11.7,
+    0.02
+   ],
+   "max": [
+    -7.36,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    -7.36,
+    11.7,
+    0.02
+   ],
+   "max": [
+    -5.02,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    -5.02,
+    11.7,
+    0.02
+   ],
+   "max": [
+    -2.68,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    -2.68,
+    11.7,
+    0.02
+   ],
+   "max": [
+    -0.34,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    -0.34,
+    11.7,
+    0.02
+   ],
+   "max": [
+    2.0,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    2.0,
+    11.7,
+    3.42
+   ],
+   "max": [
+    6.0,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n_lintel"
+  },
+  {
+   "min": [
+    2.0,
+    11.82,
+    0.428
+   ],
+   "max": [
+    6.0,
+    11.88,
+    0.768
+   ],
+   "material": "wood",
+   "tag": "barricade"
+  },
+  {
+   "min": [
+    2.0,
+    11.82,
+    1.176
+   ],
+   "max": [
+    6.0,
+    11.88,
+    1.516
+   ],
+   "material": "wood",
+   "tag": "barricade"
+  },
+  {
+   "min": [
+    2.0,
+    11.82,
+    1.924
+   ],
+   "max": [
+    6.0,
+    11.88,
+    2.264
+   ],
+   "material": "wood",
+   "tag": "barricade"
+  },
+  {
+   "min": [
+    2.0,
+    11.82,
+    2.672
+   ],
+   "max": [
+    6.0,
+    11.88,
+    3.012
+   ],
+   "material": "wood",
+   "tag": "barricade"
+  },
+  {
+   "min": [
+    6.0,
+    11.7,
+    0.02
+   ],
+   "max": [
+    8.2,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    8.2,
+    11.7,
+    0.02
+   ],
+   "max": [
+    10.4,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    10.4,
+    11.7,
+    0.02
+   ],
+   "max": [
+    12.6,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    12.6,
+    11.7,
+    0.02
+   ],
+   "max": [
+    14.8,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    14.8,
+    11.7,
+    0.02
+   ],
+   "max": [
+    17.0,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    17.0,
+    11.7,
+    0.02
+   ],
+   "max": [
+    19.2,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    19.2,
+    11.7,
+    0.02
+   ],
+   "max": [
+    20.8,
+    12.0,
+    1.02
+   ],
+   "material": "brick",
+   "tag": "wall_n_sill"
+  },
+  {
+   "min": [
+    19.2,
+    11.7,
+    2.12
+   ],
+   "max": [
+    20.8,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n_lintel"
+  },
+  {
+   "min": [
+    19.2,
+    11.84,
+    1.02
+   ],
+   "max": [
+    20.8,
+    11.86,
+    2.12
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    20.8,
+    11.7,
+    0.02
+   ],
+   "max": [
+    22.4333,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    22.4333,
+    11.7,
+    0.02
+   ],
+   "max": [
+    24.0667,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    24.0667,
+    11.7,
+    0.02
+   ],
+   "max": [
+    25.7,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_n"
+  },
+  {
+   "min": [
+    25.7,
+    -12.0,
+    0.02
+   ],
+   "max": [
+    26.0,
+    -9.6875,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e"
+  },
+  {
+   "min": [
+    25.7,
+    -9.6875,
+    0.02
+   ],
+   "max": [
+    26.0,
+    -7.375,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e"
+  },
+  {
+   "min": [
+    25.7,
+    -7.375,
+    0.02
+   ],
+   "max": [
+    26.0,
+    -5.0625,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e"
+  },
+  {
+   "min": [
+    25.7,
+    -5.0625,
+    0.02
+   ],
+   "max": [
+    26.0,
+    -2.75,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e"
+  },
+  {
+   "min": [
+    25.7,
+    -2.75,
+    0.02
+   ],
+   "max": [
+    26.0,
+    -0.4375,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e"
+  },
+  {
+   "min": [
+    25.7,
+    -0.4375,
+    0.02
+   ],
+   "max": [
+    26.0,
+    1.875,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e"
+  },
+  {
+   "min": [
+    25.7,
+    1.875,
+    0.02
+   ],
+   "max": [
+    26.0,
+    4.1875,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e"
+  },
+  {
+   "min": [
+    25.7,
+    4.1875,
+    0.02
+   ],
+   "max": [
+    26.0,
+    6.5,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e"
+  },
+  {
+   "min": [
+    25.7,
+    6.5,
+    2.17
+   ],
+   "max": [
+    26.0,
+    7.5,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e_lintel"
+  },
+  {
+   "min": [
+    25.825,
+    6.5,
+    0.02
+   ],
+   "max": [
+    25.875,
+    7.5,
+    2.17
+   ],
+   "material": "wood",
+   "tag": "door"
+  },
+  {
+   "min": [
+    25.7,
+    7.5,
+    0.02
+   ],
+   "max": [
+    26.0,
+    9.75,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e"
+  },
+  {
+   "min": [
+    25.7,
+    9.75,
+    0.02
+   ],
+   "max": [
+    26.0,
+    12.0,
+    3.5
+   ],
+   "material": "brick",
+   "tag": "wall_e"
+  },
+  {
+   "min": [
+    -10.0,
+    -12.0,
+    3.5
+   ],
+   "max": [
+    26.0,
+    -11.7,
+    8.0
+   ],
+   "material": "metal",
+   "tag": "siding"
+  },
+  {
+   "min": [
+    -10.0,
+    11.7,
+    3.5
+   ],
+   "max": [
+    26.0,
+    12.0,
+    8.0
+   ],
+   "material": "metal",
+   "tag": "siding"
+  },
+  {
+   "min": [
+    -10.0,
+    -11.7,
+    3.5
+   ],
+   "max": [
+    -9.7,
+    11.7,
+    8.0
+   ],
+   "material": "metal",
+   "tag": "siding"
+  },
+  {
+   "min": [
+    25.7,
+    -11.7,
+    3.5
+   ],
+   "max": [
+    26.0,
+    11.7,
+    8.0
+   ],
+   "material": "metal",
+   "tag": "siding"
+  },
+  {
+   "min": [
+    -10.0,
+    -12.0,
+    8.0
+   ],
+   "max": [
+    26.0,
+    12.0,
+    8.3
+   ],
+   "material": "concrete",
+   "tag": "roof"
+  },
+  {
+   "min": [
+    14.0,
+    2.0,
+    0.02
+   ],
+   "max": [
+    16.0,
+    2.12,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_s1"
+  },
+  {
+   "min": [
+    16.0,
+    2.0,
+    2.17
+   ],
+   "max": [
+    17.0,
+    2.12,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_s1_lintel"
+  },
+  {
+   "min": [
+    17.0,
+    2.0,
+    0.02
+   ],
+   "max": [
+    18.7333,
+    2.12,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_s1"
+  },
+  {
+   "min": [
+    18.7333,
+    2.0,
+    0.02
+   ],
+   "max": [
+    20.4667,
+    2.12,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_s1"
+  },
+  {
+   "min": [
+    20.4667,
+    2.0,
+    0.02
+   ],
+   "max": [
+    22.2,
+    2.12,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_s1"
+  },
+  {
+   "min": [
+    22.2,
+    2.0,
+    0.02
+   ],
+   "max": [
+    23.8,
+    2.12,
+    1.02
+   ],
+   "material": "drywall",
+   "tag": "office_s1_sill"
+  },
+  {
+   "min": [
+    22.2,
+    2.0,
+    2.12
+   ],
+   "max": [
+    23.8,
+    2.12,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_s1_lintel"
+  },
+  {
+   "min": [
+    22.2,
+    2.05,
+    1.02
+   ],
+   "max": [
+    23.8,
+    2.07,
+    2.12
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    23.8,
+    2.0,
+    0.02
+   ],
+   "max": [
+    25.7,
+    2.12,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_s1"
+  },
+  {
+   "min": [
+    14.0,
+    2.12,
+    0.02
+   ],
+   "max": [
+    14.12,
+    3.7,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_w1"
+  },
+  {
+   "min": [
+    14.0,
+    3.7,
+    0.02
+   ],
+   "max": [
+    14.12,
+    5.3,
+    1.02
+   ],
+   "material": "drywall",
+   "tag": "office_w1_sill"
+  },
+  {
+   "min": [
+    14.0,
+    3.7,
+    2.12
+   ],
+   "max": [
+    14.12,
+    5.3,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_w1_lintel"
+  },
+  {
+   "min": [
+    14.05,
+    3.7,
+    1.02
+   ],
+   "max": [
+    14.07,
+    5.3,
+    2.12
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    14.0,
+    5.3,
+    0.02
+   ],
+   "max": [
+    14.12,
+    7.5,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_w1"
+  },
+  {
+   "min": [
+    14.0,
+    7.5,
+    2.17
+   ],
+   "max": [
+    14.12,
+    8.5,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_w1_lintel"
+  },
+  {
+   "min": [
+    14.035,
+    7.5,
+    0.02
+   ],
+   "max": [
+    14.085,
+    8.5,
+    2.17
+   ],
+   "material": "wood",
+   "tag": "door"
+  },
+  {
+   "min": [
+    14.0,
+    8.5,
+    0.02
+   ],
+   "max": [
+    14.12,
+    10.1,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_w1"
+  },
+  {
+   "min": [
+    14.0,
+    10.1,
+    0.02
+   ],
+   "max": [
+    14.12,
+    11.7,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_w1"
+  },
+  {
+   "min": [
+    19.94,
+    2.12,
+    0.02
+   ],
+   "max": [
+    20.06,
+    4.5,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_mid1"
+  },
+  {
+   "min": [
+    19.94,
+    4.5,
+    2.17
+   ],
+   "max": [
+    20.06,
+    5.5,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_mid1_lintel"
+  },
+  {
+   "min": [
+    19.94,
+    5.5,
+    0.02
+   ],
+   "max": [
+    20.06,
+    7.5667,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_mid1"
+  },
+  {
+   "min": [
+    19.94,
+    7.5667,
+    0.02
+   ],
+   "max": [
+    20.06,
+    9.6333,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_mid1"
+  },
+  {
+   "min": [
+    19.94,
+    9.6333,
+    0.02
+   ],
+   "max": [
+    20.06,
+    11.7,
+    3.2
+   ],
+   "material": "drywall",
+   "tag": "office_mid1"
+  },
+  {
+   "min": [
+    14.0,
+    2.0,
+    3.2
+   ],
+   "max": [
+    22.0,
+    11.7,
+    3.5
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    22.0,
+    2.0,
+    3.2
+   ],
+   "max": [
+    23.4,
+    8.0,
+    3.5
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    22.0,
+    9.4,
+    3.2
+   ],
+   "max": [
+    23.4,
+    11.7,
+    3.5
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    23.4,
+    2.0,
+    3.2
+   ],
+   "max": [
+    25.7,
+    11.7,
+    3.5
+   ],
+   "material": "concrete",
+   "tag": "slab"
+  },
+  {
+   "min": [
+    22.0,
+    8.0,
+    3.2
+   ],
+   "max": [
+    23.4,
+    9.4,
+    3.5
+   ],
+   "material": "wood",
+   "tag": "floor_hatch"
+  },
+  {
+   "min": [
+    14.0,
+    2.0,
+    3.5
+   ],
+   "max": [
+    15.1,
+    2.12,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_s2"
+  },
+  {
+   "min": [
+    15.1,
+    2.0,
+    5.65
+   ],
+   "max": [
+    16.1,
+    2.12,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_s2_lintel"
+  },
+  {
+   "min": [
+    16.1,
+    2.0,
+    3.5
+   ],
+   "max": [
+    18.0,
+    2.12,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_s2"
+  },
+  {
+   "min": [
+    18.0,
+    2.0,
+    3.5
+   ],
+   "max": [
+    20.0,
+    2.12,
+    4.5
+   ],
+   "material": "drywall",
+   "tag": "office_s2_sill"
+  },
+  {
+   "min": [
+    18.0,
+    2.0,
+    5.6
+   ],
+   "max": [
+    20.0,
+    2.12,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_s2_lintel"
+  },
+  {
+   "min": [
+    18.0,
+    2.05,
+    4.5
+   ],
+   "max": [
+    20.0,
+    2.07,
+    5.6
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    20.0,
+    2.0,
+    3.5
+   ],
+   "max": [
+    21.35,
+    2.12,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_s2"
+  },
+  {
+   "min": [
+    21.35,
+    2.0,
+    3.5
+   ],
+   "max": [
+    22.7,
+    2.12,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_s2"
+  },
+  {
+   "min": [
+    22.7,
+    2.0,
+    3.5
+   ],
+   "max": [
+    24.3,
+    2.12,
+    4.5
+   ],
+   "material": "drywall",
+   "tag": "office_s2_sill"
+  },
+  {
+   "min": [
+    22.7,
+    2.0,
+    5.6
+   ],
+   "max": [
+    24.3,
+    2.12,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_s2_lintel"
+  },
+  {
+   "min": [
+    22.7,
+    2.05,
+    4.5
+   ],
+   "max": [
+    24.3,
+    2.07,
+    5.6
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    24.3,
+    2.0,
+    3.5
+   ],
+   "max": [
+    25.7,
+    2.12,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_s2"
+  },
+  {
+   "min": [
+    14.0,
+    2.12,
+    3.5
+   ],
+   "max": [
+    14.12,
+    4.06,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_w2"
+  },
+  {
+   "min": [
+    14.0,
+    4.06,
+    3.5
+   ],
+   "max": [
+    14.12,
+    6.0,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_w2"
+  },
+  {
+   "min": [
+    14.0,
+    6.0,
+    3.5
+   ],
+   "max": [
+    14.12,
+    8.0,
+    4.5
+   ],
+   "material": "drywall",
+   "tag": "office_w2_sill"
+  },
+  {
+   "min": [
+    14.0,
+    6.0,
+    5.6
+   ],
+   "max": [
+    14.12,
+    8.0,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_w2_lintel"
+  },
+  {
+   "min": [
+    14.05,
+    6.0,
+    4.5
+   ],
+   "max": [
+    14.07,
+    8.0,
+    5.6
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    14.0,
+    8.0,
+    3.5
+   ],
+   "max": [
+    14.12,
+    9.85,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_w2"
+  },
+  {
+   "min": [
+    14.0,
+    9.85,
+    3.5
+   ],
+   "max": [
+    14.12,
+    11.7,
+    6.5
+   ],
+   "material": "drywall",
+   "tag": "office_w2"
+  },
+  {
+   "min": [
+    14.0,
+    2.0,
+    6.5
+   ],
+   "max": [
+    25.7,
+    11.7,
+    6.7
+   ],
+   "material": "concrete",
+   "tag": "office_roof"
+  },
+  {
+   "min": [
+    15.2,
+    5.6,
+    0.02
+   ],
+   "max": [
+    16.8,
+    6.4,
+    0.75
+   ],
+   "material": "wood",
+   "tag": "desk"
+  },
+  {
+   "min": [
+    17.2,
+    9.1,
+    0.02
+   ],
+   "max": [
+    18.8,
+    9.9,
+    0.75
+   ],
+   "material": "wood",
+   "tag": "desk"
+  },
+  {
+   "min": [
+    21.7,
+    4.1,
+    0.02
+   ],
+   "max": [
+    23.3,
+    4.9,
+    0.75
+   ],
+   "material": "wood",
+   "tag": "desk"
+  },
+  {
+   "min": [
+    16.2,
+    4.6,
+    3.5
+   ],
+   "max": [
+    17.8,
+    5.4,
+    4.25
+   ],
+   "material": "wood",
+   "tag": "desk"
+  },
+  {
+   "min": [
+    20.2,
+    9.6,
+    3.5
+   ],
+   "max": [
+    21.8,
+    10.4,
+    4.25
+   ],
+   "material": "wood",
+   "tag": "desk"
+  },
+  {
+   "min": [
+    23.7,
+    5.6,
+    3.5
+   ],
+   "max": [
+    25.3,
+    6.4,
+    4.25
+   ],
+   "material": "wood",
+   "tag": "desk"
+  },
+  {
+   "min": [
+    25.0,
+    9.0,
+    0.02
+   ],
+   "max": [
+    25.6,
+    11.6,
+    1.9
+   ],
+   "material": "metal",
+   "tag": "shelf"
+  },
+  {
+   "min": [
+    20.3,
+    11.0,
+    0.02
+   ],
+   "max": [
+    23.0,
+    11.6,
+    1.9
+   ],
+   "material": "metal",
+   "tag": "shelf"
+  },
+  {
+   "min": [
+    7.5,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    0.2686
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    7.8571,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    0.5171
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    8.2143,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    0.7657
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    8.5714,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    1.0143
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    8.9286,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    1.2629
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    9.2857,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    1.5114
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    9.6429,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    1.76
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    10.0,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    2.0086
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    10.3571,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    2.2571
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    10.7143,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    2.5057
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    11.0714,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    2.7543
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    11.4286,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    3.0029
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    11.7857,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    3.2514
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    12.1429,
+    0.4,
+    0.02
+   ],
+   "max": [
+    12.5,
+    1.9,
+    3.5
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    12.5,
+    0.4,
+    3.3
+   ],
+   "max": [
+    17.0,
+    2.0,
+    3.5
+   ],
+   "material": "metal",
+   "tag": "catwalk"
+  },
+  {
+   "min": [
+    12.5,
+    0.32,
+    3.5
+   ],
+   "max": [
+    17.0,
+    0.4,
+    4.5
+   ],
+   "material": "metal",
+   "tag": "railing"
+  },
+  {
+   "min": [
+    -6.0,
+    -11.7,
+    3.8
+   ],
+   "max": [
+    10.0,
+    -9.0,
+    4.0
+   ],
+   "material": "metal",
+   "tag": "mezzanine"
+  },
+  {
+   "min": [
+    -3.5,
+    -9.08,
+    4.0
+   ],
+   "max": [
+    10.0,
+    -9.0,
+    5.0
+   ],
+   "material": "metal",
+   "tag": "railing"
+  },
+  {
+   "min": [
+    -9.5,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    0.2687
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -9.125,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    0.5175
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -8.75,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    0.7662
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -8.375,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    1.015
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -8.0,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    1.2637
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -7.625,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    1.5125
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -7.25,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    1.7612
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -6.875,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    2.01
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -6.5,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    2.2588
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -6.125,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    2.5075
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -5.75,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    2.7563
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -5.375,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    3.005
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -5.0,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    3.2538
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -4.625,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    3.5025
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -4.25,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    3.7513
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    -3.875,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    -3.5,
+    -7.6,
+    4.0
+   ],
+   "material": "concrete",
+   "tag": "stairs",
+   "destructible": false
+  },
+  {
+   "min": [
+    1.4,
+    -11.2,
+    4.0
+   ],
+   "max": [
+    2.6,
+    -10.0,
+    5.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    6.5,
+    -11.3,
+    4.0
+   ],
+   "max": [
+    7.5,
+    -10.3,
+    5.0
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    -4.0,
+    3.0,
+    0.0
+   ],
+   "max": [
+    2.0,
+    3.1,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -4.0,
+    5.3,
+    0.0
+   ],
+   "max": [
+    2.0,
+    5.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -4.0,
+    3.0,
+    2.5
+   ],
+   "max": [
+    2.0,
+    5.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -4.0,
+    3.0,
+    0.0
+   ],
+   "max": [
+    2.0,
+    5.4,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -4.0,
+    3.0,
+    0.0
+   ],
+   "max": [
+    -3.9,
+    5.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -4.0,
+    5.6,
+    0.0
+   ],
+   "max": [
+    2.0,
+    5.7,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -4.0,
+    7.9,
+    0.0
+   ],
+   "max": [
+    2.0,
+    8.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -4.0,
+    5.6,
+    2.5
+   ],
+   "max": [
+    2.0,
+    8.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -4.0,
+    5.6,
+    0.0
+   ],
+   "max": [
+    2.0,
+    8.0,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    1.9,
+    5.6,
+    0.0
+   ],
+   "max": [
+    2.0,
+    8.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -4.0,
+    5.6,
+    0.0
+   ],
+   "max": [
+    -3.9,
+    8.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    4.0,
+    -6.0,
+    0.0
+   ],
+   "max": [
+    4.1,
+    0.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.3,
+    -6.0,
+    0.0
+   ],
+   "max": [
+    6.4,
+    0.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    4.0,
+    -6.0,
+    2.5
+   ],
+   "max": [
+    6.4,
+    0.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    4.0,
+    -6.0,
+    0.0
+   ],
+   "max": [
+    6.4,
+    0.0,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    4.0,
+    -6.0,
+    0.0
+   ],
+   "max": [
+    6.4,
+    -5.9,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -0.6,
+    -2.6,
+    0.0
+   ],
+   "max": [
+    0.6,
+    -1.4,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    0.7,
+    -2.7,
+    0.0
+   ],
+   "max": [
+    1.9,
+    -1.5,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    7.4,
+    7.4,
+    0.0
+   ],
+   "max": [
+    8.6,
+    8.6,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    7.4,
+    8.7,
+    0.0
+   ],
+   "max": [
+    8.6,
+    9.9,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    -8.5,
+    -4.5,
+    0.0
+   ],
+   "max": [
+    -7.5,
+    -3.5,
+    1.0
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    11.4,
+    -8.6,
+    0.0
+   ],
+   "max": [
+    12.6,
+    -7.4,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    17.4,
+    -6.6,
+    0.0
+   ],
+   "max": [
+    18.6,
+    -5.4,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    21.4,
+    -9.6,
+    0.0
+   ],
+   "max": [
+    22.6,
+    -8.4,
+    1.2
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    21.5,
+    -2.5,
+    0.0
+   ],
+   "max": [
+    22.5,
+    -1.5,
+    1.0
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    7.4,
+    7.4,
+    1.2
+   ],
+   "max": [
+    8.6,
+    8.6,
+    2.4
+   ],
+   "material": "wood",
+   "tag": "crate"
+  },
+  {
+   "min": [
+    14.0,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    17.6,
+    -8.2,
+    3.0
+   ],
+   "material": "metal",
+   "tag": "rack"
+  },
+  {
+   "min": [
+    19.0,
+    -9.0,
+    0.02
+   ],
+   "max": [
+    22.6,
+    -8.2,
+    3.0
+   ],
+   "material": "metal",
+   "tag": "rack"
+  },
+  {
+   "min": [
+    -30.0,
+    -20.0,
+    0.0
+   ],
+   "max": [
+    -24.0,
+    -19.9,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -17.7,
+    0.0
+   ],
+   "max": [
+    -24.0,
+    -17.6,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -20.0,
+    2.5
+   ],
+   "max": [
+    -24.0,
+    -17.6,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -20.0,
+    0.0
+   ],
+   "max": [
+    -24.0,
+    -17.6,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -20.0,
+    0.0
+   ],
+   "max": [
+    -29.9,
+    -17.6,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -17.4,
+    0.0
+   ],
+   "max": [
+    -24.0,
+    -17.3,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -15.1,
+    0.0
+   ],
+   "max": [
+    -24.0,
+    -15.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -17.4,
+    2.5
+   ],
+   "max": [
+    -24.0,
+    -15.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -17.4,
+    0.0
+   ],
+   "max": [
+    -24.0,
+    -15.0,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -17.4,
+    0.0
+   ],
+   "max": [
+    -29.9,
+    -15.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -22.0,
+    14.0,
+    0.0
+   ],
+   "max": [
+    -21.9,
+    20.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -19.7,
+    14.0,
+    0.0
+   ],
+   "max": [
+    -19.6,
+    20.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -22.0,
+    14.0,
+    2.5
+   ],
+   "max": [
+    -19.6,
+    20.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -22.0,
+    14.0,
+    0.0
+   ],
+   "max": [
+    -19.6,
+    20.0,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -22.0,
+    14.0,
+    0.0
+   ],
+   "max": [
+    -19.6,
+    14.1,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -18.0,
+    18.0,
+    0.0
+   ],
+   "max": [
+    -12.0,
+    18.1,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -18.0,
+    20.3,
+    0.0
+   ],
+   "max": [
+    -12.0,
+    20.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -18.0,
+    18.0,
+    2.5
+   ],
+   "max": [
+    -12.0,
+    20.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -18.0,
+    18.0,
+    0.0
+   ],
+   "max": [
+    -12.0,
+    20.4,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -18.0,
+    18.0,
+    0.0
+   ],
+   "max": [
+    -17.9,
+    20.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    30.0,
+    -24.0,
+    0.0
+   ],
+   "max": [
+    30.1,
+    -18.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    32.3,
+    -24.0,
+    0.0
+   ],
+   "max": [
+    32.4,
+    -18.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    30.0,
+    -24.0,
+    2.5
+   ],
+   "max": [
+    32.4,
+    -18.0,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    30.0,
+    -24.0,
+    0.0
+   ],
+   "max": [
+    32.4,
+    -18.0,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    30.0,
+    -24.0,
+    0.0
+   ],
+   "max": [
+    32.4,
+    -23.9,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    30.0,
+    18.0,
+    0.0
+   ],
+   "max": [
+    36.0,
+    18.1,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    30.0,
+    20.3,
+    0.0
+   ],
+   "max": [
+    36.0,
+    20.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    30.0,
+    18.0,
+    2.5
+   ],
+   "max": [
+    36.0,
+    20.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    30.0,
+    18.0,
+    0.0
+   ],
+   "max": [
+    36.0,
+    20.4,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    30.0,
+    18.0,
+    0.0
+   ],
+   "max": [
+    30.1,
+    20.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.0,
+    20.0,
+    0.0
+   ],
+   "max": [
+    12.0,
+    20.1,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.0,
+    22.3,
+    0.0
+   ],
+   "max": [
+    12.0,
+    22.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.0,
+    20.0,
+    2.5
+   ],
+   "max": [
+    12.0,
+    22.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.0,
+    20.0,
+    0.0
+   ],
+   "max": [
+    12.0,
+    22.4,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.0,
+    20.0,
+    0.0
+   ],
+   "max": [
+    6.1,
+    22.4,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.0,
+    -22.0,
+    0.0
+   ],
+   "max": [
+    12.0,
+    -21.9,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.0,
+    -19.7,
+    0.0
+   ],
+   "max": [
+    12.0,
+    -19.6,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.0,
+    -22.0,
+    2.5
+   ],
+   "max": [
+    12.0,
+    -19.6,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.0,
+    -22.0,
+    0.0
+   ],
+   "max": [
+    12.0,
+    -19.6,
+    0.05
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    6.0,
+    -22.0,
+    0.0
+   ],
+   "max": [
+    6.1,
+    -19.6,
+    2.6
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -20.0,
+    2.6
+   ],
+   "max": [
+    -24.0,
+    -19.9,
+    5.2
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -17.7,
+    2.6
+   ],
+   "max": [
+    -24.0,
+    -17.6,
+    5.2
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -20.0,
+    5.1
+   ],
+   "max": [
+    -24.0,
+    -17.6,
+    5.2
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -20.0,
+    2.6
+   ],
+   "max": [
+    -24.0,
+    -17.6,
+    2.65
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -24.1,
+    -20.0,
+    2.6
+   ],
+   "max": [
+    -24.0,
+    -17.6,
+    5.2
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -30.0,
+    -20.0,
+    2.6
+   ],
+   "max": [
+    -29.9,
+    -17.6,
+    5.2
+   ],
+   "material": "metal",
+   "tag": "container"
+  },
+  {
+   "min": [
+    -20.3,
+    -5.5,
+    0
+   ],
+   "max": [
+    -19.7,
+    -2.5,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "barrier"
+  },
+  {
+   "min": [
+    -20.3,
+    4.5,
+    0
+   ],
+   "max": [
+    -19.7,
+    7.5,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "barrier"
+  },
+  {
+   "min": [
+    -15.5,
+    21.7,
+    0
+   ],
+   "max": [
+    -12.5,
+    22.3,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "barrier"
+  },
+  {
+   "min": [
+    12.5,
+    -18.3,
+    0
+   ],
+   "max": [
+    15.5,
+    -17.7,
+    0.9
+   ],
+   "material": "concrete",
+   "tag": "barrier"
+  },
+  {
+   "min": [
+    -34.0,
+    -28.0,
+    0
+   ],
+   "max": [
+    -33.1,
+    -27.85,
+    2.6
+   ],
+   "material": "wood",
+   "tag": "booth"
+  },
+  {
+   "min": [
+    -33.1,
+    -28.0,
+    0
+   ],
+   "max": [
+    -31.9,
+    -27.85,
+    1.0
+   ],
+   "material": "wood",
+   "tag": "booth_sill"
+  },
+  {
+   "min": [
+    -33.1,
+    -28.0,
+    2.1
+   ],
+   "max": [
+    -31.9,
+    -27.85,
+    2.6
+   ],
+   "material": "wood",
+   "tag": "booth_lintel"
+  },
+  {
+   "min": [
+    -33.1,
+    -27.935,
+    1.0
+   ],
+   "max": [
+    -31.9,
+    -27.915,
+    2.1
+   ],
+   "material": "glass",
+   "tag": "window_glass"
+  },
+  {
+   "min": [
+    -31.9,
+    -28.0,
+    0
+   ],
+   "max": [
+    -31.0,
+    -27.85,
+    2.6
+   ],
+   "material": "wood",
+   "tag": "booth"
+  },
+  {
+   "min": [
+    -34.0,
+    -25.15,
+    0
+   ],
+   "max": [
+    -33.0,
+    -25.0,
+    2.6
+   ],
+   "material": "wood",
+   "tag": "booth"
+  },
+  {
+   "min": [
+    -33.0,
+    -25.15,
+    2.15
+   ],
+   "max": [
+    -32.0,
+    -25.0,
+    2.6
+   ],
+   "material": "wood",
+   "tag": "booth_lintel"
+  },
+  {
+   "min": [
+    -33.0,
+    -25.1,
+    0.0
+   ],
+   "max": [
+    -32.0,
+    -25.05,
+    2.15
+   ],
+   "material": "wood",
+   "tag": "door"
+  },
+  {
+   "min": [
+    -32.0,
+    -25.15,
+    0
+   ],
+   "max": [
+    -31.0,
+    -25.0,
+    2.6
+   ],
+   "material": "wood",
+   "tag": "booth"
+  },
+  {
+   "min": [
+    -34.0,
+    -28.0,
+    0
+   ],
+   "max": [
+    -33.85,
+    -25.0,
+    2.6
+   ],
+   "material": "wood",
+   "tag": "booth"
+  },
+  {
+   "min": [
+    -31.15,
+    -28.0,
+    0
+   ],
+   "max": [
+    -31.0,
+    -25.0,
+    2.6
+   ],
+   "material": "wood",
+   "tag": "booth"
+  },
+  {
+   "min": [
+    -34.0,
+    -28.0,
+    2.6
+   ],
+   "max": [
+    -31.0,
+    -25.0,
+    2.75
+   ],
+   "material": "wood",
+   "tag": "booth_roof"
+  },
+  {
+   "min": [
+    -36.2,
+    30.0,
+    0
+   ],
+   "max": [
+    -35.8,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    -30.2,
+    30.0,
+    0
+   ],
+   "max": [
+    -29.8,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    -24.2,
+    30.0,
+    0
+   ],
+   "max": [
+    -23.8,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    -18.2,
+    30.0,
+    0
+   ],
+   "max": [
+    -17.8,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    -12.2,
+    30.0,
+    0
+   ],
+   "max": [
+    -11.8,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    -6.2,
+    30.0,
+    0
+   ],
+   "max": [
+    -5.8,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    -0.2,
+    30.0,
+    0
+   ],
+   "max": [
+    0.2,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    5.8,
+    30.0,
+    0
+   ],
+   "max": [
+    6.2,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    11.8,
+    30.0,
+    0
+   ],
+   "max": [
+    12.2,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    17.8,
+    30.0,
+    0
+   ],
+   "max": [
+    18.2,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    23.8,
+    30.0,
+    0
+   ],
+   "max": [
+    24.2,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    29.8,
+    30.0,
+    0
+   ],
+   "max": [
+    30.2,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  },
+  {
+   "min": [
+    35.8,
+    30.0,
+    0
+   ],
+   "max": [
+    36.2,
+    30.4,
+    1.0
+   ],
+   "material": "metal",
+   "tag": "bollard"
+  }
+ ],
+ "spawns": [
+  {
+   "pos": [
+    -36.0,
+    0.0,
+    0.0
+   ],
+   "yaw": 0.0,
+   "team": 0
+  },
+  {
+   "pos": [
+    -36.0,
+    4.0,
+    0.0
+   ],
+   "yaw": 0.0,
+   "team": 0
+  },
+  {
+   "pos": [
+    -36.0,
+    -4.0,
+    0.0
+   ],
+   "yaw": 0.0,
+   "team": 0
+  },
+  {
+   "pos": [
+    -34.0,
+    8.0,
+    0.0
+   ],
+   "yaw": 0.0,
+   "team": 0
+  },
+  {
+   "pos": [
+    -34.0,
+    -8.0,
+    0.0
+   ],
+   "yaw": 0.0,
+   "team": 0
+  },
+  {
+   "pos": [
+    17.0,
+    8.0,
+    0.02
+   ],
+   "yaw": 180.0,
+   "team": 1
+  },
+  {
+   "pos": [
+    23.0,
+    6.0,
+    0.02
+   ],
+   "yaw": 180.0,
+   "team": 1
+  },
+  {
+   "pos": [
+    15.5,
+    3.2,
+    3.5
+   ],
+   "yaw": 180.0,
+   "team": 1
+  },
+  {
+   "pos": [
+    23.2,
+    10.8,
+    3.5
+   ],
+   "yaw": 180.0,
+   "team": 1
+  },
+  {
+   "pos": [
+    24.0,
+    4.0,
+    3.5
+   ],
+   "yaw": 180.0,
+   "team": 1
+  }
+ ],
+ "objectives": [
+  {
+   "name": "Upper Office",
+   "min": [
+    14.2,
+    2.2,
+    3.5
+   ],
+   "max": [
+    25.6,
+    11.6,
+    6.5
+   ]
+  },
+  {
+   "name": "Storage",
+   "min": [
+    20.1,
+    2.2,
+    0.02
+   ],
+   "max": [
+    25.6,
+    11.6,
+    3.2
+   ]
+  }
+ ]
+}

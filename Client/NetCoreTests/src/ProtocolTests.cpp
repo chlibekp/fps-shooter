@@ -64,7 +64,7 @@ namespace
 TFPS_TEST(GoldenHandshakeBytesMatchRust)
 {
 	auto V = LoadVectors();
-	TFPS_REQUIRE(V.size() == 12);
+	TFPS_REQUIRE(V.size() == 15);
 	std::vector<uint8_t> B;
 	ConnectRequest CR; CR.ClientNonce = 0x0102030405060708ull; CR.Encode(B);
 	TFPS_EXPECT(B == V["connect_request"]);
@@ -261,6 +261,13 @@ TFPS_TEST(DefinitionHashesMatchRust)
 	TFPS_REQUIRE(ParseMapJson(ReadText(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/maps/test_arena.json"), Map, Err));
 	TFPS_REQUIRE(ParseWeaponsJson(ReadText(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/weapons.json"), Weapons, Err));
 	TFPS_EXPECT(Map.GeometryHash() == HexU64(V["map_hash_test_arena"]));
+	for (const char* Name : {"harbor", "villa", "consulate"})
+	{
+		MapDef M;
+		TFPS_REQUIRE(ParseMapJson(ReadText(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/maps/" + Name + ".json"), M, Err));
+		std::printf("  map %s: %d solids, hash %016llx\n", Name, static_cast<int>(M.Solids.size()), static_cast<unsigned long long>(M.GeometryHash()));
+		TFPS_EXPECT(M.GeometryHash() == HexU64(V[std::string("map_hash_") + Name]));
+	}
 	TFPS_EXPECT(Weapons.Hash() == HexU64(V["weapons_hash"]));
 }
 

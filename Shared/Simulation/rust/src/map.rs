@@ -86,11 +86,20 @@ pub struct SpawnPoint {
     pub team: u8,
 }
 
+/// A named objective area (bomb/secure site) for game modes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Objective {
+    pub name: String,
+    pub bounds: Aabb,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct MapDef {
     pub name: String,
     pub solids: Vec<Solid>,
     pub spawns: Vec<SpawnPoint>,
+    /// Objective sites (not part of the geometry hash yet).
+    pub objectives: Vec<Objective>,
     /// Players below this Z are respawned (fell out of the world).
     pub kill_z: f32,
 }
@@ -114,6 +123,15 @@ struct JsonMap {
     kill_z: f32,
     solids: Vec<JsonSolid>,
     spawns: Vec<JsonSpawn>,
+    #[serde(default)]
+    objectives: Vec<JsonObjective>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct JsonObjective {
+    name: String,
+    min: [f32; 3],
+    max: [f32; 3],
 }
 
 fn default_kill_z() -> f32 {
@@ -174,6 +192,17 @@ impl MapDef {
                     pos: Vec3::new(s.pos[0], s.pos[1], s.pos[2]),
                     yaw_deg: s.yaw,
                     team: s.team,
+                })
+                .collect(),
+            objectives: j
+                .objectives
+                .into_iter()
+                .map(|o| Objective {
+                    name: o.name,
+                    bounds: Aabb {
+                        min: Vec3::new(o.min[0], o.min[1], o.min[2]),
+                        max: Vec3::new(o.max[0], o.max[1], o.max[2]),
+                    },
                 })
                 .collect(),
         };

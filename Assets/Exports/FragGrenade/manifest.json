@@ -1,0 +1,23 @@
+{
+  "asset": "FragGrenade",
+  "unreal_mesh": "SM_FragGrenade",
+  "dimensions_m": [
+    0.0678,
+    0.0745,
+    0.1024
+  ],
+  "triangles_lod0": 2216,
+  "triangles_lod1": 664,
+  "collision_primitives": 1,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/FragGrenade/T_FragGrenade_BC.png",
+    "N": "Assets/Exports/FragGrenade/T_FragGrenade_N.png",
+    "ORM": "Assets/Exports/FragGrenade/T_FragGrenade_ORM.png",
+    "fbx_lod0": "Assets/Exports/FragGrenade/SM_FragGrenade.fbx",
+    "fbx_lod1": "Assets/Exports/FragGrenade/SM_FragGrenade_LOD1.fbx",
+    "preview": "Assets/Exports/FragGrenade/preview.png",
+    "blend": "Assets/Blender/FragGrenade.blend"
+  },
+  "notes": "Gadget 1 (frag). Server collision: sphere of radius 0.06 m."
+}

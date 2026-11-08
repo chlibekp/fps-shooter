@@ -1,0 +1,23 @@
+{
+  "asset": "ReconDrone",
+  "unreal_mesh": "SM_ReconDrone",
+  "dimensions_m": [
+    0.28,
+    0.146,
+    0.205
+  ],
+  "triangles_lod0": 1320,
+  "triangles_lod1": 528,
+  "collision_primitives": 1,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/ReconDrone/T_ReconDrone_BC.png",
+    "N": "Assets/Exports/ReconDrone/T_ReconDrone_N.png",
+    "ORM": "Assets/Exports/ReconDrone/T_ReconDrone_ORM.png",
+    "fbx_lod0": "Assets/Exports/ReconDrone/SM_ReconDrone.fbx",
+    "fbx_lod1": "Assets/Exports/ReconDrone/SM_ReconDrone_LOD1.fbx",
+    "preview": "Assets/Exports/ReconDrone/preview.png",
+    "blend": "Assets/Blender/ReconDrone.blend"
+  },
+  "notes": "Gadget 5 (drone). Server hit box: 0.30 x 0.30 x 0.18 m around the centre."
+}

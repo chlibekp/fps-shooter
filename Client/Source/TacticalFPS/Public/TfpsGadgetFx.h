@@ -7,6 +7,7 @@
 #include "TfpsGadgetFx.generated.h"
 
 class UStaticMeshComponent;
+class UStaticMesh;
 class UPointLightComponent;
 class UMaterialInstanceDynamic;
 
@@ -60,6 +61,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> DeviceMaterial;
+
+	/** Meshes from the Blender pipeline, by gadget kind (nullptr = not imported: placeholder shapes). */
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMesh>> ImportedMeshes;
 
 	TArray<FSlot> Slots;
 	float FlashLife = 0.0f;

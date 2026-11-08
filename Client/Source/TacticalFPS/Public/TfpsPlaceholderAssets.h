@@ -20,6 +20,12 @@ struct FTfpsPlaceholderAssets
 	static UStaticMesh* Cylinder();
 	static UStaticMesh* Sphere();
 	static UMaterialInterface* BaseMaterial();
+	/**
+	 * A mesh imported from the Blender pipeline (Tools/AssetPipeline/unreal_import.py puts
+	 * SM_<Asset> into /Game/Environment/Props/<Asset>), or nullptr if it is not in the
+	 * project yet, so callers fall back to the placeholder shapes.
+	 */
+	static UStaticMesh* ImportedProp(const TCHAR* Asset);
 	/** Tinted instance of the base material ("Color" vector parameter). */
 	static UMaterialInstanceDynamic* MakeTinted(UObject* Outer, const FLinearColor& Color);
 };

@@ -9,6 +9,7 @@
 
 class UInstancedStaticMeshComponent;
 class UStaticMeshComponent;
+class UStaticMesh;
 
 /**
  * Builds the graybox of the current map from its shared gameplay definition
@@ -36,7 +37,10 @@ private:
 	int32 MeshFor(tfps::EMaterial M);
 	int32 AddBox(int32 MeshIndex, const tfps::Aabb& B);
 	/** Adds a solid (whole box, or one instance per destruction cell). */
-	void AddSolid(const tfps::WorldSolid& S);
+	void AddSolid(const tfps::WorldSolid& S, const char* Tag = "");
+	/** Imported prop for a solid whose tag and size match one (nullptr = graybox), and its yaw. */
+	UStaticMesh* MatchProp(const tfps::WorldSolid& S, const char* Tag, float& OutYaw) const;
+	void AddProp(UStaticMesh* Mesh, const tfps::Aabb& B, float Yaw);
 	void ReinforceSolid(const tfps::WorldSolid& S);
 	void SpawnDebris(const FVector& CenterCm, const FVector& SizeCm, uint8 Material);
 
@@ -53,6 +57,21 @@ private:
 	TMap<uint32, TPair<int32, int32>> CellInstances;
 	TMap<uint8, int32> MeshForMaterial;
 	TArray<uint8> MeshMaterial;
+
+	/** A destructible solid shown as an imported prop until its first cell breaks. */
+	struct FDressing
+	{
+		UStaticMeshComponent* Prop = nullptr;
+		bool bIntact = true;
+		TMap<uint32, FTransform> Cells;
+	};
+
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> DressingProps;
+	UPROPERTY()
+	TMap<FName, TObjectPtr<UStaticMesh>> PropMeshes;
+	TArray<FDressing> Dressings;
+	TMap<uint32, int32> CellDressing;
 
 	int32 BuiltRevision = -1;
 	/** Solids of the collision world drawn so far (map solids + runtime barricades). */

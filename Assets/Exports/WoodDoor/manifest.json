@@ -1,0 +1,23 @@
+{
+  "asset": "WoodDoor",
+  "unreal_mesh": "SM_WoodDoor",
+  "dimensions_m": [
+    1.0,
+    0.116,
+    2.15
+  ],
+  "triangles_lod0": 1636,
+  "triangles_lod1": 490,
+  "collision_primitives": 1,
+  "texture_size": 1024,
+  "files": {
+    "BC": "Assets/Exports/WoodDoor/T_WoodDoor_BC.png",
+    "N": "Assets/Exports/WoodDoor/T_WoodDoor_N.png",
+    "ORM": "Assets/Exports/WoodDoor/T_WoodDoor_ORM.png",
+    "fbx_lod0": "Assets/Exports/WoodDoor/SM_WoodDoor.fbx",
+    "fbx_lod1": "Assets/Exports/WoodDoor/SM_WoodDoor_LOD1.fbx",
+    "preview": "Assets/Exports/WoodDoor/preview.png",
+    "blend": "Assets/Blender/WoodDoor.blend"
+  },
+  "notes": "Matches mapkit DOOR_W x DOOR_SLAB x DOOR_H door solids (wood, breakable)."
+}

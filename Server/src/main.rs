@@ -19,9 +19,10 @@ struct Args {
     snapshot_interval: u8,
     #[arg(long, default_value_t = 10)]
     max_players: u16,
-    /// Map gameplay definition (JSON).
-    #[arg(long, default_value = "Shared/Definitions/maps/test_arena.json")]
-    map: PathBuf,
+    /// Map gameplay definition: a JSON path, or a map name from
+    /// Shared/Definitions/maps (test_arena, harbor, villa, consulate).
+    #[arg(long, default_value = "test_arena")]
+    map: String,
     /// Weapon definitions (JSON, must match the clients' file).
     #[arg(long, default_value = "Shared/Definitions/weapons.json")]
     weapons: PathBuf,
@@ -34,6 +35,16 @@ struct Args {
     /// Seconds between statistics log lines.
     #[arg(long, default_value_t = 10)]
     stats_interval: u64,
+}
+
+/// A bare name ("harbor") means Shared/Definitions/maps/<name>.json.
+fn resolve_map(arg: &str) -> PathBuf {
+    let p = PathBuf::from(arg);
+    if p.extension().is_some() || arg.contains('/') || arg.contains('\\') {
+        p
+    } else {
+        PathBuf::from(format!("Shared/Definitions/maps/{arg}.json"))
+    }
 }
 
 fn parse_hex_u64(s: &str) -> Result<u64, String> {
@@ -52,7 +63,7 @@ fn main() -> anyhow::Result<()> {
         tick_rate: args.tick_rate,
         snapshot_interval: args.snapshot_interval,
         max_players: args.max_players,
-        map_path: args.map,
+        map_path: resolve_map(&args.map),
         weapons_path: args.weapons,
         gadgets_path: args.gadgets,
         join_token: args.join_token,

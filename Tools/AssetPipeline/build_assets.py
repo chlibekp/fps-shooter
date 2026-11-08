@@ -2,7 +2,8 @@
 """Builds all Blender assets headlessly.
 
 Usage: python3 Tools/AssetPipeline/build_assets.py [asset ...]
-       assets: crate, barrier, container (default: all)
+       assets: crate, barrier, container, drone, breach_charge, frag, camera, door,
+               window, brick_panel (default: all)
 Env:   BLENDER=/path/to/blender  TFPS_TEX_SIZE=512  TFPS_BAKE_SAMPLES=16
 """
 import os
@@ -15,6 +16,13 @@ SCRIPTS = {
     "crate": "build_crate.py",
     "barrier": "build_barrier.py",
     "container": "build_container.py",
+    "drone": "build_drone.py",
+    "breach_charge": "build_breach_charge.py",
+    "frag": "build_frag.py",
+    "camera": "build_camera.py",
+    "door": "build_door.py",
+    "window": "build_window.py",
+    "brick_panel": "build_brick_panel.py",
 }
 
 

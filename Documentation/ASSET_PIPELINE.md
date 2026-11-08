@@ -21,7 +21,7 @@ distro build also needs `python3-numpy` for the FBX exporter).
 |------|-------|
 | Units | 1 Blender unit = 1 m (Unreal imports FBX meters as 100 uu) |
 | Axes | Z up; FBX export forward −Z, up Y (Unreal default import) |
-| Pivot | Bottom centre of the asset |
+| Pivot | Bottom centre of the asset (the build fails otherwise) |
 | Naming | `SM_<Asset>` mesh, `SM_<Asset>_LOD1`, `UCX_SM_<Asset>_NN` collision, `T_<Asset>_BC/N/ORM` textures |
 | Normal maps | Tangent space, **DirectX** convention (green flipped at bake time) |
 | ORM | R = ambient occlusion, G = roughness, B = metallic (import as linear / "Masks") |
@@ -44,37 +44,79 @@ Assets/Exports/<Asset>/manifest.json          dimensions, triangle counts, files
 
 ## Current assets
 
-| Asset | Size (m) | Tris LOD0 / LOD1 | Collision | Textures | Matches map solid |
-|-------|----------|------------------|-----------|----------|-------------------|
-| WoodCrate | 1.25 × 1.25 × 1.2 | 6,696 / 2,342 | 1 box | 1024² | `crate` |
-| JerseyBarrier | 0.6 × 3.0 × 0.93 | 436 / 218 | 1 convex hull | 512² | `barrier` |
-| ShippingContainer | 6.06 × 2.53 × 2.6 | 4,420 / 1,326 | 5 boxes | 512² | `container` |
+| Asset | Size (m) | Tris LOD0 / LOD1 | Collision | Textures | Used for |
+|-------|----------|------------------|-----------|----------|----------|
+| WoodCrate | 1.248 × 1.248 × 1.202 | 6,696 / 2,342 | 1 | 1024² | map solids tagged `crate` |
+| JerseyBarrier | 0.6 × 3 × 0.93 | 436 / 218 | 1 | 512² | `barrier` |
+| ShippingContainer | 6.061 × 2.532 × 2.6 | 4,420 / 1,326 | 5 | 512² | `container` (kit reference) |
+| WoodDoor | 1 × 0.116 × 2.15 | 1,636 / 490 | 1 | 1024² | `door` (mapkit door slab) |
+| WindowFrame | 1.5 × 0.35 × 1.15 | 756 / 378 | 1 | 512² | frames `window_glass` panes |
+| BrickWallPanel | 2.4 × 0.3 × 3 | 108 / 54 | 1 | 1024² | one mapkit wall panel |
+| ReconDrone | 0.28 × 0.146 × 0.205 | 1,320 / 528 | 1 | 512² | gadget 5 |
+| BreachCharge | 0.24 × 0.08 × 0.34 | 564 / 224 | 1 | 512² | gadget 4 |
+| FragGrenade | 0.0678 × 0.0745 × 0.1024 | 2,216 / 664 | 1 | 512² | gadget 1 |
+| WallCamera | 0.1 × 0.1266 × 0.1189 | 880 / 308 | 1 | 512² | gadget 6 |
 
 Previews: `Assets/Exports/*/preview.png`.
 
-## Importing into Unreal (manual step until an editor commandlet exists)
+## Multi-surface assets (gadgets, hardware)
 
-1. Drag `SM_<Asset>.fbx` into `Content/Environment/Props/<Asset>/`. Leave
-   *Combine Meshes* off; collision is picked up from the `UCX_` meshes.
-2. Open the mesh → LOD Settings → *Import LOD Level 1* → `SM_<Asset>_LOD1.fbx`.
-3. Import the three textures. Set `_N` compression to **Normalmap**. Set
-   `_ORM` to **Masks** (sRGB off).
-4. Create `MI_<Asset>` from the project master material (Phase 5; until then
-   the engine's default lit material with the three maps wired works).
-5. Enable Nanite on the static mesh where the platform supports it (see
-   `PLATFORMS.md`). The LOD1 FBX is used where Nanite is unavailable.
+Props made of several surfaces (plastic, rubber, steel, paint) use
+`tc.paint(part, rgb, metallic, roughness)` on each part before joining, and
+`tc.painted_material()`. The values are stored in colour attributes. One
+material renders them with subtle procedural wear, and the bake produces
+one texture set:
+* metallic is baked per texel into ORM.B;
+* base colour is baked with metallic forced to 0, so metals keep their
+  tint instead of baking black.
 
-Planned: an Unreal Python/commandlet import script
-(`Tools/AssetPipeline/unreal_import.py`) to make steps 1–4 automatic.
+## Importing into Unreal
+
+`Tools/AssetPipeline/unreal_import.py`, run in the editor (*Execute Python
+Script*) or with `UnrealEditor-Cmd ... -run=pythonscript -script=...`,
+imports every `Assets/Exports/*/manifest.json`:
+
+* `SM_<Asset>` into `/Game/Environment/Props/<Asset>`, with UCX collision
+  and LOD1;
+* the textures with the right compression (N = normal map, ORM = masks,
+  sRGB off);
+* `MI_<Asset>` as a child of `/Game/Materials/M_TfpsMaster` if that parent
+  exists, otherwise a small standalone material wiring the maps.
+
+**Status: written against the UE 5 Python API, not yet run in an editor.**
+
+Manual equivalent:
+1. Drag `SM_<Asset>.fbx` into `Content/Environment/Props/<Asset>/` with
+   *Combine Meshes* off.
+2. Import `SM_<Asset>_LOD1.fbx` into LOD 1.
+3. Import the textures (N: Normalmap; ORM: Masks).
+4. Create the material.
+
+## Where the game uses imported assets
+
+The game looks for `/Game/Environment/Props/<Asset>/SM_<Asset>` at runtime
+(`FTfpsPlaceholderAssets::ImportedProp`) and falls back to placeholder
+shapes while an asset is not imported:
+
+* `ATfpsArenaBuilder` dresses map solids whose tag and size match a prop:
+  `crate` → WoodCrate, `barrier` → JerseyBarrier, `door` → WoodDoor, and
+  `window_glass` (1.4 × 1.1 m) → WindowFrame around the pane. A
+  destructible solid shows the prop until its first cell is destroyed. The
+  prop is then replaced by the surviving cells, so the visuals never
+  disagree with gameplay.
+* `ATfpsGadgetFx` draws grenades, charges, drones and cameras with
+  FragGrenade, BreachCharge, ReconDrone and WallCamera.
 
 ## Known limitations
 
-* The texture bakes are procedural (noise/wave/voronoi). They look plausible
-  but are not photo-sourced. Higher-fidelity materials are Phase 5 work.
+* The texture bakes are procedural (noise/wave/voronoi/brick). They look
+  plausible but are not photo-sourced.
+* Placed devices (charges, cameras) are drawn without the surface
+  orientation (the server does not replicate the wall normal yet).
 * Wood grain on the crate's top face is generated in object space, so it
   does not follow each plank perfectly.
 * Small parts such as the container corner castings get very little UV
   space. Some of them bake dark.
-* The in-game graybox still uses engine cubes (`FTfpsPlaceholderAssets`).
-  Placing these props over the matching map solids is part of the Phase 5
-  map dressing.
+* Walls and floors are still drawn as tinted cell cubes. The
+  BrickWallPanel material is not applied to them yet: it needs world-aligned
+  UVs on the cell instances.

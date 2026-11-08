@@ -1,0 +1,23 @@
+{
+  "asset": "BreachCharge",
+  "unreal_mesh": "SM_BreachCharge",
+  "dimensions_m": [
+    0.24,
+    0.08,
+    0.34
+  ],
+  "triangles_lod0": 564,
+  "triangles_lod1": 224,
+  "collision_primitives": 1,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/BreachCharge/T_BreachCharge_BC.png",
+    "N": "Assets/Exports/BreachCharge/T_BreachCharge_N.png",
+    "ORM": "Assets/Exports/BreachCharge/T_BreachCharge_ORM.png",
+    "fbx_lod0": "Assets/Exports/BreachCharge/SM_BreachCharge.fbx",
+    "fbx_lod1": "Assets/Exports/BreachCharge/SM_BreachCharge_LOD1.fbx",
+    "preview": "Assets/Exports/BreachCharge/preview.png",
+    "blend": "Assets/Blender/BreachCharge.blend"
+  },
+  "notes": "Gadget 4 (breaching charge). Placed 3 cm off the surface by the server."
+}

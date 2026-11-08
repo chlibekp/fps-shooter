@@ -1,0 +1,23 @@
+{
+  "asset": "WallCamera",
+  "unreal_mesh": "SM_WallCamera",
+  "dimensions_m": [
+    0.1,
+    0.1266,
+    0.1189
+  ],
+  "triangles_lod0": 880,
+  "triangles_lod1": 308,
+  "collision_primitives": 1,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/WallCamera/T_WallCamera_BC.png",
+    "N": "Assets/Exports/WallCamera/T_WallCamera_N.png",
+    "ORM": "Assets/Exports/WallCamera/T_WallCamera_ORM.png",
+    "fbx_lod0": "Assets/Exports/WallCamera/SM_WallCamera.fbx",
+    "fbx_lod1": "Assets/Exports/WallCamera/SM_WallCamera_LOD1.fbx",
+    "preview": "Assets/Exports/WallCamera/preview.png",
+    "blend": "Assets/Blender/WallCamera.blend"
+  },
+  "notes": "Gadget 6 (camera). Server hit box: 0.16 m cube around the placement point."
+}

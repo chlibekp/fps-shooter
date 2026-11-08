@@ -40,6 +40,13 @@ void ATfpsGadgetFx::BeginPlay()
 	ArmedMaterial = FTfpsPlaceholderAssets::MakeTinted(this, FLinearColor(2.5f, 0.15f, 0.08f));
 	SmokeMaterial = FTfpsPlaceholderAssets::MakeTinted(this, FLinearColor(0.62f, 0.62f, 0.6f));
 	DeviceMaterial = FTfpsPlaceholderAssets::MakeTinted(this, FLinearColor(0.1f, 0.9f, 1.4f));
+	// Indexed by tfps::EGadgetKind.
+	const TCHAR* const Names[] = {TEXT("FragGrenade"), TEXT("FragGrenade"), TEXT("FragGrenade"), TEXT("BreachCharge"),
+		TEXT("ReconDrone"), TEXT("WallCamera"), TEXT("WallCamera"), TEXT("WallCamera"), nullptr};
+	for (const TCHAR* Name : Names)
+	{
+		ImportedMeshes.Add(Name != nullptr ? FTfpsPlaceholderAssets::ImportedProp(Name) : nullptr);
+	}
 	for (int32 I = 0; I < SlotCount; ++I)
 	{
 		UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
@@ -95,7 +102,18 @@ void ATfpsGadgetFx::Tick(float DeltaSeconds)
 			Slot->PosCm = bNew ? Target : FMath::Lerp(Slot->PosCm, Target, FMath::Min(1.0f, DeltaSeconds * 25.0f));
 			const tfps::GadgetDef* Def = Net->GetGadgets().Get(G.Gadget);
 			UStaticMeshComponent* M = Slot->Mesh;
-			if (G.Phase == tfps::GadgetPhase::Smoking)
+			const int32 KindIndex = Def != nullptr ? static_cast<int32>(Def->Kind) : -1;
+			UStaticMesh* Imported = ImportedMeshes.IsValidIndex(KindIndex) ? ImportedMeshes[KindIndex].Get() : nullptr;
+			if (Imported != nullptr && G.Phase != tfps::GadgetPhase::Smoking)
+			{
+				// Real asset: authored in meters (imported at 100 uu/m), with its own material.
+				Slot->SmokeAge = 0.0f;
+				M->SetStaticMesh(Imported);
+				M->SetMaterial(0, Imported->GetMaterial(0));
+				M->SetWorldScale3D(FVector(1.0f));
+				M->SetWorldLocation(Slot->PosCm);
+			}
+			else if (G.Phase == tfps::GadgetPhase::Smoking)
 			{
 				Slot->SmokeAge = bNew ? SmokeGrowTime : Slot->SmokeAge + DeltaSeconds;
 				const float RadiusCm = (Def != nullptr ? Def->Radius : 4.0f) * TfpsMetersToUnreal;

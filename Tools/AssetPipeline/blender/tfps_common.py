@@ -69,6 +69,22 @@ def box(name, size, location, bevel=0.0, bevel_segments=2):
     return o
 
 
+def cylinder(name, radius, depth, location, axis='Z', vertices=24, bevel=0.0):
+    """Cylinder mesh object centred at `location`, its axis along X, Y or Z."""
+    rot = {'X': (0.0, math.pi / 2, 0.0), 'Y': (math.pi / 2, 0.0, 0.0), 'Z': (0.0, 0.0, 0.0)}[axis]
+    bpy.ops.mesh.primitive_cylinder_add(vertices=vertices, radius=radius, depth=depth, location=location, rotation=rot)
+    o = bpy.context.active_object
+    o.name = name
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    if bevel > 0.0:
+        m = o.modifiers.new("Bevel", 'BEVEL')
+        m.width = bevel
+        m.segments = 2
+        m.limit_method = 'ANGLE'
+        apply_modifiers(o)
+    return o
+
+
 def apply_modifiers(o):
     select_only([o])
     for m in list(o.modifiers):
@@ -142,13 +158,18 @@ def dimensions(o):
 
 
 def set_origin_floor_center(o):
-    """Moves geometry so the pivot is at the bottom centre of the bounds."""
-    bb = [o.matrix_world @ Vector(c) for c in o.bound_box]
-    mn = Vector((min(v.x for v in bb), min(v.y for v in bb), min(v.z for v in bb)))
-    mx = Vector((max(v.x for v in bb), max(v.y for v in bb), max(v.z for v in bb)))
+    """Moves geometry so the pivot is at the bottom centre of the bounds.
+
+    The object's transform is baked into the mesh first: after join() the
+    object keeps the first part's location, which must not be lost."""
+    from mathutils import Matrix
+    o.data.transform(o.matrix_world)
+    o.matrix_world = Matrix.Identity(4)
+    vs = [v.co for v in o.data.vertices]
+    mn = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
+    mx = Vector((max(v.x for v in vs), max(v.y for v in vs), max(v.z for v in vs)))
     offset = Vector(((mn.x + mx.x) / 2, (mn.y + mx.y) / 2, mn.z))
-    o.data.transform(__import__("mathutils").Matrix.Translation(-offset))
-    o.location = (0, 0, 0)
+    o.data.transform(Matrix.Translation(-offset))
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +213,76 @@ def ramp(nt, stops):
 
 
 # ---------------------------------------------------------------------------
+# Painted multi-surface assets (gadgets, hardware)
+# ---------------------------------------------------------------------------
+
+def paint(o, rgb, metallic=0.0, roughness=0.5):
+    """Stores a surface's base colour, metallic and roughness in colour
+    attributes, so one material can render many parts after `join`."""
+    me = o.data
+    for name, value in (("tfps_col", (rgb[0], rgb[1], rgb[2], 1.0)), ("tfps_mr", (metallic, roughness, 0.0, 1.0))):
+        attr = me.color_attributes.get(name) or me.color_attributes.new(name, 'FLOAT_COLOR', 'CORNER')
+        for d in attr.data:
+            d.color = value
+    return o
+
+
+def painted_material(name, grain=0.08, bump_strength=0.15):
+    """Material reading `paint` attributes, with subtle procedural wear."""
+    m, nt, bsdf, coord = new_material(name)
+    col = node(nt, "ShaderNodeAttribute", attribute_name="tfps_col")
+    mr = node(nt, "ShaderNodeAttribute", attribute_name="tfps_mr")
+    noise = node(nt, "ShaderNodeTexNoise")
+    noise.inputs["Scale"].default_value = 40.0
+    noise.inputs["Detail"].default_value = 8.0
+    nt.links.new(coord.outputs["Object"], noise.inputs["Vector"])
+    vary = node(nt, "ShaderNodeMapRange")
+    vary.inputs["To Min"].default_value = 1.0 - grain
+    vary.inputs["To Max"].default_value = 1.0 + grain
+    nt.links.new(noise.outputs["Fac"], vary.inputs["Value"])
+    mul = node(nt, "ShaderNodeMix", data_type='RGBA', blend_type='MULTIPLY')
+    mul.inputs["Factor"].default_value = 1.0
+    nt.links.new(col.outputs["Color"], mul.inputs[6])
+    g = nt.nodes.new("ShaderNodeCombineColor")
+    for ch in ("Red", "Green", "Blue"):
+        nt.links.new(vary.outputs["Result"], g.inputs[ch])
+    nt.links.new(g.outputs["Color"], mul.inputs[7])
+    nt.links.new(mul.outputs[2], bsdf.inputs["Base Color"])
+    sep = nt.nodes.new("ShaderNodeSeparateColor")
+    nt.links.new(mr.outputs["Color"], sep.inputs["Color"])
+    nt.links.new(sep.outputs["Red"], bsdf.inputs["Metallic"])
+    rough = node(nt, "ShaderNodeMath", operation='MULTIPLY_ADD')
+    nt.links.new(noise.outputs["Fac"], rough.inputs[0])
+    rough.inputs[1].default_value = 0.12
+    nt.links.new(sep.outputs["Green"], rough.inputs[2])
+    nt.links.new(rough.outputs["Value"], bsdf.inputs["Roughness"])
+    bump = node(nt, "ShaderNodeBump")
+    bump.inputs["Strength"].default_value = bump_strength
+    bump.inputs["Distance"].default_value = 0.0005
+    nt.links.new(noise.outputs["Fac"], bump.inputs["Height"])
+    nt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    m["tfps_metallic_attr"] = True
+    return m
+
+
+def _bake_metallic_attr(o, mat, img):
+    """Bakes the `tfps_mr` red channel (metallic) via a temporary emission."""
+    nt = mat.node_tree
+    out = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
+    old = out.inputs["Surface"].links[0].from_socket
+    mr = node(nt, "ShaderNodeAttribute", attribute_name="tfps_mr")
+    sep = nt.nodes.new("ShaderNodeSeparateColor")
+    em = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(mr.outputs["Color"], sep.inputs["Color"])
+    nt.links.new(sep.outputs["Red"], em.inputs["Color"])
+    nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+    _bake_image(o, mat, img, 'EMIT')
+    nt.links.new(old, out.inputs["Surface"])
+    for n in (mr, sep, em):
+        nt.nodes.remove(n)
+
+
+# ---------------------------------------------------------------------------
 # Baking
 # ---------------------------------------------------------------------------
 
@@ -221,7 +312,22 @@ def bake_textures(o, mat, out_dir, asset):
         return i
 
     bc = img(f"T_{asset}_BC", False)
+    # Cycles' diffuse colour is zero on metallic surfaces; bake the albedo with
+    # metallic forced to 0 so metals keep their tint (metallic goes to ORM.B).
+    bsdf = next((n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+    saved_link, saved_value = None, None
+    if bsdf is not None:
+        sock = bsdf.inputs["Metallic"]
+        if sock.links:
+            saved_link = sock.links[0].from_socket
+            mat.node_tree.links.remove(sock.links[0])
+        saved_value = sock.default_value
+        sock.default_value = 0.0
     _bake_image(o, mat, bc, 'DIFFUSE', pass_filter={'COLOR'})
+    if bsdf is not None:
+        bsdf.inputs["Metallic"].default_value = saved_value
+        if saved_link is not None:
+            mat.node_tree.links.new(saved_link, bsdf.inputs["Metallic"])
     nrm = img(f"T_{asset}_N_bake", True)
     _bake_image(o, mat, nrm, 'NORMAL', normal_space='TANGENT')
     rough = img(f"T_{asset}_R_bake", True)
@@ -233,6 +339,11 @@ def bake_textures(o, mat, out_dir, asset):
 
     metallic_value = mat.get("tfps_metallic", 0.0)
     metallic_map = mat.get("tfps_metallic_from_rust", False)
+    metallic_attr = None
+    if mat.get("tfps_metallic_attr", False):
+        metallic_attr = img(f"T_{asset}_M_bake", True)
+        _bake_metallic_attr(o, mat, metallic_attr)
+        metallic_attr = list(metallic_attr.pixels)
 
     # Normal: Blender bakes OpenGL (Y+); Unreal expects DirectX (Y-): flip green.
     px = list(nrm.pixels)
@@ -248,7 +359,9 @@ def bake_textures(o, mat, out_dir, asset):
     for i in range(0, len(a), 4):
         orm[i] = a[i]
         orm[i + 1] = r[i]
-        if metallic_map:
+        if metallic_attr is not None:
+            orm[i + 2] = metallic_attr[i]
+        elif metallic_map:
             # Painted steel: bare metal shows where paint roughness is low.
             orm[i + 2] = 0.85 if r[i] < 0.38 else 0.0
         else:
@@ -404,6 +517,14 @@ def finish_asset(asset, lod0, lod1, collisions, procedural_mat, notes=""):
     """Bakes, exports, previews and writes the manifest for one asset."""
     out_dir = os.path.join(REPO, "Assets", "Exports", asset)
     os.makedirs(out_dir, exist_ok=True)
+    # Pipeline convention: pivot at the bottom centre. Unreal places props by
+    # this pivot, so a wrong one misplaces every instance; fail the build.
+    ws = [lod0.matrix_world @ v.co for v in lod0.data.vertices]
+    lo = [min(v[i] for v in ws) for i in range(3)]
+    hi = [max(v[i] for v in ws) for i in range(3)]
+    centre = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]]
+    if any(abs(c) > 0.002 for c in centre):
+        raise RuntimeError(f"{asset}: pivot is not at the bottom centre (bounds {lo} .. {hi})")
     files, bc, nrm, orm = bake_textures(lod0, procedural_mat, out_dir, asset)
     baked = make_baked_material(asset, bc, nrm, orm)
     for o in (lod0, lod1):

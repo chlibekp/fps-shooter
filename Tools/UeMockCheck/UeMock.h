@@ -47,7 +47,9 @@ template <typename T> struct TArray : std::vector<T>
 	template <typename P> int32 RemoveAll(P Pred) { auto It = std::remove_if(this->begin(), this->end(), Pred); int32 N = static_cast<int32>(this->end() - It); this->erase(It, this->end()); return N; }
 	void Reset() { this->clear(); }
 	bool IsValidIndex(int32 I) const { return I >= 0 && I < Num(); }
+	T& Last() { return this->back(); }
 };
+constexpr int32 INDEX_NONE = -1;
 struct FString
 {
 	std::wstring S;
@@ -66,7 +68,7 @@ struct FString
 namespace ESearchCase { enum Type { IgnoreCase }; }
 namespace ESearchDir { enum Type { FromEnd }; }
 struct FText { static FText FromString(const FString&) { return FText(); } };
-struct FName { FName() = default; FName(const TCHAR*) {} };
+struct FName { std::wstring N; FName() = default; FName(const TCHAR* In) : N(In ? In : L"") {} bool operator<(const FName& O) const { return N < O.N; } bool operator==(const FName& O) const { return N == O.N; } };
 static const FName NAME_None; static const FName NAME_DGram;
 template <typename T> struct TSharedRef : std::shared_ptr<T> { using std::shared_ptr<T>::shared_ptr; };
 template <typename T> struct TSharedPtr : std::shared_ptr<T> { TSharedPtr() = default; TSharedPtr(const TSharedRef<T>& R) : std::shared_ptr<T>(R) {} bool IsValid() const { return this->get() != nullptr; } };
@@ -91,6 +93,15 @@ template <typename K, typename V> struct TMap
 		void RemoveCurrent() { I = Map->erase(I); bRemoved = true; }
 	};
 	It CreateIterator() { return It{&M, M.begin()}; }
+	struct RangeIt
+	{
+		typename std::map<K, V>::const_iterator I;
+		TPair<K, V> operator*() const { return TPair<K, V>(I->first, I->second); }
+		void operator++() { ++I; }
+		bool operator!=(const RangeIt& O) const { return I != O.I; }
+	};
+	RangeIt begin() const { return RangeIt{M.begin()}; }
+	RangeIt end() const { return RangeIt{M.end()}; }
 };
 template <typename T> struct TSet { std::set<T> S; void Add(const T& V) { S.insert(V); } bool Contains(const T& V) const { return S.count(V) != 0; } };
 template <typename T> struct TObjectPtr
@@ -160,6 +171,7 @@ struct FMath
 	static float Sin(float V) { return std::sin(V); }
 	static float Cos(float V) { return std::cos(V); }
 	static float Tan(float V) { return std::tan(V); }
+	template <typename T> static T Abs(T V) { return V < T(0) ? -V : V; }
 };
 struct FChar { static bool IsAlnum(TCHAR C) { return std::iswalnum(static_cast<wint_t>(C)) != 0; } };
 struct FCString { static int32 Atoi(const TCHAR* S) { return static_cast<int32>(std::wcstol(S, nullptr, 10)); } };
@@ -193,7 +205,8 @@ public:
 	template <typename T> T* CreateDefaultSubobject(const TCHAR*) { return new T(); }
 };
 template <typename T> T* NewObject(UObject* Outer = nullptr) { (void)Outer; return new T(); }
-template <typename T> T* LoadObject(UObject* Outer, const TCHAR* Path) { (void)Outer; (void)Path; return nullptr; }
+enum ELoadFlags : uint32_t { LOAD_None = 0, LOAD_NoWarn = 1, LOAD_Quiet = 2 };
+template <typename T> T* LoadObject(UObject* Outer, const TCHAR* Path, const TCHAR* = nullptr, uint32_t = LOAD_None) { (void)Outer; (void)Path; return nullptr; }
 template <typename To, typename From> To* Cast(From* F) { return dynamic_cast<To*>(F); }
 template <typename To, typename From> const To* Cast(const From* F) { return dynamic_cast<const To*>(F); }
 #define STATIC_CLASS_IMPL static UClass* StaticClass() { static UClass C; return &C; }
@@ -210,7 +223,7 @@ public:
 	static UMaterialInstanceDynamic* Create(UMaterialInterface*, UObject*) { return new UMaterialInstanceDynamic(); }
 	void SetVectorParameterValue(const TCHAR*, const FLinearColor&) {}
 };
-class UStaticMesh : public UObject {};
+class UStaticMesh : public UObject { public: UMaterialInterface* GetMaterial(int32) const { return nullptr; } };
 class UActorComponent : public UObject { public: void RegisterComponent() {} void DestroyComponent() {} };
 class USceneComponent : public UActorComponent
 {

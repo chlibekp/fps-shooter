@@ -1,0 +1,23 @@
+{
+  "asset": "BrickWallPanel",
+  "unreal_mesh": "SM_BrickWallPanel",
+  "dimensions_m": [
+    2.4,
+    0.3,
+    3.0
+  ],
+  "triangles_lod0": 108,
+  "triangles_lod1": 54,
+  "collision_primitives": 1,
+  "texture_size": 1024,
+  "files": {
+    "BC": "Assets/Exports/BrickWallPanel/T_BrickWallPanel_BC.png",
+    "N": "Assets/Exports/BrickWallPanel/T_BrickWallPanel_N.png",
+    "ORM": "Assets/Exports/BrickWallPanel/T_BrickWallPanel_ORM.png",
+    "fbx_lod0": "Assets/Exports/BrickWallPanel/SM_BrickWallPanel.fbx",
+    "fbx_lod1": "Assets/Exports/BrickWallPanel/SM_BrickWallPanel_LOD1.fbx",
+    "preview": "Assets/Exports/BrickWallPanel/preview.png",
+    "blend": "Assets/Blender/BrickWallPanel.blend"
+  },
+  "notes": "One mapkit wall panel (PANEL = 2.4 m). Visual only: gameplay uses the cell grid."
+}

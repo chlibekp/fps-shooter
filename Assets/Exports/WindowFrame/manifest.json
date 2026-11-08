@@ -1,0 +1,23 @@
+{
+  "asset": "WindowFrame",
+  "unreal_mesh": "SM_WindowFrame",
+  "dimensions_m": [
+    1.5,
+    0.35,
+    1.15
+  ],
+  "triangles_lod0": 756,
+  "triangles_lod1": 378,
+  "collision_primitives": 1,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/WindowFrame/T_WindowFrame_BC.png",
+    "N": "Assets/Exports/WindowFrame/T_WindowFrame_N.png",
+    "ORM": "Assets/Exports/WindowFrame/T_WindowFrame_ORM.png",
+    "fbx_lod0": "Assets/Exports/WindowFrame/SM_WindowFrame.fbx",
+    "fbx_lod1": "Assets/Exports/WindowFrame/SM_WindowFrame_LOD1.fbx",
+    "preview": "Assets/Exports/WindowFrame/preview.png",
+    "blend": "Assets/Blender/WindowFrame.blend"
+  },
+  "notes": "Frames the mapkit default window (1.4 x 1.1 m, sill 1.0 m); glass is gameplay geometry."
+}

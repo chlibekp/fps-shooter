@@ -293,18 +293,121 @@ pub fn encode(
     shots: &[ShotEvent],
     gadgets: &[GadgetEntityState],
 ) {
-    let mut sent = Vec::new();
-    encode_budgeted(
-        w,
-        header,
-        entities,
-        baseline,
-        shots,
-        gadgets,
-        usize::MAX,
-        |_| 0.0,
-        &mut sent,
-    );
+    encode_header(w, header);
+    write_all(w, entities, baseline, shots, gadgets);
+}
+
+fn encode_header(w: &mut Writer, header: &SnapshotHeader) {
+    w.u32(header.server_tick);
+    w.u32(header.baseline_tick);
+    w.u32(header.last_cmd_seq);
+    w.i8(header.input_buffer_depth);
+    encode_local(w, header);
+}
+
+fn desired_mask<'a>(
+    e: &EntityState,
+    baseline: Option<&'a [EntityState]>,
+) -> (u16, Option<&'a EntityState>) {
+    match baseline.and_then(|b| find(b, e.id)) {
+        Some(base) => (change_mask(e, base), Some(base)),
+        None => (M_FULL | M_ALL, None),
+    }
+}
+
+/// Bytes the entity, shot and gadget lists take with every change written.
+fn full_len(
+    entities: &[EntityState],
+    baseline: Option<&[EntityState]>,
+    shots: usize,
+    gadgets: usize,
+) -> usize {
+    let entities = &entities[..entities.len().min(MAX_ENTITIES_PER_SNAPSHOT)];
+    3 + entities
+        .iter()
+        .map(|e| entry_len(desired_mask(e, baseline).0))
+        .sum::<usize>()
+        + shots.min(MAX_SHOT_EVENTS) * 16
+        + gadgets.min(MAX_GADGET_ENTITIES) * 12
+}
+
+/// Writes every entity with all its changes, then the shots and gadgets.
+fn write_all(
+    w: &mut Writer,
+    entities: &[EntityState],
+    baseline: Option<&[EntityState]>,
+    shots: &[ShotEvent],
+    gadgets: &[GadgetEntityState],
+) {
+    let entities = &entities[..entities.len().min(MAX_ENTITIES_PER_SNAPSHOT)];
+    w.u8(entities.len() as u8);
+    for e in entities {
+        write_entity(w, e, desired_mask(e, baseline).0);
+    }
+    let ns = shots.len().min(MAX_SHOT_EVENTS);
+    write_shots(w, &shots[..ns]);
+    let ng = gadgets.len().min(MAX_GADGET_ENTITIES);
+    write_gadgets(w, &gadgets[..ng]);
+}
+
+fn write_entity(w: &mut Writer, e: &EntityState, mask: u16) {
+    w.u16(e.id);
+    w.u16(mask);
+    if mask & M_PX != 0 {
+        w.i32(e.pos_mm[0]);
+    }
+    if mask & M_PY != 0 {
+        w.i32(e.pos_mm[1]);
+    }
+    if mask & M_PZ != 0 {
+        w.i32(e.pos_mm[2]);
+    }
+    if mask & M_YAW != 0 {
+        w.u16(e.yaw_q);
+    }
+    if mask & M_PITCH != 0 {
+        w.i16(e.pitch_q);
+    }
+    if mask & M_FLAGS != 0 {
+        w.u8(e.flags);
+    }
+    if mask & M_HEALTH != 0 {
+        w.u8(e.health);
+    }
+    if mask & M_LEAN != 0 {
+        w.i8(e.lean_q);
+    }
+    if mask & M_WEAPON != 0 {
+        w.u8(e.weapon);
+    }
+    if mask & M_AIM != 0 {
+        w.u8(e.aim_q);
+    }
+}
+
+fn write_shots(w: &mut Writer, shots: &[ShotEvent]) {
+    w.u8(shots.len() as u8);
+    for s in shots {
+        w.u16(s.shooter);
+        w.u8(s.weapon);
+        for v in s.end_mm {
+            w.i32(v);
+        }
+        w.u8(s.surface);
+    }
+}
+
+fn write_gadgets(w: &mut Writer, gadgets: &[GadgetEntityState]) {
+    w.u8(gadgets.len() as u8);
+    for g in gadgets {
+        w.u16(g.id);
+        w.u8(g.gadget);
+        w.u8(g.phase);
+        w.u16(g.owner);
+        for v in g.pos_cm {
+            w.i16(v);
+        }
+    }
 }
 
 /// Bytes of an entity entry with `mask` (id + mask + fields).
@@ -363,21 +466,19 @@ pub fn encode_budgeted(
 ) -> BudgetReport {
     debug_assert!(entities.windows(2).all(|p| p[0].id < p[1].id));
     debug_assert_eq!(baseline.is_none(), header.baseline_tick == 0);
-    w.u32(header.server_tick);
-    w.u32(header.baseline_tick);
-    w.u32(header.last_cmd_seq);
-    w.i8(header.input_buffer_depth);
-    encode_local(w, header);
+    encode_header(w, header);
 
     let entities = &entities[..entities.len().min(MAX_ENTITIES_PER_SNAPSHOT)];
     // Desired mask per entity, and the minimum we must send.
-    let desired: Vec<(u16, Option<&EntityState>)> = entities
-        .iter()
-        .map(|e| match baseline.and_then(|b| find(b, e.id)) {
-            Some(base) => (change_mask(e, base), Some(base)),
-            None => (M_FULL | M_ALL, None),
-        })
-        .collect();
+    // Usual case: everything fits, so no prioritising is needed.
+    if w.len() + full_len(entities, baseline, shots.len(), gadgets.len()) <= max_len {
+        write_all(w, entities, baseline, shots, gadgets);
+        sent.clear();
+        sent.extend_from_slice(entities);
+        return BudgetReport::default();
+    }
+    let desired: Vec<(u16, Option<&EntityState>)> =
+        entities.iter().map(|e| desired_mask(e, baseline)).collect();
     // Counts bytes: 3 list counts + the mandatory entries.
     let mut budget = max_len.saturating_sub(w.len() + 3);
     let mut chosen: Vec<Option<u16>> = desired.iter().map(|(_, base)| base.map(|_| 0u16)).collect();
@@ -419,60 +520,10 @@ pub fn encode_budgeted(
         } else {
             *desired[i].1.expect("held entities are in the baseline")
         });
-        w.u16(e.id);
-        w.u16(mask);
-        if mask & M_PX != 0 {
-            w.i32(e.pos_mm[0]);
-        }
-        if mask & M_PY != 0 {
-            w.i32(e.pos_mm[1]);
-        }
-        if mask & M_PZ != 0 {
-            w.i32(e.pos_mm[2]);
-        }
-        if mask & M_YAW != 0 {
-            w.u16(e.yaw_q);
-        }
-        if mask & M_PITCH != 0 {
-            w.i16(e.pitch_q);
-        }
-        if mask & M_FLAGS != 0 {
-            w.u8(e.flags);
-        }
-        if mask & M_HEALTH != 0 {
-            w.u8(e.health);
-        }
-        if mask & M_LEAN != 0 {
-            w.i8(e.lean_q);
-        }
-        if mask & M_WEAPON != 0 {
-            w.u8(e.weapon);
-        }
-        if mask & M_AIM != 0 {
-            w.u8(e.aim_q);
-        }
+        write_entity(w, e, mask);
     }
-
-    w.u8(ns as u8);
-    for s in &shots[..ns] {
-        w.u16(s.shooter);
-        w.u8(s.weapon);
-        for v in s.end_mm {
-            w.i32(v);
-        }
-        w.u8(s.surface);
-    }
-
-    w.u8(ng as u8);
-    for g in &gadgets[..ng] {
-        w.u16(g.id);
-        w.u8(g.gadget);
-        w.u8(g.phase);
-        w.u16(g.owner);
-        for v in g.pos_cm {
-            w.i16(v);
-        }
-    }
+    write_shots(w, &shots[..ns]);
+    write_gadgets(w, &gadgets[..ng]);
     report
 }
 

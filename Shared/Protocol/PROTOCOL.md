@@ -1,11 +1,12 @@
-# TacticalFPS wire protocol — version 7
+# TacticalFPS wire protocol — version 8
 
 Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
 stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions),
 v4 (Phase 4: gadget slots, gadget entities in snapshots, flashbangs),
 v5 (three gadget slots, drone remote control, Spotted),
 v6 (four gadget slots; cameras, motion sensors, jammers),
-v7 (runtime solids for barricades, wall reinforcement).
+v7 (runtime solids for barricades, wall reinforcement),
+v8 (game modes: MatchState, MapReset, hold-action kind).
 
 Implementations:
 
@@ -28,7 +29,7 @@ both sides.
 | Field | Type | Value |
 |-------|------|-------|
 | magic | u16 | `0x4654` (bytes `54 46`, "TF") |
-| version | u16 | `7` |
+| version | u16 | `8` |
 | type | u8 | packet type |
 
 Packet types: 1 ConnectRequest, 2 Challenge, 3 ChallengeResponse,
@@ -113,6 +114,8 @@ Message types (S→C):
 | 8 | Explosion | `i32 pos_mm[3], u16 radius_cm` — to everyone (effects only) |
 | 11 | SolidAdded | `u16 index, i32 min_mm[3], i32 max_mm[3], u8 material, u8 destructible` — to everyone, and all of them, in order, to joining players before CellsDestroyed. `index` equals the receiver's current solid count; the solid is pushed to the collision world (cells subdivided by the usual rule), so prediction collides with it. Bounds are used exactly as `mm × 0.001` (f32), which is also what the server uses |
 | 12 | SolidReinforced | `u16 index` — the solid's material becomes Reinforced (6): bullets and explosives no longer affect it. Sent to joiners too |
+| 13 | MatchState | `u8 mode, u8 phase, u8 round, u8 score[2], u8 attacking_squad, u16 time_left_ds, u8 rounds_to_win, u8 device_site, i32 device_pos_mm[3], u8 last_winner, u8 last_reason` — to everyone whenever it changes and to joining players. mode 0 team deathmatch / 1 elimination / 2 defuse; phase 0 warmup / 1 preparation / 2 action / 3 round end / 4 match over; scores per squad (rounds won, kills in deathmatch); `time_left_ds` = seconds × 10 left in the phase or on the device fuse (clients count down locally); `rounds_to_win` is the kill limit in deathmatch; `device_site` 255 = not planted; `last_winner` 255 = none; reasons 1 eliminated, 2 time up, 3 detonated, 4 defused, 5 score limit |
+| 14 | MapReset | no payload — a new round started: rebuild the collision world from the map definition (destruction, barricades, reinforcements and gadgets are gone). Sent before any other message of that tick |
 | 10 | Spotted | `u16 target, u16 spotter, i32 pos_mm[3], u8 duration_ds` — to the spotter's team only; show a marker at the pinned position for `duration_ds` / 10 s |
 | 9 | Flash | `i32 pos_mm[3], u8 intensity` — to everyone; `intensity` (0..255) is how strongly *the receiving player* is blinded (0 = only the bang is visible) |
 
@@ -147,6 +150,27 @@ reloading or firing; switching takes 0.4 s). Pressing FIRE uses the gadget
 an underhand lob at 45 % speed); a breaching charge is placed on the surface
 in front of the player (within its reach). AIM + FIRE with the breaching
 charge in hand detonates the player's armed charges.
+
+**Match phases:** players have a persistent *squad* (0/1, owns the score)
+and a *side* per round (`team` in PlayerJoined: 0 attackers, 1 defenders).
+At half-time (after `rounds_to_win - 1` rounds) the squads swap sides and
+PlayerJoined is re-sent for every player with the new side. Your squad =
+`attacking_squad` if your side is 0, else the other squad. During the
+preparation phase of round modes, attackers hold position (only stance,
+aim, lean, reload, fire and use buttons apply, and remote control still
+works), and weapons are cold for everyone (FIRE is ignored unless a gadget
+is in hand). After the match everyone holds and weapons are cold. The
+server applies these restrictions, and clients apply the same rule
+(`phase_restrictions` + `restrict_input`) for prediction.
+
+**Defuse:** an attacker holding USE inside an objective site (feet inside
+its bounds) for 6 s plants the device. A defender holding USE within 1.5 m
+of it for 7 s defuses it. The round ends when:
+* a side is eliminated (if the device is planted, the attackers being
+  eliminated does not end the round);
+* the time runs out without a plant (defenders win);
+* the device detonates (attackers win);
+* the device is defused (defenders win).
 
 USE (button 14) held for 1.5 s by a defender (team 1) looking at a
 destructible wooden, drywall or brick solid within 1.8 m reinforces it
@@ -188,7 +212,7 @@ f32 cooldown, f32 reload_timer, u8 reload_empty, f32 equip_timer
 u8  burst_left, u8 trigger_prev, u16 shots_fired
 f32 recoil_pitch, f32 recoil_yaw, f32 recover_timer, u32 shot_counter
 u8  health, u8 alive, f32 respawn_in
-u8  reinforcements_left, u8 reinforce_progress (0..255 while holding USE on a wall)
+u8  reinforcements_left, u8 action_progress (0..255), u8 action (0 none, 1 reinforce, 2 plant, 3 defuse)
 4 × { u8 gadget_id, u8 count }      the local player's gadget slots
 -- other entities (≤ 64), sorted by id ascending, all present entities listed --
 u8  entity_count

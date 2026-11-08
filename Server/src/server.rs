@@ -312,7 +312,7 @@ impl ServerCore {
 
         let (team, pname) = if rejoin_existing {
             let p = self.game.player(player_id).expect("player of live conn");
-            (p.team, p.name.clone())
+            (p.squad, p.name.clone())
         } else if let Some(s) = &restored {
             (s.team, s.name.clone())
         } else {
@@ -374,6 +374,8 @@ impl ServerCore {
             };
             let _ = conn.rel_tx.queue(m.msg_type(), m.encode_payload());
         }
+        let m = Message::MatchState(self.match_info());
+        let _ = conn.rel_tx.queue(m.msg_type(), m.encode_payload());
         // Tell the new client about everyone (including itself).
         for p in self.game.players() {
             let m = Message::PlayerJoined {
@@ -421,8 +423,9 @@ impl ServerCore {
     }
 
     fn pick_team(&self) -> u8 {
-        let t0 = self.game.players().iter().filter(|p| p.team == 0).count();
-        let t1 = self.game.players().iter().filter(|p| p.team == 1).count();
+        // Balance squads (a squad's side changes at half-time).
+        let t0 = self.game.players().iter().filter(|p| p.squad == 0).count();
+        let t1 = self.game.players().iter().filter(|p| p.squad == 1).count();
         if t1 < t0 {
             1
         } else {
@@ -565,7 +568,7 @@ impl ServerCore {
                         c.reconnect_token,
                         SavedPlayer {
                             id: p.id,
-                            team: p.team,
+                            team: p.squad,
                             name: p.name,
                             state: p.state,
                             weapon: p.weapon,
@@ -603,6 +606,29 @@ impl ServerCore {
     /// Turns this tick's combat results into reliable messages and keeps shot
     /// events for the next snapshots.
     fn announce_game_events(&mut self) {
+        // A new round: clients rebuild the map before anything else of this tick.
+        if self.game.map_reset_this_tick {
+            self.broadcast_except(u16::MAX, &Message::MapReset);
+        }
+        if self.game.match_state.sides_swapped {
+            let msgs: Vec<Message> = self
+                .game
+                .players()
+                .iter()
+                .map(|p| Message::PlayerJoined {
+                    player_id: p.id,
+                    team: p.team,
+                    name: p.name.clone(),
+                })
+                .collect();
+            for m in &msgs {
+                self.broadcast_except(u16::MAX, m);
+            }
+        }
+        if self.game.match_state.changed {
+            let m = Message::MatchState(self.match_info());
+            self.broadcast_except(u16::MAX, &m);
+        }
         for (tick, ev) in self.game.shot_events.iter() {
             if self.recent_shots.len() >= SHOT_EVENT_HISTORY {
                 self.recent_shots.pop_front();
@@ -678,6 +704,14 @@ impl ServerCore {
                             health,
                             from_mm,
                         },
+                    );
+                }
+                GameEvent::RoundEnd { winner, reason } => {
+                    info!(
+                        winner,
+                        reason,
+                        round = self.game.match_state.round,
+                        "round over"
                     );
                 }
                 GameEvent::Spotted {
@@ -812,9 +846,15 @@ impl ServerCore {
                     player.respawn_timer.max(0.0)
                 },
                 reinforcements: player.reinforcements,
-                reinforce_progress: ((player.reinforce_progress / self.game.rules.reinforce_time)
-                    .clamp(0.0, 1.0)
-                    * 255.0) as u8,
+                reinforce_progress: {
+                    let need = match player.action {
+                        crate::game::rounds::action::PLANT => self.game.rules.plant_time,
+                        crate::game::rounds::action::DEFUSE => self.game.rules.defuse_time,
+                        _ => self.game.rules.reinforce_time,
+                    };
+                    ((player.reinforce_progress / need).clamp(0.0, 1.0) * 255.0) as u8
+                },
+                action: player.action,
                 gadgets: player.gadgets,
             };
             // Shots by other players since the last snapshot sent to this client.
@@ -926,6 +966,41 @@ fn sanitize_name(raw: &str) -> Option<String> {
         return Some("Operator".to_string());
     }
     Some(name.to_string())
+}
+
+impl ServerCore {
+    fn match_info(&self) -> tfps_protocol::messages::MatchInfo {
+        let ms = &self.game.match_state;
+        let rules = &self.game.rules;
+        let (site, pos) = match ms.device {
+            Some(d) => (
+                d.site,
+                [
+                    quantize_mm(d.pos.x),
+                    quantize_mm(d.pos.y),
+                    quantize_mm(d.pos.z),
+                ],
+            ),
+            None => (255, [0, 0, 0]),
+        };
+        tfps_protocol::messages::MatchInfo {
+            mode: rules.mode as u8,
+            phase: ms.phase as u8,
+            round: ms.round,
+            score: ms.score,
+            attacking_squad: ms.attacking_squad,
+            time_left_ds: (ms.time_left.max(0.0) * 10.0).round().min(u16::MAX as f32) as u16,
+            rounds_to_win: if rules.mode.has_rounds() {
+                rules.rounds_to_win
+            } else {
+                rules.score_limit
+            },
+            device_site: site,
+            device_pos_mm: pos,
+            last_winner: ms.last_result.map_or(255, |r| r.0),
+            last_reason: ms.last_result.map_or(0, |r| r.1),
+        }
+    }
 }
 
 fn solid_added_message(s: &crate::game::AddedSolid) -> Message {

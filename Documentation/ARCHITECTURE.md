@@ -261,3 +261,29 @@ placed over a player.
 Wall reinforcement only changes a solid's material to Reinforced. Collision
 is unchanged, so prediction is unaffected; bullets and explosives simply
 stop affecting it on the server. Clients are told for the visuals.
+
+## Decision 14 — Game modes run on the server; phase restrictions are shared
+
+Team deathmatch, elimination (rounds; covers 1v1) and defuse (attackers
+plant in an objective site, defenders defuse) are a state machine in
+`Server/src/game/rounds.rs`: warmup → preparation → action → round end →
+… → match over.
+
+* **Squads and sides.** A squad owns the score and swaps sides at
+  half-time. The existing per-player `team` field is the side, so
+  spawns, loadouts, reinforcement and friendly fire need no special cases.
+* **Map reset.** Every round resets the map (destruction, barricades,
+  reinforcements and gadgets) on the server. A `MapReset` message makes
+  every client rebuild its collision world before anything else of that
+  tick.
+* **Shared restrictions.** The only rules that affect movement prediction
+  are the preparation-phase restrictions: attackers hold position, and
+  weapons are cold. They live in the shared simulation
+  (`phase_restrictions`, `restrict_input`, Rust and C++). The server
+  applies them from its state, the clients from the replicated
+  `MatchState`, and the conformance vectors cover the filter. At a phase
+  boundary the client can be a tick off; that costs at most one ordinary
+  correction.
+* **Server authority.** Planting, defusing and win conditions are decided
+  only by the server. Clients render timers by counting down locally from
+  the last `MatchState`.

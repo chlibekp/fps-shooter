@@ -4,12 +4,13 @@
 //! Text format (one record per line, all floats as raw IEEE-754 bits in hex):
 //!
 //! ```text
-//! tfps-player-vectors 4
+//! tfps-player-vectors 5
 //! solid <minx> <miny> <minz> <maxx> <maxy> <maxz> <material> <destructible>
 //! destroyed <cell_id>
 //! seq <name> <dt> <primary_id> <secondary_id>
 //! start <move> <weapon>
-//! step <buttons> <yaw_q> <pitch_q> <slot> <move> <weapon> <n_shots> {<shot>}
+//! step <buttons> <yaw_q> <pitch_q> <slot> <restrict> <move> <weapon> <n_shots> {<shot>}
+//! (<restrict>: bit 0 hold position, bit 1 weapons cold, applied with restrict_input)
 //! end
 //! ```
 //! `<move>` = `px py pz vx vy vz on_ground crouched prone jump_timer stance_timer lean aim`
@@ -21,11 +22,12 @@ use crate::map::CollisionWorld;
 use crate::math::Vec3;
 use crate::movement::{buttons, simulate, MoveInput, MoveState};
 use crate::weapon::{
-    simulate_player, ShotBuffer, WeaponDef, WeaponSet, WeaponState, GADGET_SLOTS, SLOTS,
+    restrict_input, simulate_player, ShotBuffer, WeaponDef, WeaponSet, WeaponState, GADGET_SLOTS,
+    SLOTS,
 };
 use std::fmt::Write;
 
-pub const FORMAT_VERSION: u32 = 4;
+pub const FORMAT_VERSION: u32 = 5;
 
 struct XorShift(u64);
 impl XorShift {
@@ -148,6 +150,7 @@ pub fn generate(
             out.push('\n');
             let mut input = MoveInput::default();
             let mut hold = 0u32;
+            let mut restrict = 0u8; // bit 0: hold position, bit 1: weapons cold
             for _ in 0..steps_per_seq {
                 if hold == 0 {
                     let r = rng.next();
@@ -199,6 +202,11 @@ pub fn generate(
                     }
                     input.buttons = b;
                     hold = 3 + ((r >> 40) & 0x1F) as u32;
+                    restrict = if (r >> 56) & 3 == 0 {
+                        ((r >> 59) & 3) as u8
+                    } else {
+                        0
+                    };
                 }
                 hold -= 1;
                 let r = rng.next();
@@ -207,11 +215,14 @@ pub fn generate(
                     .wrapping_add(((r & 0x3FF) as u16).wrapping_sub(0x1FF));
                 input.pitch_q = ((r >> 10) & 0x7FFF) as i16 - 16383;
                 shots.clear();
-                simulate_player(&mut ms, &mut ws, &input, dt, world, &loadout, &mut shots);
+                let effective = restrict_input(&input, restrict & 1 != 0, restrict & 2 != 0);
+                simulate_player(
+                    &mut ms, &mut ws, &effective, dt, world, &loadout, &mut shots,
+                );
                 let _ = write!(
                     out,
-                    "step {} {} {} {}",
-                    input.buttons, input.yaw_q, input.pitch_q, input.slot
+                    "step {} {} {} {} {}",
+                    input.buttons, input.yaw_q, input.pitch_q, input.slot, restrict
                 );
                 fmt_move(&mut out, &ms);
                 fmt_weapon(&mut out, &ws);

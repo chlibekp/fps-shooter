@@ -172,6 +172,7 @@ struct FMath
 	static float Cos(float V) { return std::cos(V); }
 	static float Tan(float V) { return std::tan(V); }
 	template <typename T> static T Abs(T V) { return V < T(0) ? -V : V; }
+	static float Fmod(float A, float B) { return std::fmod(A, B); }
 };
 struct FChar { static bool IsAlnum(TCHAR C) { return std::iswalnum(static_cast<wint_t>(C)) != 0; } };
 struct FCString { static int32 Atoi(const TCHAR* S) { return static_cast<int32>(std::wcstol(S, nullptr, 10)); } };

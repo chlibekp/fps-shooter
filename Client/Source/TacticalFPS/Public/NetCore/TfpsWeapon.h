@@ -22,6 +22,26 @@ namespace tfps
 	constexpr float kGadgetEquipTime = 0.4f;
 	constexpr float kGadgetAimTime = 0.25f;
 	inline bool IsGadgetSlot(uint8_t Active) { return Active >= kWeaponSlots && Active < kWeaponSlots + kGadgetSlots; }
+	/** Match-phase input restrictions (same as Rust weapon::restrict_input): hold position (no
+	 *  movement unless driving a drone) and/or weapons cold (no firing unless a gadget is in hand). */
+	MoveInput RestrictInput(const MoveInput& Input, bool bHoldPosition, bool bWeaponsCold);
+
+	namespace MatchPhase
+	{
+		constexpr uint8_t Warmup = 0;
+		constexpr uint8_t Prep = 1;
+		constexpr uint8_t Action = 2;
+		constexpr uint8_t RoundEnd = 3;
+		constexpr uint8_t MatchOver = 4;
+	}
+
+	/** Same as Rust weapon::phase_restrictions: attackers hold position in the preparation phase
+	 *  of round modes; weapons are cold during preparation and after the match. */
+	inline void PhaseRestrictions(bool bRoundMode, uint8_t Phase, uint8_t Side, bool& bOutHold, bool& bOutCold)
+	{
+		bOutHold = (Phase == MatchPhase::Prep && bRoundMode && Side == 0) || Phase == MatchPhase::MatchOver;
+		bOutCold = (Phase == MatchPhase::Prep && bRoundMode) || Phase == MatchPhase::MatchOver;
+	}
 	constexpr int kMaxShotsPerTick = 4;
 	constexpr int kMaxPellets = 12;
 

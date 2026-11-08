@@ -969,3 +969,126 @@ fn barricades_and_reinforcements_replicate_to_everyone_including_late_joiners() 
     };
     assert!(c.world().overlaps_any(&probe));
 }
+
+#[test]
+fn defuse_rounds_run_over_the_network() {
+    // Open field with an objective site around the defenders' spawn.
+    let map = || {
+        MapDef::from_json(
+            r#"{"name":"open","solids":[{"min":[-30,-30,-1],"max":[30,30,0],"material":"dirt"},
+                {"min":[0,8,0],"max":[0.2,12,3],"material":"wood"}],
+                "spawns":[{"pos":[-7.5,0,0],"team":0},{"pos":[7.5,0,0],"yaw":180,"team":1}],
+                "objectives":[{"name":"Site","min":[5,-3,0],"max":[10,3,3]}]}"#,
+        )
+        .unwrap()
+    };
+    let cfg = ServerConfig {
+        rules: tfps_server::game::MatchRules {
+            mode: tfps_server::game::GameMode::Defuse,
+            rounds_to_win: 2,
+            prep_time: 1.0,
+            round_time: 20.0,
+            round_end_time: 1.0,
+            plant_time: 0.5,
+            device_fuse: 1.0,
+            ..Default::default()
+        },
+        ..test_cfg()
+    };
+    let srv = tfps_server::start_with_data(cfg, map(), weapons(), gadgets()).unwrap();
+    let mut a = Client::connect(
+        ClientConfig::new(srv.local_addr, "Attacker"),
+        &map(),
+        &weapons(),
+    )
+    .unwrap();
+    let mut b = Client::connect(
+        ClientConfig::new(srv.local_addr, "Defender"),
+        &map(),
+        &weapons(),
+    )
+    .unwrap();
+    connect_all(&mut [&mut a, &mut b]);
+    let phase = |c: &Client| c.match_info.map(|m| m.phase);
+    assert!(
+        both_until(&mut a, &mut b, Duration::from_secs(8), |c| phase(c)
+            == Some(1)),
+        "preparation starts after the warmup countdown"
+    );
+    // Preparation: the attacker tries to run; server and prediction hold it.
+    let start = a.predicted.pos;
+    let corrections = a.stats.corrections;
+    a.set_input(MoveInput {
+        buttons: buttons::FORWARD | buttons::SPRINT,
+        yaw_q: 0,
+        pitch_q: 0,
+        slot: 0,
+    });
+    run(&mut [&mut a, &mut b], Duration::from_millis(500));
+    assert!(
+        a.predicted.pos.distance(&start) < 1e-3,
+        "held during preparation"
+    );
+    assert!(
+        a.stats.corrections <= corrections + 1,
+        "prediction applies the same rule"
+    );
+    // Action: run into the site and plant.
+    run(&mut [&mut a, &mut b], Duration::from_millis(800));
+    assert_eq!(phase(&a), Some(2));
+    assert!(both_until(&mut a, &mut b, Duration::from_secs(8), |c| c
+        .predicted
+        .pos
+        .x
+        > 5.5));
+    a.set_input(MoveInput {
+        buttons: buttons::USE,
+        yaw_q: 0,
+        pitch_q: 0,
+        slot: 0,
+    });
+    assert!(
+        both_until(&mut a, &mut b, Duration::from_secs(3), |c| c
+            .match_info
+            .is_some_and(|m| m.device_site == 0)),
+        "device planted"
+    );
+    // The fuse runs out: attackers win the round; the next round resets the map.
+    assert!(both_until(&mut a, &mut b, Duration::from_secs(3), |c| c
+        .match_info
+        .is_some_and(|m| m.phase == 3
+            && m.last_reason == 3
+            && m.score[0] == 1)));
+    let mut reset = false;
+    let end = Instant::now() + Duration::from_secs(4);
+    while Instant::now() < end && !reset {
+        run(&mut [&mut a, &mut b], Duration::from_millis(5));
+        reset |= drain(&mut a)
+            .iter()
+            .any(|e| matches!(e, ClientEvent::MapReset));
+    }
+    assert!(reset, "MapReset at the next round");
+    assert!(both_until(&mut a, &mut b, Duration::from_secs(1), |c| c
+        .match_info
+        .is_some_and(|m| m.round == 2)));
+    // Half-time after rounds_to_win - 1 = 1 round: the sides swapped.
+    assert_eq!(a.team, 1, "attacker squad now defends");
+    assert_eq!(b.team, 0);
+}
+
+/// Updates two clients until `cond(a)` holds or `timeout` passes.
+fn both_until(
+    a: &mut Client,
+    b: &mut Client,
+    timeout: Duration,
+    cond: impl Fn(&Client) -> bool,
+) -> bool {
+    let end = Instant::now() + timeout;
+    while Instant::now() < end {
+        if cond(a) {
+            return true;
+        }
+        run(&mut [&mut *a, &mut *b], Duration::from_millis(5));
+    }
+    cond(a)
+}

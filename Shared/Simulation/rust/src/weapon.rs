@@ -29,6 +29,50 @@ pub const GADGET_EQUIP_TIME: f32 = 0.4;
 /// Aim (ADS) decay rate while holding a gadget, in 1/s.
 pub const GADGET_AIM_TIME: f32 = 0.25;
 
+/// Match-phase input restrictions, applied identically by the server and by
+/// client prediction. `hold_position`: the body may not move (attackers
+/// during the preparation phase; driving a drone stays allowed).
+/// `weapons_cold`: the weapon may not fire (gadgets stay usable).
+pub fn restrict_input(input: &MoveInput, hold_position: bool, weapons_cold: bool) -> MoveInput {
+    let mut out = *input;
+    let remote = input.slot & REMOTE_CONTROL != 0;
+    if hold_position && !remote {
+        out.buttons &= buttons::CROUCH
+            | buttons::PRONE
+            | buttons::AIM
+            | buttons::LEAN_LEFT
+            | buttons::LEAN_RIGHT
+            | buttons::RELOAD
+            | buttons::FIRE
+            | buttons::USE;
+    }
+    if weapons_cold && !remote && !is_gadget_slot(input.slot & !REMOTE_CONTROL) {
+        out.buttons &= !buttons::FIRE;
+    }
+    out
+}
+
+/// Replicated match phases (see the server's `game::rounds::MatchPhase`).
+pub mod match_phase {
+    pub const WARMUP: u8 = 0;
+    pub const PREP: u8 = 1;
+    pub const ACTION: u8 = 2;
+    pub const ROUND_END: u8 = 3;
+    pub const MATCH_OVER: u8 = 4;
+}
+
+/// Input restrictions of a match phase for a player on `side` (0 attackers):
+/// (hold position, weapons cold). Attackers hold position during the
+/// preparation phase of round modes; weapons are cold during preparation and
+/// after the match. Server and client prediction use the same rule.
+pub fn phase_restrictions(round_mode: bool, phase: u8, side: u8) -> (bool, bool) {
+    match phase {
+        match_phase::PREP if round_mode => (side == 0, true),
+        match_phase::MATCH_OVER => (true, true),
+        _ => (false, false),
+    }
+}
+
 /// True if `active` is a gadget slot (weapon holstered).
 #[inline]
 pub fn is_gadget_slot(active: u8) -> bool {

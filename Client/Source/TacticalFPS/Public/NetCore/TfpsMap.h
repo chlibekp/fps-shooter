@@ -62,6 +62,9 @@ namespace tfps
 		std::string Name;
 		std::vector<Solid> Solids;
 		std::vector<SpawnPoint> Spawns;
+		/** Objective sites (index = site id in MatchState). Not part of the geometry hash yet. */
+		struct Objective { std::string Name; Aabb Bounds; };
+		std::vector<Objective> Objectives;
 		float KillZ = -50.0f;
 
 		/** Same value as MapDef::geometry_hash() in Rust. */

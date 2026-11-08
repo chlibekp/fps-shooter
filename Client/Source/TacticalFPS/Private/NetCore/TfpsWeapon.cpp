@@ -154,6 +154,22 @@ namespace tfps
 		return true;
 	}
 
+	MoveInput RestrictInput(const MoveInput& Input, bool bHoldPosition, bool bWeaponsCold)
+	{
+		MoveInput Out = Input;
+		const bool bRemote = (Input.Slot & kRemoteControl) != 0;
+		if (bHoldPosition && !bRemote)
+		{
+			Out.Buttons = static_cast<uint16_t>(Out.Buttons & (Buttons::Crouch | Buttons::Prone | Buttons::Aim | Buttons::LeanLeft | Buttons::LeanRight
+				| Buttons::Reload | Buttons::Fire | Buttons::Use));
+		}
+		if (bWeaponsCold && !bRemote && !IsGadgetSlot(static_cast<uint8_t>(Input.Slot & ~kRemoteControl)))
+		{
+			Out.Buttons = static_cast<uint16_t>(Out.Buttons & ~Buttons::Fire);
+		}
+		return Out;
+	}
+
 	WeaponState WeaponState::New(const WeaponDef* const Loadout[kWeaponSlots])
 	{
 		WeaponState S;

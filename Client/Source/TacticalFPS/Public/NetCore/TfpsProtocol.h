@@ -18,7 +18,7 @@
 namespace tfps
 {
 	constexpr uint16_t kMagic = 0x4654;
-	constexpr uint16_t kProtocolVersion = 7;
+	constexpr uint16_t kProtocolVersion = 8;
 	constexpr size_t kMaxPacketSize = 1200;
 	constexpr size_t kHandshakePacketSize = 256;
 	constexpr size_t kMaxNameLen = 24;
@@ -82,6 +82,8 @@ namespace tfps
 		constexpr uint8_t Spotted = 10;
 		constexpr uint8_t SolidAdded = 11;
 		constexpr uint8_t SolidReinforced = 12;
+		constexpr uint8_t MatchState = 13;
+		constexpr uint8_t MapReset = 14;
 	}
 	constexpr size_t kMaxCellsPerMessage = 90;
 
@@ -228,6 +230,22 @@ namespace tfps
 	/** Writes an empty reliable section (the v1 client sends no reliable messages). */
 	inline void WriteEmptyReliable(ByteWriter& W) { W.U8(0); }
 
+	/** Replicated match progress (MatchState message, see PROTOCOL.md). */
+	struct MatchInfo
+	{
+		uint8_t Mode = 0;           // 0 deathmatch, 1 elimination, 2 defuse
+		uint8_t Phase = 0;          // MatchPhase
+		uint8_t Round = 0;
+		uint8_t Score[2] = {0, 0};  // per squad
+		uint8_t AttackingSquad = 0;
+		uint16_t TimeLeftDs = 0;
+		uint8_t RoundsToWin = 0;
+		uint8_t DeviceSite = 255;
+		int32_t DevicePosMm[3] = {0, 0, 0};
+		uint8_t LastWinner = 255;
+		uint8_t LastReason = 0;
+	};
+
 	struct ServerMessage
 	{
 		uint8_t Type = 0;
@@ -253,6 +271,7 @@ namespace tfps
 		int32_t MaxMm[3] = {0, 0, 0};
 		uint8_t Material = 0;
 		bool bDestructible = false;
+		MatchInfo Match;                  // MatchState
 		uint8_t DurationDs = 0;           // Spotted: marker lifetime in tenths of a second (PlayerId = target, OtherId = spotter, FromMm = position)
 
 		bool Decode(uint8_t InType, const std::vector<uint8_t>& Payload);
@@ -357,7 +376,8 @@ namespace tfps
 		bool bAlive = true;
 		float RespawnIn = 0.0f;
 		uint8_t Reinforcements = 0;
-		uint8_t ReinforceProgress = 0; // 0..255
+		uint8_t ReinforceProgress = 0; // 0..255 (progress of the hold-USE action)
+		uint8_t Action = 0;            // 0 none, 1 reinforce, 2 plant, 3 defuse
 		GadgetStock Gadgets[kGadgetSlots];
 	};
 

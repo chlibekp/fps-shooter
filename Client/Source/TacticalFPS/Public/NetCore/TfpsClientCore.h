@@ -49,7 +49,7 @@ namespace tfps
 
 	struct ClientEvent
 	{
-		enum class EType : uint8_t { Connected, PlayerJoined, PlayerLeft, PlayerConnState, Disconnected, HitConfirm, Damaged, Kill, Explosion, Flash, Spotted } Type = EType::Connected;
+		enum class EType : uint8_t { Connected, PlayerJoined, PlayerLeft, PlayerConnState, Disconnected, HitConfirm, Damaged, Kill, Explosion, Flash, Spotted, MatchState, MapReset } Type = EType::Connected;
 		uint16_t PlayerId = 0;
 		uint8_t Team = 0;
 		std::string Name;
@@ -164,6 +164,19 @@ namespace tfps
 		bool IsAlive() const { return bAlive; }
 		float RespawnIn() const { return RespawnSeconds; }
 		uint8_t Health() const { return LocalHealth; }
+		/** Newest match state (mode, phase, round, scores, device) and when it arrived. */
+		const MatchInfo& Match() const { return CurrentMatch; }
+		bool HasMatch() const { return bHasMatch; }
+		double MatchReceivedAt() const { return MatchAt; }
+		/** Seconds left in the current phase, counted down locally since the last MatchState. */
+		float MatchTimeLeft(double Now) const;
+		/** Our side this round (0 attackers, 1 defenders) and squad (owner of the score). */
+		uint8_t Side() const { return LocalTeam; }
+		uint8_t Squad() const { return LocalTeam == 0 ? CurrentMatch.AttackingSquad : static_cast<uint8_t>(CurrentMatch.AttackingSquad ^ 1); }
+		/** Hold-USE action in progress (0 none, 1 reinforce, 2 plant, 3 defuse). */
+		uint8_t Action() const { return LocalAction; }
+		/** The map was rebuilt for a new round since the last call (visuals rebuild too). */
+		bool PollMapReset() { const bool b = bMapResetPending; bMapResetPending = false; return b; }
 		/** Wall reinforcements left and progress (0..1) of the one being applied. */
 		uint8_t Reinforcements() const { return LocalReinforcements; }
 		float ReinforceProgress() const { return static_cast<float>(LocalReinforceProgress) / 255.0f; }
@@ -219,6 +232,13 @@ namespace tfps
 		std::deque<uint32_t> ReinforcedSolids;
 		uint32_t SolidDesyncCount = 0;
 		uint8_t LocalReinforcements = 0;
+		uint8_t LocalAction = 0;
+		uint8_t LocalTeam = 0;
+		MatchInfo CurrentMatch;
+		bool bHasMatch = false;
+		double MatchAt = 0.0;
+		bool bMapResetPending = false;
+		MapDef MapCopy;
 		uint8_t LocalReinforceProgress = 0;
 		std::vector<GadgetEntityState> GadgetEntities;
 		GadgetStock LocalGadgets[kGadgetSlots];

@@ -16,6 +16,8 @@ pub mod msg_type {
     pub const SPOTTED: u8 = 10;
     pub const SOLID_ADDED: u8 = 11;
     pub const SOLID_REINFORCED: u8 = 12;
+    pub const MATCH_STATE: u8 = 13;
+    pub const MAP_RESET: u8 = 14;
 }
 
 /// Maximum cell ids per CellsDestroyed message (fits the 400-byte per-packet
@@ -41,6 +43,31 @@ impl ConnState {
             _ => Err(DecodeError::Invalid("bad conn state")),
         }
     }
+}
+
+/// Replicated match progress (see PROTOCOL.md, MatchState).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MatchInfo {
+    /// 0 deathmatch, 1 elimination, 2 defuse.
+    pub mode: u8,
+    /// 0 warmup, 1 preparation, 2 action, 3 round end, 4 match over.
+    pub phase: u8,
+    pub round: u8,
+    /// Per squad: rounds won (kills in deathmatch).
+    pub score: [u8; 2],
+    /// Squad playing attackers (side 0) this round.
+    pub attacking_squad: u8,
+    /// Seconds left in the phase (or on the device fuse) x 10.
+    pub time_left_ds: u16,
+    /// Rounds to win (score limit in deathmatch).
+    pub rounds_to_win: u8,
+    /// Objective site holding the planted device, 255 = none.
+    pub device_site: u8,
+    pub device_pos_mm: [i32; 3],
+    /// Winner squad of the last round / the match, 255 = none.
+    pub last_winner: u8,
+    /// Why (1 eliminated, 2 time up, 3 detonated, 4 defused, 5 score limit).
+    pub last_reason: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -101,6 +128,12 @@ pub enum Message {
     /// S -> all. Solid `index` was reinforced (its material is now
     /// Reinforced: bullets and explosives no longer affect it).
     SolidReinforced { index: u16 },
+    /// S -> all (and joiners). Game mode and match progress; sent when it
+    /// changes. Clients count `time_left_ds` down locally.
+    MatchState(MatchInfo),
+    /// S -> all. A new round started: rebuild the map from its definition
+    /// (destruction, barricades and reinforcements are cleared).
+    MapReset,
     /// S -> all. Kill feed.
     Kill {
         killer: u16,
@@ -125,6 +158,8 @@ impl Message {
             Message::Spotted { .. } => msg_type::SPOTTED,
             Message::SolidAdded { .. } => msg_type::SOLID_ADDED,
             Message::SolidReinforced { .. } => msg_type::SOLID_REINFORCED,
+            Message::MatchState(_) => msg_type::MATCH_STATE,
+            Message::MapReset => msg_type::MAP_RESET,
         }
     }
 
@@ -206,6 +241,23 @@ impl Message {
                 w.u8(*destructible as u8);
             }
             Message::SolidReinforced { index } => w.u16(*index),
+            Message::MatchState(m) => {
+                w.u8(m.mode);
+                w.u8(m.phase);
+                w.u8(m.round);
+                w.u8(m.score[0]);
+                w.u8(m.score[1]);
+                w.u8(m.attacking_squad);
+                w.u16(m.time_left_ds);
+                w.u8(m.rounds_to_win);
+                w.u8(m.device_site);
+                for v in m.device_pos_mm {
+                    w.i32(v);
+                }
+                w.u8(m.last_winner);
+                w.u8(m.last_reason);
+            }
+            Message::MapReset => {}
             Message::Spotted {
                 target,
                 spotter,
@@ -300,6 +352,20 @@ impl Message {
                 destructible: r.u8()? != 0,
             },
             msg_type::SOLID_REINFORCED => Message::SolidReinforced { index: r.u16()? },
+            msg_type::MATCH_STATE => Message::MatchState(MatchInfo {
+                mode: r.u8()?,
+                phase: r.u8()?,
+                round: r.u8()?,
+                score: [r.u8()?, r.u8()?],
+                attacking_squad: r.u8()?,
+                time_left_ds: r.u16()?,
+                rounds_to_win: r.u8()?,
+                device_site: r.u8()?,
+                device_pos_mm: [r.i32()?, r.i32()?, r.i32()?],
+                last_winner: r.u8()?,
+                last_reason: r.u8()?,
+            }),
+            msg_type::MAP_RESET => Message::MapReset,
             msg_type::SPOTTED => Message::Spotted {
                 target: r.u16()?,
                 spotter: r.u16()?,
@@ -373,6 +439,20 @@ mod tests {
                 destructible: true,
             },
             Message::SolidReinforced { index: 12 },
+            Message::MatchState(MatchInfo {
+                mode: 2,
+                phase: 2,
+                round: 3,
+                score: [1, 2],
+                attacking_squad: 1,
+                time_left_ds: 1234,
+                rounds_to_win: 4,
+                device_site: 1,
+                device_pos_mm: [1, -2, 3],
+                last_winner: 0,
+                last_reason: 4,
+            }),
+            Message::MapReset,
         ] {
             assert_eq!(
                 Message::decode(m.msg_type(), &m.encode_payload()).unwrap(),

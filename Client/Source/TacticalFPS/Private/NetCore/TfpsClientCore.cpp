@@ -39,6 +39,7 @@ namespace tfps
 		, Ring(kSnapshotRing)
 		, RecvBuf(2048)
 	{
+		MapCopy = Map;
 		SendBuf.reserve(kMaxPacketSize);
 		SessionReconnectToken = Config.ReconnectToken;
 	}
@@ -66,7 +67,13 @@ namespace tfps
 			return; // dead players do not move; the server ignores their inputs too
 		}
 		ShotScratch.Clear();
-		SimulatePlayer(Ms, Ws, Input, Dt, Collision, Loadout, ShotScratch);
+		// Match-phase restrictions, exactly as the server applies them.
+		bool bHold = false, bCold = false;
+		if (bHasMatch)
+		{
+			PhaseRestrictions(CurrentMatch.Mode != 0, CurrentMatch.Phase, LocalTeam, bHold, bCold);
+		}
+		SimulatePlayer(Ms, Ws, RestrictInput(Input, bHold, bCold), Dt, Collision, Loadout, ShotScratch);
 		if (EmitShots != nullptr)
 		{
 			*EmitShots = ShotScratch;
@@ -375,8 +382,24 @@ namespace tfps
 		E.PlayerId = M.PlayerId;
 		switch (M.Type)
 		{
+		case MsgType::MatchState:
+			CurrentMatch = M.Match;
+			bHasMatch = true;
+			MatchAt = LastRecv;
+			E.Type = ClientEvent::EType::MatchState;
+			break;
+		case MsgType::MapReset:
+			// New round: destruction, barricades and reinforcements are gone.
+			Collision = CollisionWorld::FromMap(MapCopy);
+			DestroyedCells.clear();
+			AddedSolids.clear();
+			ReinforcedSolids.clear();
+			bMapResetPending = true;
+			E.Type = ClientEvent::EType::MapReset;
+			break;
 		case MsgType::PlayerJoined:
 		{
+			if (M.PlayerId == LocalPlayerId) { LocalTeam = M.Team; }
 			if (M.PlayerId != LocalPlayerId)
 			{
 				RemotePlayer& P = RemotePlayers[M.PlayerId];
@@ -535,6 +558,7 @@ namespace tfps
 		GadgetEntities.swap(GadgetBuf);
 		LocalReinforcements = H.Reinforcements;
 		LocalReinforceProgress = H.ReinforceProgress;
+		LocalAction = H.Action;
 		for (int I = 0; I < kGadgetSlots; ++I) { LocalGadgets[I] = H.Gadgets[I]; }
 		NetStats.ServerInputDepth = H.InputBufferDepth;
 		Reconcile(H.LastCmdSeq, H.Local, H.Weapon);
@@ -671,5 +695,12 @@ namespace tfps
 		OutSolidIndex = ReinforcedSolids.front();
 		ReinforcedSolids.pop_front();
 		return true;
+	}
+
+	float ClientCore::MatchTimeLeft(double Now) const
+	{
+		if (!bHasMatch) { return 0.0f; }
+		const double Left = static_cast<double>(CurrentMatch.TimeLeftDs) * 0.1 - (Now - MatchAt);
+		return Left > 0.0 ? static_cast<float>(Left) : 0.0f;
 	}
 }

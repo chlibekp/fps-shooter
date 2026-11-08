@@ -63,7 +63,7 @@ TFPS_TEST(PlayerSimConformanceWithRust)
 	std::istringstream Lines(Text);
 	std::string Line;
 	std::getline(Lines, Line);
-	TFPS_REQUIRE(Line == "tfps-player-vectors 4");
+	TFPS_REQUIRE(Line == "tfps-player-vectors 5");
 	tfps::CollisionWorld World;
 	tfps::MoveState Ms;
 	tfps::WeaponState Ws;
@@ -114,6 +114,8 @@ TFPS_TEST(PlayerSimConformanceWithRust)
 			In >> P;
 			Input.PitchQ = static_cast<int16_t>(P);
 			Input.Slot = static_cast<uint8_t>(NextU(In));
+			const unsigned long Restrict = NextU(In);
+			Input = tfps::RestrictInput(Input, (Restrict & 1) != 0, (Restrict & 2) != 0);
 			tfps::MoveState EMs;
 			tfps::WeaponState EWs;
 			ReadMove(In, EMs);

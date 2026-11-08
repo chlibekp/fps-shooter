@@ -196,7 +196,7 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 	// Spotted enemies: diamond markers at the spotted position (projected with
 	// the current view; the pose is the pinned spot, not live tracking).
 	const ATfpsPlayerController* SpotPC = Cast<ATfpsPlayerController>(GetOwningPlayerController());
-	if (SpotPC != nullptr && Net.GetSpotMarkers().Num() > 0)
+	if (SpotPC != nullptr)
 	{
 		const tfps::GadgetEntityState* Drone = Net.GetControlledDevice();
 		const FRotator ViewRot = SpotPC->GetControlRotation();
@@ -241,7 +241,38 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 			DrawLine(SX - R, SY, SX, SY - R, C, 2.0f * Scale);
 			DrawText(Net.PlayerName(M.Target), C, SX + R + 4.0f * Scale, SY - R, Small, Scale);
 		}
+		// Objective sites (round modes): name and distance at the site's centre;
+		// the planted device blinks red.
+		const tfps::MapDef* Map = Net.GetMap();
+		const tfps::MatchInfo& MI = Core.Match();
+		if (Map != nullptr && Core.HasMatch() && MI.Mode == 2 && MI.Phase != tfps::MatchPhase::Warmup)
+		{
+			auto Project = [&](const FVector& P, float& OX, float& OY) -> bool
+			{
+				const FVector Rel = P - Origin;
+				const float Z = static_cast<float>(FVector::DotProduct(Rel, Fwd));
+				if (Z < 0.2f) { return false; }
+				OX = CX + static_cast<float>(FVector::DotProduct(Rel, Right)) / Z * Focal;
+				OY = CY - static_cast<float>(FVector::DotProduct(Rel, Up)) / Z * Focal;
+				return true;
+			};
+			for (size_t I = 0; I < Map->Objectives.size(); ++I)
+			{
+				const tfps::Aabb& B = Map->Objectives[I].Bounds;
+				const FVector Centre((B.Min.X + B.Max.X) * 0.5f, (B.Min.Y + B.Max.Y) * 0.5f, B.Min.Z + 1.0f);
+				float SX = 0.0f, SY = 0.0f;
+				if (!Project(Centre, SX, SY)) { continue; }
+				const bool bDevice = MI.DeviceSite == I;
+				const bool bBlink = bDevice && FMath::Fmod(static_cast<float>(Now), 0.5f) < 0.25f;
+				const FLinearColor C = bDevice ? (bBlink ? FLinearColor(1.0f, 0.1f, 0.05f, 1.0f) : FLinearColor(0.6f, 0.05f, 0.03f, 1.0f))
+											   : FLinearColor(0.95f, 0.8f, 0.3f, 0.85f);
+				const float Dist = static_cast<float>((Centre - Origin).Size());
+				DrawText(FString::Printf(TEXT("%s  %.0f m"), UTF8_TO_TCHAR(Map->Objectives[I].Name.c_str()), Dist), C, SX - 40.0f * Scale, SY, Small, Scale);
+			}
+		}
 	}
+
+	DrawMatchHud(Net, Core, Scale);
 
 	// Drone / camera view overlay.
 	if (const tfps::GadgetEntityState* Device = Net.GetControlledDevice())
@@ -259,7 +290,7 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 			H - M - 30.0f * Scale, Small, Scale);
 	}
 
-	// Wall reinforcement (defenders): count, and a progress bar while holding USE.
+	// Hold-USE actions: wall reinforcement count, and a progress bar while holding USE.
 	if (Core.Reinforcements() > 0 || Core.ReinforceProgress() > 0.0f)
 	{
 		DrawText(FString::Printf(TEXT("Reinforcements x%d  [hold F on a wall]"), static_cast<int32>(Core.Reinforcements())), Dim, 24.0f * Scale,
@@ -270,7 +301,9 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 		const float RW = 220.0f * Scale;
 		DrawRect(FLinearColor(0.1f, 0.1f, 0.1f, 0.7f), CX - RW * 0.5f, CY + 60.0f * Scale, RW, 8.0f * Scale);
 		DrawRect(FLinearColor(0.6f, 0.75f, 0.9f, 0.95f), CX - RW * 0.5f, CY + 60.0f * Scale, RW * Core.ReinforceProgress(), 8.0f * Scale);
-		DrawText(TEXT("REINFORCING"), Text, CX - 45.0f * Scale, CY + 72.0f * Scale, Small, Scale);
+		const uint8 Act = Core.Action();
+		const TCHAR* Label = Act == 2 ? TEXT("PLANTING") : (Act == 3 ? TEXT("DEFUSING") : TEXT("REINFORCING"));
+		DrawText(Label, Text, CX - 45.0f * Scale, CY + 72.0f * Scale, Small, Scale);
 	}
 
 	// Flashbang: white-out that holds, then fades (drawn under the rest of the HUD text that follows).
@@ -334,4 +367,66 @@ void ATfpsHUD::DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCor
 		DrawText(FString::Printf(TEXT("YOU WERE TAKEN DOWN  -  respawning in %.1f s"), Core.RespawnIn()), Text, CX - 220.0f * Scale, CY - 60.0f * Scale,
 			Font, Scale);
 	}
+}
+
+void ATfpsHUD::DrawMatchHud(const UTfpsNetSubsystem& Net, const tfps::ClientCore& Core, float Scale)
+{
+	if (!Core.HasMatch())
+	{
+		return;
+	}
+	UFont* Font = GEngine->GetMediumFont();
+	UFont* Small = GEngine->GetSmallFont();
+	const double Now = FPlatformTime::Seconds();
+	const tfps::MatchInfo& M = Core.Match();
+	const float W = Canvas->ClipX;
+	const float CX = W * 0.5f;
+	const uint8 Mine = Core.Squad();
+	const FLinearColor Ours(0.35f, 0.7f, 1.0f, 0.95f);
+	const FLinearColor Theirs(1.0f, 0.45f, 0.3f, 0.95f);
+	const FLinearColor Text(0.92f, 0.93f, 0.90f, 0.95f);
+	const float Left = Core.MatchTimeLeft(Now);
+	const int32 Mins = static_cast<int32>(Left) / 60;
+	const int32 Secs = static_cast<int32>(Left) % 60;
+	const TCHAR* ModeName = M.Mode == 2 ? TEXT("DEFUSE") : (M.Mode == 1 ? TEXT("ELIMINATION") : TEXT("TEAM DEATHMATCH"));
+	const TCHAR* PhaseName = TEXT("");
+	switch (M.Phase)
+	{
+	case tfps::MatchPhase::Warmup: PhaseName = TEXT("WARMUP"); break;
+	case tfps::MatchPhase::Prep: PhaseName = TEXT("PREPARATION"); break;
+	case tfps::MatchPhase::Action: PhaseName = M.DeviceSite != 255 ? TEXT("DEVICE PLANTED") : TEXT(""); break;
+	case tfps::MatchPhase::RoundEnd: PhaseName = TEXT("ROUND OVER"); break;
+	default: PhaseName = TEXT("MATCH OVER"); break;
+	}
+	// Top centre: scores (ours left), timer, round and phase.
+	const float Y = 14.0f * Scale;
+	DrawRect(FLinearColor(0.02f, 0.025f, 0.03f, 0.6f), CX - 150.0f * Scale, Y - 4.0f * Scale, 300.0f * Scale, 64.0f * Scale);
+	DrawText(FString::Printf(TEXT("%d"), static_cast<int32>(M.Score[Mine])), Ours, CX - 130.0f * Scale, Y, Font, Scale * 1.5f);
+	DrawText(FString::Printf(TEXT("%d"), static_cast<int32>(M.Score[Mine ^ 1])), Theirs, CX + 105.0f * Scale, Y, Font, Scale * 1.5f);
+	const FLinearColor TimerColor = M.DeviceSite != 255 ? FLinearColor(1.0f, 0.2f, 0.1f, 1.0f) : Text;
+	DrawText(FString::Printf(TEXT("%d:%02d"), Mins, Secs), TimerColor, CX - 28.0f * Scale, Y, Font, Scale * 1.3f);
+	const FString Sub = M.Mode == 0 ? FString::Printf(TEXT("%s  first to %d"), ModeName, static_cast<int32>(M.RoundsToWin))
+									: FString::Printf(TEXT("%s  round %d  %s  %s"), ModeName, static_cast<int32>(M.Round), Core.Side() == 0 ? TEXT("ATTACK") : TEXT("DEFEND"), PhaseName);
+	DrawText(Sub, Text, CX - 140.0f * Scale, Y + 38.0f * Scale, Small, Scale);
+	// Round / match result banner.
+	if ((M.Phase == tfps::MatchPhase::RoundEnd || M.Phase == tfps::MatchPhase::MatchOver) && M.LastWinner != 255)
+	{
+		const bool bWon = M.LastWinner == Mine;
+		const TCHAR* Why = TEXT("");
+		switch (M.LastReason)
+		{
+		case 1: Why = TEXT("enemy eliminated"); break;
+		case 2: Why = TEXT("time ran out"); break;
+		case 3: Why = TEXT("device detonated"); break;
+		case 4: Why = TEXT("device defused"); break;
+		case 5: Why = TEXT("score limit reached"); break;
+		default: break;
+		}
+		const TCHAR* What = M.Phase == tfps::MatchPhase::MatchOver ? (bWon ? TEXT("VICTORY") : TEXT("DEFEAT")) : (bWon ? TEXT("ROUND WON") : TEXT("ROUND LOST"));
+		const float BY = Canvas->ClipY * 0.28f;
+		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 0.0f, BY - 10.0f * Scale, W, 70.0f * Scale);
+		DrawText(What, bWon ? Ours : Theirs, CX - 90.0f * Scale, BY, Font, Scale * 1.8f);
+		DrawText(Why, Text, CX - 60.0f * Scale, BY + 40.0f * Scale, Small, Scale);
+	}
+	(void)Net;
 }

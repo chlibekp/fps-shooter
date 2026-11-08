@@ -134,6 +134,16 @@ namespace tfps
 			if (const JsonValue* T = SV.Find("team")) { P.Team = static_cast<uint8_t>(T->Number); }
 			Map.Spawns.push_back(P);
 		}
+		if (const JsonValue* Objs = Root.Find("objectives"))
+		{
+			for (const JsonValue& OV : Objs->Items)
+			{
+				MapDef::Objective O;
+				if (const JsonValue* N = OV.Find("name")) { O.Name = N->String; }
+				if (!ReadVec3(OV.Find("min"), O.Bounds.Min) || !ReadVec3(OV.Find("max"), O.Bounds.Max)) { OutError = "objective needs min/max"; return false; }
+				Map.Objectives.push_back(O);
+			}
+		}
 		OutError = Map.Validate();
 		if (!OutError.empty()) { return false; }
 		OutMap = std::move(Map);

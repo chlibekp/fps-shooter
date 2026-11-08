@@ -4,7 +4,7 @@ Legend: ✅ implemented and tested · 🟡 partially implemented / implemented b
 not verified end-to-end · ❌ not started · 🔒 placeholder (explicitly marked
 temporary).
 
-Last updated: Phase 5 (maps and assets): three production maps; Blender kit and gadget models. Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
+Last updated: Phase 6, part 1 (game modes and match flow). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
 
 ## Verification environment caveat
 
@@ -150,6 +150,19 @@ result:
 | Drones: deploy, remote control (body frozen by the shared simulation), hop, spot for the team, destroyed by one bullet or any explosion | ✅ server and NetCore / 🟡 🔒 Unreal | Unit and e2e tests. Drone motion is not predicted (camera follows snapshots). The Unreal drone camera, overlay and spot markers are only mock-checked. |
 | Wall cameras (place, view, spot), motion sensors (spot running enemies through walls), jammers (stop enemy drones, block charge detonation); all destroyed by one bullet or any explosion | ✅ server / 🟡 🔒 Unreal | Unit-tested; the camera view reuses the drone remote-control path |
 | Deployable barricades (fill the doorway or window in front, destructible wood, prediction collides with them) and wall reinforcement (hold USE, defenders, 2 per life) | ✅ server and NetCore / 🟡 🔒 Unreal | Unit tests, plus an e2e test that includes a late joiner. Barricade cells and reinforced tint are drawn by `ATfpsArenaBuilder` (mock-checked). |
+
+## Match flow (spec §10) — Phase 6
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Team deathmatch (respawns, kill limit, optional time limit) | ✅ | Default mode |
+| Elimination rounds (1v1 and teams), defenders win on time | ✅ | |
+| Defuse: plant in an objective site, fuse, defuse, detonation | ✅ | Unit tests and an e2e test over UDP |
+| Warmup countdown, preparation phase (attackers hold, weapons cold), round end, match over | ✅ | Restrictions shared with client prediction |
+| Half-time side swap, map reset every round | ✅ | `MapReset`; joiners get the current state |
+| HUD: scores, timer, round, side, phase, result banner, plant/defuse progress, objective markers | 🟡 | Canvas HUD, mock-checked |
+| Server CLI: `--mode --rounds-to-win --round-time --prep-time --score-limit --time-limit --friendly-fire` | ✅ | |
+| Lobby with invite codes, custom match settings | ❌ | Phase 6, part 2 |
 
 ## Frontend / UI (spec §11)
 

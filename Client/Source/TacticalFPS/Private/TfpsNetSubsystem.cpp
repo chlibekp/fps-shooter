@@ -122,6 +122,13 @@ void UTfpsNetSubsystem::Pump()
 		}
 	}
 	uint32_t Cell = 0;
+	if (Core && Core->PollMapReset())
+	{
+		// New round: the arena builder redraws the map from its definition.
+		++MapRevision;
+		PendingDestroyedCells.Reset();
+		PendingReinforced.Reset();
+	}
 	while (Core && Core->PollDestroyedCell(Cell))
 	{
 		PendingDestroyedCells.Add(Cell);
@@ -212,6 +219,22 @@ void UTfpsNetSubsystem::HandleEvents()
 			{
 				PendingExplosions.Add(TPair<FVector, float>(FVector(Event.From.X, Event.From.Y, Event.From.Z), Event.Radius));
 			}
+			break;
+		case tfps::ClientEvent::EType::MatchState:
+		{
+			const tfps::MatchInfo& M = Core->Match();
+			if (M.Phase == tfps::MatchPhase::Prep)
+			{
+				PushEvent(FString::Printf(TEXT("Round %d: %s"), static_cast<int32>(M.Round), Core->Side() == 0 ? TEXT("attack") : TEXT("defend")));
+			}
+			else if ((M.Phase == tfps::MatchPhase::RoundEnd || M.Phase == tfps::MatchPhase::MatchOver) && M.LastWinner != 255)
+			{
+				PushEvent(FString::Printf(TEXT("%s %d - %d"), M.LastWinner == Core->Squad() ? TEXT("Round won") : TEXT("Round lost"),
+					static_cast<int32>(M.Score[Core->Squad()]), static_cast<int32>(M.Score[Core->Squad() ^ 1])));
+			}
+			break;
+		}
+		case tfps::ClientEvent::EType::MapReset:
 			break;
 		case tfps::ClientEvent::EType::Spotted:
 		{

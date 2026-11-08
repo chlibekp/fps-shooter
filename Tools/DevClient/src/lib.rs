@@ -15,7 +15,7 @@ use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
 use tfps_protocol::ack::AckState;
 use tfps_protocol::input::{InputBundle, MAX_INPUT_REDUNDANCY};
-use tfps_protocol::messages::{ConnState, Message};
+use tfps_protocol::messages::{ConnState, MatchInfo, Message};
 use tfps_protocol::packet::{
     self, BodyKind, Challenge, ChallengeResponse, ConnectAccepted, ConnectRejected, ConnectRequest,
     DataHeader, Disconnect, DisconnectReason, PacketType, RejectReason,
@@ -122,6 +122,10 @@ pub enum ClientEvent {
         pos_mm: [i32; 3],
         intensity: u8,
     },
+    /// Match progress changed (mode, phase, round, scores, device).
+    MatchState(MatchInfo),
+    /// A new round started and the map was rebuilt.
+    MapReset,
     /// A teammate's drone spotted `target`.
     Spotted {
         target: u16,
@@ -208,6 +212,12 @@ pub struct Client {
     phase: Phase,
     rng: rand::rngs::StdRng,
     world: CollisionWorld,
+    map: MapDef,
+    /// Newest match state from the server, and when it arrived.
+    pub match_info: Option<MatchInfo>,
+    pub match_info_at: Option<Instant>,
+    /// Our current side (0 attackers, 1 defenders).
+    pub team: u8,
     local_map_hash: u64,
 
     // Session
@@ -294,6 +304,10 @@ impl Client {
             },
             rng,
             world: CollisionWorld::from_map(map),
+            map: map.clone(),
+            match_info: None,
+            match_info_at: None,
+            team: 0,
             local_map_hash: map.geometry_hash(),
             session_key: 0,
             player_id: 0,
@@ -537,6 +551,12 @@ impl Client {
         ) else {
             return 0;
         };
+        // Match-phase restrictions, exactly as the server applies them.
+        let (hold, cold) = match &self.match_info {
+            Some(m) => tfps_sim::weapon::phase_restrictions(m.mode != 0, m.phase, self.team),
+            None => (false, false),
+        };
+        let input = &tfps_sim::weapon::restrict_input(input, hold, cold);
         self.shot_buf.clear();
         simulate_player(
             ms,
@@ -744,11 +764,26 @@ impl Client {
 
     fn on_message(&mut self, m: Message) {
         match m {
+            Message::MatchState(info) => {
+                self.match_info = Some(info);
+                self.match_info_at = Some(Instant::now());
+                self.events.push_back(ClientEvent::MatchState(info));
+            }
+            Message::MapReset => {
+                // New round: destruction, barricades and reinforcements are gone.
+                self.world = CollisionWorld::from_map(&self.map);
+                self.destroyed_cells = 0;
+                self.solids_added = 0;
+                self.events.push_back(ClientEvent::MapReset);
+            }
             Message::PlayerJoined {
                 player_id,
                 team,
                 name,
             } => {
+                if player_id == self.player_id {
+                    self.team = team;
+                }
                 if player_id != self.player_id {
                     let rp = self
                         .players

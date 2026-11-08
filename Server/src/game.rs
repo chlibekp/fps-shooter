@@ -3,16 +3,19 @@
 //! The network layer feeds validated input commands in; `GameWorld::tick`
 //! advances the simulation by exactly one fixed step.
 
+pub mod rounds;
+
 use crate::combat::{self, BodyPart, Hitboxes, LagHistory};
 use crate::destruction::{self, Destruction, Obstacle};
 use crate::gadgets::{self, phase, GadgetEntity};
+pub use rounds::{GameMode, MatchPhase, MatchState};
 use tfps_protocol::snapshot::{
     entity_flags, quantize_lean, quantize_mm, quantize_unit, surface, EntityState, ShotEvent,
 };
 use tfps_sim::gadget::{GadgetKind, GadgetSet, GadgetStock};
 use tfps_sim::weapon::{
-    is_gadget_slot, Shot, ShotBuffer, WeaponDef, WeaponSet, WeaponState, GADGET_SLOTS,
-    REMOTE_CONTROL, SLOTS,
+    is_gadget_slot, restrict_input, Shot, ShotBuffer, WeaponDef, WeaponSet, WeaponState,
+    GADGET_SLOTS, REMOTE_CONTROL, SLOTS,
 };
 use tfps_sim::{
     buttons, movement, simulate_player, CollisionWorld, MapDef, MoveInput, MoveState, Vec3,
@@ -186,6 +189,18 @@ pub struct MatchRules {
     pub reinforcements_per_player: u8,
     /// Seconds of holding USE to reinforce a wall.
     pub reinforce_time: f32,
+    pub mode: GameMode,
+    /// Round modes: rounds a squad must win (sides swap after rounds_to_win - 1).
+    pub rounds_to_win: u8,
+    pub prep_time: f32,
+    pub round_time: f32,
+    pub round_end_time: f32,
+    pub plant_time: f32,
+    pub defuse_time: f32,
+    pub device_fuse: f32,
+    /// Deathmatch: kills to win and time limit (0 = none).
+    pub score_limit: u8,
+    pub time_limit: f32,
 }
 
 impl Default for MatchRules {
@@ -199,6 +214,16 @@ impl Default for MatchRules {
             defender_team: 1,
             reinforcements_per_player: 2,
             reinforce_time: 1.5,
+            mode: GameMode::Deathmatch,
+            rounds_to_win: 4,
+            prep_time: 30.0,
+            round_time: 180.0,
+            round_end_time: 6.0,
+            plant_time: 6.0,
+            defuse_time: 7.0,
+            device_fuse: 45.0,
+            score_limit: 50,
+            time_limit: 0.0,
         }
     }
 }
@@ -234,6 +259,11 @@ pub struct Player {
     /// Seconds USE has been held on `reinforce_target`.
     pub reinforce_progress: f32,
     pub reinforce_target: Option<usize>,
+    /// Persistent squad (0/1) owning the score; `team` is the current side.
+    pub squad: u8,
+    /// Hold-USE action in progress (rounds::action), progress in
+    /// `reinforce_progress`.
+    pub action: u8,
 }
 
 impl Player {
@@ -332,6 +362,8 @@ pub enum GameEvent {
         weapon: u8,
         headshot: bool,
     },
+    /// A round ended (the match state carries the details).
+    RoundEnd { winner: u8, reason: u8 },
     /// A drone of `spotter` saw enemy `target` at `pos`; tell `team`.
     Spotted {
         spotter: u16,
@@ -384,6 +416,10 @@ pub struct GameWorld {
     trace_buf: Vec<Obstacle>,
     /// Explosions this tick (centre, radius), for effects.
     pub explosions: Vec<(Vec3, f32)>,
+    /// Modes, rounds, objective.
+    pub match_state: MatchState,
+    /// The map was reset (new round) this tick: clients must rebuild it.
+    pub map_reset_this_tick: bool,
 }
 
 impl GameWorld {
@@ -425,6 +461,8 @@ impl GameWorld {
             destruction,
             trace_buf: Vec::with_capacity(64),
             explosions: Vec::new(),
+            match_state: MatchState::default(),
+            map_reset_this_tick: false,
         }
     }
 
@@ -497,14 +535,16 @@ impl GameWorld {
             .unwrap_or(0)
     }
 
-    /// Inserts a player (new, or restored after reconnect with its state).
+    /// Inserts a player (new, or restored after reconnect with its state)
+    /// into `squad`; the side it plays follows from the match state.
     pub fn add_player(
         &mut self,
         id: u16,
-        team: u8,
+        squad: u8,
         name: String,
         restore: Option<(MoveState, WeaponState, u8, [GadgetStock; GADGET_SLOTS])>,
     ) {
+        let team = self.side_of_squad(squad);
         let loadout = self.default_loadout();
         let (state, weapon, health, gadget_stock) = match restore {
             Some(r) => r,
@@ -553,6 +593,8 @@ impl GameWorld {
             },
             reinforce_progress: 0.0,
             reinforce_target: None,
+            squad,
+            action: rounds::action::NONE,
         };
         match self.players.binary_search_by_key(&id, |p| p.id) {
             Ok(i) => self.players[i] = p,
@@ -605,6 +647,7 @@ impl GameWorld {
         self.destruction.destroyed_this_tick.clear();
         self.solids_added_this_tick.clear();
         self.reinforced_this_tick.clear();
+        self.update_match();
         self.pending_shots.clear();
         let dt = self.dt;
         let kill_z = self.map.kill_z;
@@ -613,6 +656,9 @@ impl GameWorld {
         for i in 0..self.players.len() {
             let (cmd, starved, render_time) = self.players[i].cmds.take();
             self.players[i].last_starved = starved;
+            // Match-phase restrictions (clients predict the same).
+            let (hold, cold) = self.restrictions(self.players[i].team);
+            let cmd = restrict_input(&cmd, hold, cold);
             if !self.players[i].alive {
                 self.players[i].respawn_timer -= dt;
                 if self.players[i].respawn_timer <= 0.0 {
@@ -680,9 +726,15 @@ impl GameWorld {
             {
                 self.use_gadget(i, &cmd);
             }
-            self.update_reinforcing(i, &cmd, remote);
+            self.update_use_action(i, &cmd, remote);
             if self.players[i].state.pos.z < kill_z {
-                self.respawn(i);
+                if self.respawns_enabled() {
+                    self.respawn(i);
+                } else {
+                    let id = self.players[i].id;
+                    let pos = self.players[i].state.pos;
+                    self.apply_damage(id, None, 255.0, false, 0, pos);
+                }
             }
         }
 
@@ -696,7 +748,10 @@ impl GameWorld {
         // 3. Gadgets: flight, fuses, arming, smoke.
         self.update_gadgets();
 
-        // 4. Record this tick for future rewinds.
+        // 4. Round / match end conditions.
+        self.check_round_end();
+
+        // 5. Record this tick for future rewinds.
         let mut ents = std::mem::take(&mut self.entity_buf);
         self.collect_entities(&mut ents);
         self.history.record(self.tick, &ents);
@@ -839,7 +894,12 @@ impl GameWorld {
         from: Vec3,
     ) {
         let damage = raw.round().clamp(1.0, 255.0) as u8;
-        let respawn_delay = self.rules.respawn_delay;
+        // No respawns during rounds: the next round respawns everyone.
+        let respawn_delay = if self.respawns_enabled() {
+            self.rules.respawn_delay
+        } else {
+            f32::INFINITY
+        };
         let Some(victim) = self.player_mut(victim_id) else {
             return;
         };
@@ -876,6 +936,7 @@ impl GameWorld {
                 weapon,
                 headshot,
             });
+            self.score_kill(shooter, victim_id);
         }
     }
 
@@ -2499,5 +2560,211 @@ mod tests {
         b.step(cmd(0), cmd(0), 1);
         b.step(cmd(0), hold, 40);
         assert_eq!(b.w.collision.solids[si].material, tfps_sim::Material::Brick);
+    }
+
+    fn round_rules(mode: GameMode) -> MatchRules {
+        MatchRules {
+            mode,
+            rounds_to_win: 2,
+            prep_time: 1.0,
+            round_time: 10.0,
+            round_end_time: 1.0,
+            plant_time: 1.0,
+            defuse_time: 1.0,
+            device_fuse: 3.0,
+            ..Default::default()
+        }
+    }
+
+    /// Arena in a round mode with an objective site around the defender (x = 20).
+    fn round_arena(mode: GameMode) -> Arena {
+        let mut a = Arena::new("", round_rules(mode));
+        a.w.map.objectives.push(tfps_sim::map::Objective {
+            name: "Site".into(),
+            bounds: tfps_sim::Aabb {
+                min: Vec3::new(18.0, -2.0, 0.0),
+                max: Vec3::new(22.0, 2.0, 3.0),
+            },
+        });
+        a
+    }
+
+    /// Runs warmup (5 s countdown) and preparation; returns in the action phase.
+    fn to_action(a: &mut Arena) {
+        a.step(cmd(0), cmd(0), 64 * 5 + 2);
+        assert_eq!(a.w.match_state.phase, MatchPhase::Prep);
+        a.step(cmd(0), cmd(0), 64 + 2);
+        assert_eq!(a.w.match_state.phase, MatchPhase::Action);
+    }
+
+    #[test]
+    fn preparation_holds_attackers_and_keeps_weapons_cold() {
+        let mut a = round_arena(GameMode::Elimination);
+        assert_eq!(a.w.match_state.phase, MatchPhase::Warmup);
+        a.step(cmd(0), cmd(0), 64 * 5 + 2);
+        assert_eq!(a.w.match_state.phase, MatchPhase::Prep);
+        assert_eq!(a.w.match_state.round, 1);
+        let (p1, p2) = (
+            a.w.player(1).unwrap().state.pos,
+            a.w.player(2).unwrap().state.pos,
+        );
+        let fwd = cmd(buttons::FORWARD);
+        a.step(
+            aim_at(buttons::FORWARD | buttons::FIRE, 20.0, 0.0, 1.66),
+            fwd,
+            32,
+        );
+        assert!(
+            a.w.player(1).unwrap().state.pos.distance(&p1) < 1e-4,
+            "attacker held in place"
+        );
+        assert!(
+            a.w.player(2).unwrap().state.pos.distance(&p2) > 0.5,
+            "defender moves"
+        );
+        assert!(a.w.shot_events.is_empty() && a.hp(2) == 100, "weapons cold");
+    }
+
+    #[test]
+    fn elimination_round_scores_resets_map_and_respawns() {
+        let wall = r#",{"min":[10,-5,0],"max":[10.2,5,3],"material":"wood"}"#;
+        let mut a = Arena::new(wall, round_rules(GameMode::Elimination));
+        to_action(&mut a);
+        // Break a cell, then kill the defender with headshots.
+        let si = a.w.collision.solids.len() - 1;
+        let cell = a.w.collision.cells_of_solid(si).start;
+        a.w.collision.destroy_cell(cell);
+        a.w.player_mut(1).unwrap().state.pos = Vec3::new(14.0, 0.0, 0.0);
+        let ads = aim_at(buttons::AIM, 20.0 - 14.0, 0.0, 1.66);
+        a.step(ads, cmd(0), 32);
+        // One headshot at 6 m kills.
+        a.step(
+            aim_at(buttons::AIM | buttons::FIRE, 6.0, 0.0, 1.66),
+            cmd(0),
+            1,
+        );
+        assert!(!a.w.player(2).unwrap().alive);
+        assert_eq!(a.w.match_state.phase, MatchPhase::RoundEnd);
+        assert_eq!(a.w.match_state.score, [1, 0]);
+        assert_eq!(
+            a.w.match_state.last_result,
+            Some((0, rounds::reason::ELIMINATED))
+        );
+        // No respawn during the round end; the next round respawns and resets.
+        a.step(cmd(0), cmd(0), 32);
+        assert!(!a.w.player(2).unwrap().alive);
+        a.step(cmd(0), cmd(0), 40);
+        assert_eq!(a.w.match_state.phase, MatchPhase::Prep);
+        assert_eq!(a.w.match_state.round, 2);
+        assert!(a.w.player(2).unwrap().alive);
+        assert!(
+            !a.w.collision.is_destroyed(cell),
+            "map reset for the new round"
+        );
+    }
+
+    #[test]
+    fn half_time_swaps_sides_and_the_match_ends_at_rounds_to_win() {
+        let mut a = round_arena(GameMode::Elimination);
+        to_action(&mut a);
+        // Round 1: time runs out -> defenders (squad 1) win.
+        a.step(cmd(0), cmd(0), 64 * 10 + 2);
+        assert_eq!(
+            a.w.match_state.last_result,
+            Some((1, rounds::reason::TIME_UP))
+        );
+        assert_eq!(a.w.match_state.score, [0, 1]);
+        // Round 2 starts after half-time (rounds_to_win - 1 = 1 round): sides swap.
+        a.step(cmd(0), cmd(0), 64 + 2);
+        assert_eq!(a.w.match_state.round, 2);
+        assert_eq!(a.w.match_state.attacking_squad, 1);
+        assert_eq!(a.w.player(1).unwrap().team, 1, "squad 0 now defends");
+        assert_eq!(a.w.player(2).unwrap().team, 0);
+        assert_eq!(
+            a.w.player(2).unwrap().gadgets,
+            a.w.gadget_defs.loadout(0),
+            "attacker loadout"
+        );
+        // Round 2: time runs out again -> defenders (now squad 0) win: 1-1.
+        a.step(cmd(0), cmd(0), 64 + 2 + 64 * 10 + 2);
+        assert_eq!(a.w.match_state.score, [1, 1]);
+        // Round 3 decides the match.
+        a.step(cmd(0), cmd(0), 64 * 2 + 4 + 64 * 10 + 2);
+        assert_eq!(a.w.match_state.phase, MatchPhase::MatchOver);
+        assert_eq!(a.w.match_state.score, [2, 1]);
+        assert_eq!(
+            a.w.restrictions(0),
+            (true, true),
+            "everyone frozen after the match"
+        );
+    }
+
+    #[test]
+    fn attackers_plant_in_a_site_and_the_device_detonates() {
+        let mut a = round_arena(GameMode::Defuse);
+        to_action(&mut a);
+        // Outside a site USE does nothing for attackers.
+        a.step(cmd(buttons::USE), cmd(0), 70);
+        assert!(a.w.match_state.device.is_none());
+        // Inside: hold USE for plant_time.
+        a.w.player_mut(1).unwrap().state.pos = Vec3::new(19.0, 1.0, 0.0);
+        a.step(cmd(buttons::USE), cmd(0), 32);
+        assert_eq!(a.w.player(1).unwrap().action, rounds::action::PLANT);
+        a.step(cmd(buttons::USE), cmd(0), 34);
+        let d = a.w.match_state.device.expect("planted");
+        assert_eq!(d.site, 0);
+        // Killing every attacker no longer ends the round; the fuse does.
+        let pos = a.w.player(1).unwrap().state.pos;
+        a.w.apply_damage(1, None, 255.0, false, 0, pos);
+        a.step(cmd(0), cmd(0), 64);
+        assert_eq!(a.w.match_state.phase, MatchPhase::Action);
+        a.step(cmd(0), cmd(0), 64 * 2 + 2);
+        assert_eq!(
+            a.w.match_state.last_result,
+            Some((0, rounds::reason::DETONATED))
+        );
+    }
+
+    #[test]
+    fn defenders_defuse_a_planted_device() {
+        let mut a = round_arena(GameMode::Defuse);
+        to_action(&mut a);
+        a.w.player_mut(1).unwrap().state.pos = Vec3::new(19.0, 1.0, 0.0);
+        a.step(cmd(buttons::USE), cmd(0), 66);
+        assert!(a.w.match_state.device.is_some());
+        // The defender stands next to the device and holds USE.
+        a.w.player_mut(2).unwrap().state.pos = Vec3::new(19.5, 1.8, 0.0);
+        a.step(cmd(0), cmd(buttons::USE), 66);
+        assert_eq!(
+            a.w.match_state.last_result,
+            Some((1, rounds::reason::DEFUSED))
+        );
+        assert!(a.w.match_state.device.is_none());
+    }
+
+    #[test]
+    fn deathmatch_scores_kills_and_ends_at_the_limit() {
+        let mut a = Arena::new(
+            "",
+            MatchRules {
+                score_limit: 1,
+                respawn_delay: 0.1,
+                ..Default::default()
+            },
+        );
+        assert_eq!(a.w.match_state.phase, MatchPhase::Action);
+        let ads = aim_at(buttons::AIM, 20.0, 0.0, 1.66);
+        a.step(ads, cmd(0), 32);
+        a.step(
+            aim_at(buttons::AIM | buttons::FIRE, 20.0, 0.0, 1.66),
+            cmd(0),
+            1,
+        );
+        assert_eq!(a.w.match_state.score, [1, 0]);
+        assert_eq!(a.w.match_state.phase, MatchPhase::MatchOver);
+        assert_eq!(
+            a.w.match_state.last_result,
+            Some((0, rounds::reason::SCORE_LIMIT))
+        );
     }
 }

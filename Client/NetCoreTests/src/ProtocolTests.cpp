@@ -173,6 +173,12 @@ TFPS_TEST(GoldenDataPacketsMatchRust)
 	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
 	TFPS_EXPECT(M.Type == MsgType::SolidReinforced && M.SolidIndex == 17);
 	TFPS_EXPECT(M.EncodePayload() == Payload);
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::MatchState && M.Match.Mode == 2 && M.Match.Phase == 1 && M.Match.Round == 2 && M.Match.Score[0] == 1
+		&& M.Match.TimeLeftDs == 300 && M.Match.RoundsToWin == 4 && M.Match.DeviceSite == 255 && M.Match.LastReason == 3);
+	TFPS_EXPECT(M.EncodePayload() == Payload);
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::MapReset && Payload.empty());
 	TFPS_EXPECT(!Rx.Pop(Type, Payload));
 	TFPS_REQUIRE(R.U8() == static_cast<uint8_t>(EBodyKind::Snapshot));
 	SnapshotHeader SH;
@@ -181,7 +187,7 @@ TFPS_TEST(GoldenDataPacketsMatchRust)
 	std::vector<GadgetEntityState> GadgetsIn;
 	TFPS_REQUIRE(DecodeSnapshot(R, nullptr, SH, Ents, ShotsIn, &GadgetsIn));
 	TFPS_EXPECT(R.Remaining() == 0);
-	TFPS_EXPECT(SH.Reinforcements == 2 && SH.ReinforceProgress == 128);
+	TFPS_EXPECT(SH.Reinforcements == 2 && SH.ReinforceProgress == 128 && SH.Action == 2);
 	TFPS_EXPECT(SH.Gadgets[0].Id == 1 && SH.Gadgets[0].Count == 2 && SH.Gadgets[1].Id == 4 && SH.Gadgets[1].Count == 3 && SH.Gadgets[2].Id == 5 && SH.Gadgets[2].Count == 1 && SH.Gadgets[3].Id == 3 && SH.Gadgets[3].Count == 2);
 	TFPS_REQUIRE(GadgetsIn.size() == 1);
 	TFPS_EXPECT(GadgetsIn[0].Id == 3 && GadgetsIn[0].Gadget == 1 && GadgetsIn[0].Phase == GadgetPhase::Flying && GadgetsIn[0].Owner == 2
@@ -267,6 +273,7 @@ TFPS_TEST(DefinitionHashesMatchRust)
 		TFPS_REQUIRE(ParseMapJson(ReadText(std::string(TFPS_REPO_ROOT) + "/Shared/Definitions/maps/" + Name + ".json"), M, Err));
 		std::printf("  map %s: %d solids, hash %016llx\n", Name, static_cast<int>(M.Solids.size()), static_cast<unsigned long long>(M.GeometryHash()));
 		TFPS_EXPECT(M.GeometryHash() == HexU64(V[std::string("map_hash_") + Name]));
+		TFPS_EXPECT(M.Objectives.size() == 2 && !M.Objectives[0].Name.empty());
 	}
 	TFPS_EXPECT(Weapons.Hash() == HexU64(V["weapons_hash"]));
 }

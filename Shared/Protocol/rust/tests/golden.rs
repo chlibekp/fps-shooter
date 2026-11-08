@@ -258,6 +258,20 @@ fn vectors() -> String {
                 destructible: true,
             },
             Message::SolidReinforced { index: 17 },
+            Message::MatchState(tfps_protocol::messages::MatchInfo {
+                mode: 2,
+                phase: 1,
+                round: 2,
+                score: [1, 0],
+                attacking_squad: 0,
+                time_left_ds: 300,
+                rounds_to_win: 4,
+                device_site: 255,
+                device_pos_mm: [0, 0, 0],
+                last_winner: 0,
+                last_reason: 3,
+            }),
+            Message::MapReset,
         ] {
             tx.queue(m.msg_type(), m.encode_payload()).unwrap();
         }
@@ -281,6 +295,7 @@ fn vectors() -> String {
             respawn_in: 0.0,
             reinforcements: 2,
             reinforce_progress: 128,
+            action: 2,
             gadgets: [
                 tfps_sim::gadget::GadgetStock { id: 1, count: 2 },
                 tfps_sim::gadget::GadgetStock { id: 4, count: 3 },
@@ -337,6 +352,7 @@ fn vectors() -> String {
             respawn_in: 4.5,
             reinforcements: 0,
             reinforce_progress: 0,
+            action: 0,
             gadgets: Default::default(),
         };
         snapshot::encode(&mut w, &h, &cur, Some(&base), &[], &[]);

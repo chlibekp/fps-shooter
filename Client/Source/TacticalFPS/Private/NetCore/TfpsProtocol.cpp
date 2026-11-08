@@ -70,6 +70,7 @@ namespace tfps
 			W.F32(H.RespawnIn);
 			W.U8(H.Reinforcements);
 			W.U8(H.ReinforceProgress);
+			W.U8(H.Action);
 			for (const GadgetStock& G : H.Gadgets) { W.U8(G.Id); W.U8(G.Count); }
 		}
 
@@ -93,6 +94,7 @@ namespace tfps
 			H.RespawnIn = R.F32Finite();
 			H.Reinforcements = R.U8();
 			H.ReinforceProgress = R.U8();
+			H.Action = R.U8();
 			for (GadgetStock& G : H.Gadgets) { G.Id = R.U8(); G.Count = R.U8(); }
 			return R.Ok();
 		}
@@ -464,6 +466,15 @@ namespace tfps
 		case MsgType::SolidReinforced:
 			SolidIndex = R.U16();
 			break;
+		case MsgType::MatchState:
+			Match.Mode = R.U8(); Match.Phase = R.U8(); Match.Round = R.U8();
+			Match.Score[0] = R.U8(); Match.Score[1] = R.U8(); Match.AttackingSquad = R.U8();
+			Match.TimeLeftDs = R.U16(); Match.RoundsToWin = R.U8(); Match.DeviceSite = R.U8();
+			for (int32_t& Mm : Match.DevicePosMm) { Mm = R.I32(); }
+			Match.LastWinner = R.U8(); Match.LastReason = R.U8();
+			break;
+		case MsgType::MapReset:
+			break;
 		case MsgType::Spotted:
 			PlayerId = R.U16();
 			OtherId = R.U16();
@@ -511,6 +522,13 @@ namespace tfps
 			W.U8(bDestructible ? 1 : 0);
 			break;
 		case MsgType::SolidReinforced: W.U16(SolidIndex); break;
+		case MsgType::MatchState:
+			W.U8(Match.Mode); W.U8(Match.Phase); W.U8(Match.Round); W.U8(Match.Score[0]); W.U8(Match.Score[1]);
+			W.U8(Match.AttackingSquad); W.U16(Match.TimeLeftDs); W.U8(Match.RoundsToWin); W.U8(Match.DeviceSite);
+			for (int32_t Mm : Match.DevicePosMm) { W.I32(Mm); }
+			W.U8(Match.LastWinner); W.U8(Match.LastReason);
+			break;
+		case MsgType::MapReset: break;
 		case MsgType::Spotted: W.U16(PlayerId); W.U16(OtherId); W.I32(FromMm[0]); W.I32(FromMm[1]); W.I32(FromMm[2]); W.U8(DurationDs); break;
 		default: break;
 		}

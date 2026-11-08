@@ -13,11 +13,15 @@ func _ready() -> void:
 	var map_name: String = args.get("map", "harbor")
 	_out = args.get("out", _out)
 	_wait = int(args.get("frames", "90"))
-	var text := FileAccess.get_file_as_string("res://defs/maps/%s.json" % map_name)
-	var map: Dictionary = JSON.parse_string(text)
+	TfpsWorld.quality = int(args.get("quality", "3"))
+	var net := TfpsNet.new()
+	if not net.load_map(map_name):
+		printerr(net.error)
+		get_tree().quit(1)
+		return
 	var world := TfpsWorld.new()
 	add_child(world)
-	world.build_from_json(map)
+	world.build(net.world, net)
 	var cam := Camera3D.new()
 	cam.fov = 80.0
 	add_child(cam)

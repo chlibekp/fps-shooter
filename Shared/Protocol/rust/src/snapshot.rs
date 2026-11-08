@@ -293,6 +293,74 @@ pub fn encode(
     shots: &[ShotEvent],
     gadgets: &[GadgetEntityState],
 ) {
+    let mut sent = Vec::new();
+    encode_budgeted(
+        w,
+        header,
+        entities,
+        baseline,
+        shots,
+        gadgets,
+        usize::MAX,
+        |_| 0.0,
+        &mut sent,
+    );
+}
+
+/// Bytes of an entity entry with `mask` (id + mask + fields).
+fn entry_len(mask: u16) -> usize {
+    let mut n = 4;
+    for (bit, len) in [
+        (M_PX, 4),
+        (M_PY, 4),
+        (M_PZ, 4),
+        (M_YAW, 2),
+        (M_PITCH, 2),
+        (M_FLAGS, 1),
+        (M_HEALTH, 1),
+        (M_LEAN, 1),
+        (M_WEAPON, 1),
+        (M_AIM, 1),
+    ] {
+        if mask & bit != 0 {
+            n += len;
+        }
+    }
+    n
+}
+
+/// What a budgeted snapshot actually carried.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BudgetReport {
+    /// Entities sent with fewer changes than they had (kept at their baseline
+    /// state) or deferred (new, not sent yet).
+    pub entities_held: usize,
+    pub shots_dropped: usize,
+    pub gadgets_dropped: usize,
+}
+
+/// Like [`encode`], but keeps `w` at most `max_len` bytes long.
+///
+/// Every entity the client already has (present in the baseline) stays
+/// listed, at worst as "unchanged" (4 bytes), so nothing disappears. Changes
+/// are then written in order of `priority` (lower first, e.g. distance to
+/// the receiving player); entities new to the client are deferred if they
+/// do not fit. Leftover space goes to gadget entities, then shot events
+/// (cosmetic). `sent` receives the entity list as the client will
+/// reconstruct it: the server must use that, not the true state, as the
+/// baseline for later deltas.
+#[allow(clippy::too_many_arguments)]
+pub fn encode_budgeted(
+    w: &mut Writer,
+    header: &SnapshotHeader,
+    entities: &[EntityState],
+    baseline: Option<&[EntityState]>,
+    shots: &[ShotEvent],
+    gadgets: &[GadgetEntityState],
+    max_len: usize,
+    priority: impl Fn(&EntityState) -> f32,
+    sent: &mut Vec<EntityState>,
+) -> BudgetReport {
     debug_assert!(entities.windows(2).all(|p| p[0].id < p[1].id));
     debug_assert_eq!(baseline.is_none(), header.baseline_tick == 0);
     w.u32(header.server_tick);
@@ -301,13 +369,56 @@ pub fn encode(
     w.i8(header.input_buffer_depth);
     encode_local(w, header);
 
-    let n = entities.len().min(MAX_ENTITIES_PER_SNAPSHOT);
+    let entities = &entities[..entities.len().min(MAX_ENTITIES_PER_SNAPSHOT)];
+    // Desired mask per entity, and the minimum we must send.
+    let desired: Vec<(u16, Option<&EntityState>)> = entities
+        .iter()
+        .map(|e| match baseline.and_then(|b| find(b, e.id)) {
+            Some(base) => (change_mask(e, base), Some(base)),
+            None => (M_FULL | M_ALL, None),
+        })
+        .collect();
+    // Counts bytes: 3 list counts + the mandatory entries.
+    let mut budget = max_len.saturating_sub(w.len() + 3);
+    let mut chosen: Vec<Option<u16>> = desired.iter().map(|(_, base)| base.map(|_| 0u16)).collect();
+    let mandatory: usize = chosen.iter().flatten().map(|_| 4).sum();
+    budget = budget.saturating_sub(mandatory);
+    let mut order: Vec<usize> = (0..entities.len()).collect();
+    order.sort_by(|&a, &b| priority(&entities[a]).total_cmp(&priority(&entities[b])));
+    let mut report = BudgetReport::default();
+    for i in order {
+        let (mask, _) = desired[i];
+        let base_cost = if chosen[i].is_some() { 4 } else { 0 };
+        let extra = entry_len(mask) - base_cost;
+        if mask == 0 {
+            continue;
+        }
+        if extra <= budget {
+            budget -= extra;
+            chosen[i] = Some(mask);
+        } else {
+            report.entities_held += 1;
+        }
+    }
+    let ng = gadgets.len().min(MAX_GADGET_ENTITIES).min(budget / 12);
+    budget -= ng * 12;
+    let ns = shots.len().min(MAX_SHOT_EVENTS).min(budget / 16);
+    report.gadgets_dropped = gadgets.len().min(MAX_GADGET_ENTITIES) - ng;
+    report.shots_dropped = shots.len().min(MAX_SHOT_EVENTS) - ns;
+
+    sent.clear();
+    let n = chosen.iter().filter(|c| c.is_some()).count();
     w.u8(n as u8);
-    for e in &entities[..n] {
-        let mask = match baseline.and_then(|b| find(b, e.id)) {
-            Some(base) => change_mask(e, base),
-            None => M_FULL | M_ALL,
+    for (i, e) in entities.iter().enumerate() {
+        let Some(mask) = chosen[i] else {
+            continue;
         };
+        // What the client will hold for this entity after decoding.
+        sent.push(if mask == desired[i].0 {
+            *e
+        } else {
+            *desired[i].1.expect("held entities are in the baseline")
+        });
         w.u16(e.id);
         w.u16(mask);
         if mask & M_PX != 0 {
@@ -342,7 +453,6 @@ pub fn encode(
         }
     }
 
-    let ns = shots.len().min(MAX_SHOT_EVENTS);
     w.u8(ns as u8);
     for s in &shots[..ns] {
         w.u16(s.shooter);
@@ -353,7 +463,6 @@ pub fn encode(
         w.u8(s.surface);
     }
 
-    let ng = gadgets.len().min(MAX_GADGET_ENTITIES);
     w.u8(ng as u8);
     for g in &gadgets[..ng] {
         w.u16(g.id);
@@ -364,6 +473,7 @@ pub fn encode(
             w.i16(v);
         }
     }
+    report
 }
 
 /// Reads only the baseline tick (to look up the baseline before decoding).
@@ -656,5 +766,168 @@ mod tests {
         assert_eq!(quantize_mm(1.2345), 1235);
         assert_eq!(quantize_lean(-1.0), -127);
         assert_eq!(quantize_unit(0.5), 128);
+    }
+
+    fn shot(n: u16) -> ShotEvent {
+        ShotEvent {
+            shooter: n,
+            weapon: 1,
+            end_mm: [1, 2, 3],
+            surface: surface::PLAYER,
+        }
+    }
+
+    fn gadget(n: u16) -> GadgetEntityState {
+        GadgetEntityState {
+            id: n,
+            gadget: 1,
+            phase: 0,
+            owner: 1,
+            pos_cm: [1, 2, 3],
+        }
+    }
+
+    /// A full 64-entity snapshot with every shot and gadget slot used would
+    /// exceed one packet; the budget keeps it inside and the decoded result
+    /// is exactly what the encoder reported as sent.
+    #[test]
+    fn budget_keeps_packets_inside_the_limit() {
+        let header = header();
+        let ents: Vec<EntityState> = (1..=64).map(|i| ent(i, i as i32 * 1000)).collect();
+        let shots: Vec<ShotEvent> = (0..MAX_SHOT_EVENTS as u16).map(shot).collect();
+        let gadgets: Vec<GadgetEntityState> = (0..MAX_GADGET_ENTITIES as u16).map(gadget).collect();
+        let mut buf = Vec::new();
+        encode(
+            &mut Writer::new(&mut buf),
+            &header,
+            &ents,
+            None,
+            &shots,
+            &gadgets,
+        );
+        assert!(
+            buf.len() > 1200,
+            "test needs an oversized snapshot ({})",
+            buf.len()
+        );
+
+        // Full snapshot: entities near x = 0 go first, the rest are deferred.
+        let limit = 1200 - 40; // room for packet headers
+        let mut sent = Vec::new();
+        buf.clear();
+        let rep = encode_budgeted(
+            &mut Writer::new(&mut buf),
+            &header,
+            &ents,
+            None,
+            &shots,
+            &gadgets,
+            limit,
+            |e| e.pos_mm[0] as f32,
+            &mut sent,
+        );
+        assert!(buf.len() <= limit, "{} > {limit}", buf.len());
+        assert!(rep.entities_held > 0);
+        // Leftover bytes (less than one entity entry) go to gadgets, then shots.
+        assert!(rep.gadgets_dropped + rep.shots_dropped > 0);
+        assert_eq!(sent.len(), 64 - rep.entities_held);
+        assert_eq!(sent[..], ents[..sent.len()], "nearest entities first");
+        let (mut out, mut sh, mut gd) = (Vec::new(), Vec::new(), Vec::new());
+        decode(&mut Reader::new(&buf), None, &mut out, &mut sh, &mut gd).unwrap();
+        assert_eq!(out, sent);
+        assert_eq!(gd.len(), gadgets.len() - rep.gadgets_dropped);
+        assert_eq!(sh.len(), shots.len() - rep.shots_dropped);
+
+        // Following deltas against what was sent fill in the rest within a
+        // few snapshots, each inside the limit.
+        let mut base = sent.clone();
+        for round in 1..=4 {
+            let h = SnapshotHeader {
+                server_tick: 10 + round,
+                baseline_tick: 10 + round - 1,
+                ..header
+            };
+            buf.clear();
+            encode_budgeted(
+                &mut Writer::new(&mut buf),
+                &h,
+                &ents,
+                Some(&base),
+                &[],
+                &[],
+                limit,
+                |e| e.pos_mm[0] as f32,
+                &mut sent,
+            );
+            assert!(buf.len() <= limit);
+            decode(
+                &mut Reader::new(&buf),
+                Some(&base),
+                &mut out,
+                &mut sh,
+                &mut gd,
+            )
+            .unwrap();
+            assert_eq!(out, sent);
+            base = sent.clone();
+            if base == ents {
+                return;
+            }
+        }
+        panic!("entities never all arrived: {} of 64", base.len());
+    }
+
+    /// Entities the client already has are never dropped: if their changes
+    /// do not fit they stay at the baseline state.
+    #[test]
+    fn budget_holds_changes_but_keeps_known_entities() {
+        let header = SnapshotHeader {
+            server_tick: 20,
+            baseline_tick: 19,
+            ..header()
+        };
+        let base: Vec<EntityState> = (1..=64).map(|i| ent(i, 0)).collect();
+        let cur: Vec<EntityState> = base
+            .iter()
+            .map(|e| EntityState {
+                pos_mm: [e.id as i32 * 7, 1, 1],
+                yaw_q: 999,
+                health: 50,
+                ..*e
+            })
+            .collect();
+        let mut buf = Vec::new();
+        let mut w = Writer::new(&mut buf);
+        let mut sent = Vec::new();
+        // Room for the header, all 64 ids and about half the changes.
+        let rep = encode_budgeted(
+            &mut w,
+            &header,
+            &cur,
+            Some(&base),
+            &[],
+            &[],
+            700,
+            |e| -(e.id as f32), // highest id first
+            &mut sent,
+        );
+        assert!(buf.len() <= 700);
+        assert!(rep.entities_held > 0 && rep.entities_held < 64);
+        assert_eq!(sent.len(), 64);
+        for (s, (b, c)) in sent.iter().zip(base.iter().zip(&cur)) {
+            assert!(s == b || s == c);
+        }
+        assert_eq!(sent[63], cur[63], "priority order respected");
+        assert_eq!(sent[0], base[0]);
+        let (mut out, mut sh, mut gd) = (Vec::new(), Vec::new(), Vec::new());
+        decode(
+            &mut Reader::new(&buf),
+            Some(&base),
+            &mut out,
+            &mut sh,
+            &mut gd,
+        )
+        .unwrap();
+        assert_eq!(out, sent);
     }
 }

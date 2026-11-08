@@ -67,6 +67,7 @@ pub struct ServerCore {
     scratch: Vec<EntityState>,
     recent_shots: std::collections::VecDeque<(u32, ShotEvent)>,
     shot_scratch: Vec<ShotEvent>,
+    sent_scratch: Vec<EntityState>,
     gadget_scratch: Vec<GadgetEntityState>,
     weapons_hash: u64,
     last_stats_log: Instant,
@@ -89,6 +90,7 @@ impl ServerCore {
             game: GameWorld::new(map, weapons, gadgets, cfg.rules.clone(), cfg.tick_rate),
             recent_shots: std::collections::VecDeque::with_capacity(SHOT_EVENT_HISTORY),
             shot_scratch: Vec::with_capacity(32),
+            sent_scratch: Vec::with_capacity(64),
             gadget_scratch: Vec::with_capacity(24),
             weapons_hash,
             cfg,
@@ -891,16 +893,24 @@ impl ServerCore {
             .encode(&mut w);
             rel_tx.write(&mut w, seq, now, RELIABLE_RESEND, RELIABLE_BUDGET);
             w.u8(BodyKind::Snapshot as u8);
-            snapshot::encode(
+            // Nearest players first: under the byte budget, far ones wait a snapshot.
+            let me = player.state.pos;
+            let report = snapshot::encode_budgeted(
                 &mut w,
                 &header,
                 &self.scratch,
                 baseline,
                 &self.shot_scratch,
                 &self.gadget_scratch,
+                MAX_PACKET_SIZE,
+                |e| e.position().distance(&me),
+                &mut self.sent_scratch,
             );
             debug_assert!(buf.len() <= MAX_PACKET_SIZE);
-            c.remember(tick, &self.scratch);
+            if report != snapshot::BudgetReport::default() {
+                self.stats.snapshots_trimmed.fetch_add(1, Relaxed);
+            }
+            c.remember(tick, &self.sent_scratch);
             Self::send_raw(&self.socket, &self.stats, c.addr, &buf);
         }
         self.send_buf = buf;
@@ -943,6 +953,7 @@ impl ServerCore {
             ),
             invalid = s.packets_invalid - prev.packets_invalid,
             late_ticks = s.late_ticks - prev.late_ticks,
+            trimmed = s.snapshots_trimmed - prev.snapshots_trimmed,
             "server stats"
         );
         self.last_stats = s;

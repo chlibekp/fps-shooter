@@ -59,7 +59,7 @@ result:
 | Lag compensation / server rewind | ✅ | Phase 2 |
 | Server-side hit validation & damage | ✅ | Phase 2 |
 | Encryption | ❌ | Planned (X25519 + ChaCha20-Poly1305), see PROTOCOL.md |
-| Interest management / snapshot prioritisation | ❌ | Needed beyond about 60 entities per snapshot |
+| Snapshot packet budget and prioritisation | ✅ | Every snapshot ≤ 1200 bytes; changes nearest-first, held changes catch up in later deltas. Unit tests plus a 64-player e2e test (`Server/tests/full_server.rs`). No visibility-based culling yet. |
 | Multiple independent server instances | ✅ | Each process is self-contained (port per instance); orchestration ❌ |
 
 ## Movement (spec §3)

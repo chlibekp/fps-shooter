@@ -20,6 +20,8 @@ pub struct Stats {
     pub send_dropped: AtomicU64,
     /// Late ticks (the loop fell more than one tick behind).
     pub late_ticks: AtomicU64,
+    /// Snapshots that hit the packet size limit and held back some changes.
+    pub snapshots_trimmed: AtomicU64,
     /// Tick work duration in microseconds (last / max since last report).
     pub tick_us_last: AtomicU64,
     pub tick_us_max: AtomicU64,
@@ -42,6 +44,7 @@ pub struct StatsSnapshot {
     pub packets_invalid: u64,
     pub send_dropped: u64,
     pub late_ticks: u64,
+    pub snapshots_trimmed: u64,
     pub tick_us_last: u64,
 }
 
@@ -59,6 +62,7 @@ impl Stats {
             packets_invalid: self.packets_invalid.load(Relaxed),
             send_dropped: self.send_dropped.load(Relaxed),
             late_ticks: self.late_ticks.load(Relaxed),
+            snapshots_trimmed: self.snapshots_trimmed.load(Relaxed),
             tick_us_last: self.tick_us_last.load(Relaxed),
         }
     }

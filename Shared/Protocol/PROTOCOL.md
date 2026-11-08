@@ -247,6 +247,16 @@ the baseline but missing from the list was removed. The client must keep its
 own ring of decoded snapshots; if it does not have the baseline it drops the
 snapshot (and keeps acking an older one, so the server falls back).
 
+**Packet budget:** a snapshot never makes its packet exceed 1200 bytes. Every
+entity the baseline has stays in the list, at worst with mask 0 (unchanged,
+4 bytes), so the budget never removes a player. Changes are then written
+nearest-player-first. A change that does not fit is held: the entity is sent
+unchanged and the server records the *baseline* state as what the client has,
+so the change goes out in a later delta. A player new to the client that does
+not fit is deferred the same way. Leftover space carries gadget entities, then
+shot events (cosmetic; dropped if they do not fit). The wire format does not
+change; decoders need no special handling.
+
 **Client time sync:** the client adjusts its tick rate slightly based on
 `input_buffer_depth` (target 1–3) so that commands arrive just before the
 server needs them.

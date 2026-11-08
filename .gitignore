@@ -30,3 +30,4 @@ Client/NetCoreTests/build/
 .DS_Store
 Thumbs.db
 *.swp
+.claude/worktrees/

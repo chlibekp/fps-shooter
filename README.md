@@ -31,6 +31,7 @@ Engine; see [`Documentation/STATUS.md`](Documentation/STATUS.md).
 | [MILESTONE_6.md](Documentation/MILESTONE_6.md) | Phase 6 report: game modes, rounds, lobby with invite codes |
 | [LOBBY.md](Documentation/LOBBY.md) | Lobby service, menus, API and console commands |
 | [AUDIO.md](Documentation/AUDIO.md) | Procedural sound synthesis, tests and playback |
+| [VFX.md](Documentation/VFX.md) | Particle effects: impacts, explosions, smoke clouds, breaking |
 | [ARCHITECTURE.md](Documentation/ARCHITECTURE.md) | Architecture decisions and their reasons |
 | [PROTOCOL.md](Shared/Protocol/PROTOCOL.md) | Wire protocol v1 (byte level) |
 | [ASSET_PIPELINE.md](Documentation/ASSET_PIPELINE.md) | Blender → Unreal pipeline |

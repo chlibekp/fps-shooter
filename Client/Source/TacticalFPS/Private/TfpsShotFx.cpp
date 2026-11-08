@@ -1,6 +1,7 @@
 // Copyright TacticalFPS project.
 #include "TfpsShotFx.h"
 #include "TfpsAudioSubsystem.h"
+#include "TfpsFxSubsystem.h"
 #include "TacticalFPS.h"
 #include "TfpsNetSubsystem.h"
 #include "TfpsPlaceholderAssets.h"
@@ -144,6 +145,7 @@ void ATfpsShotFx::Tick(float DeltaSeconds)
 	{
 		const tfps::MapDef* Map = Net->GetMap();
 		UTfpsAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UTfpsAudioSubsystem>();
+		UTfpsFxSubsystem* FxSys = GetGameInstance()->GetSubsystem<UTfpsFxSubsystem>();
 		for (const tfps::FxShot& S : Net->GetPendingShots())
 		{
 			FVector From;
@@ -177,6 +179,15 @@ void ATfpsShotFx::Tick(float DeltaSeconds)
 			{
 				SpawnImpact(To, Surface);
 			}
+			if (FxSys != nullptr)
+			{
+				const FVector Dir = (To - From).GetSafeNormal();
+				FxSys->Fx().Muzzle(UTfpsFxSubsystem::ToMeters(From), UTfpsFxSubsystem::ToMeters(Dir * 100.0));
+				if (Surface != 0xFF)
+				{
+					FxSys->Fx().Impact(UTfpsFxSubsystem::ToMeters(To), UTfpsFxSubsystem::ToMeters(-Dir * 100.0), Surface);
+				}
+			}
 			if (Audio != nullptr)
 			{
 				// Own shots are heard in the head; others' at the shooter.
@@ -190,6 +201,7 @@ void ATfpsShotFx::Tick(float DeltaSeconds)
 		{
 			SpawnExplosion(E.Key * TfpsMetersToUnreal, E.Value * TfpsMetersToUnreal);
 			if (Audio != nullptr) { Audio->PlayAt(tfps::audio::Cue::Explosion, E.Key * TfpsMetersToUnreal); }
+			if (FxSys != nullptr) { FxSys->Fx().Explosion(UTfpsFxSubsystem::ToMeters(E.Key * TfpsMetersToUnreal), E.Value); }
 		}
 		Net->GetPendingExplosions().Reset();
 	}

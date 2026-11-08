@@ -10,6 +10,7 @@
 #include "TfpsRemotePlayer.h"
 #include "TfpsShotFx.h"
 #include "TfpsGadgetFx.h"
+#include "TfpsParticleFx.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -32,6 +33,7 @@ void ATfpsGameMode::BeginPlay()
 	GetWorld()->SpawnActor<ATfpsArenaBuilder>(ATfpsArenaBuilder::StaticClass(), FTransform::Identity, Params);
 	GetWorld()->SpawnActor<ATfpsShotFx>(ATfpsShotFx::StaticClass(), FTransform::Identity, Params);
 	GetWorld()->SpawnActor<ATfpsGadgetFx>(ATfpsGadgetFx::StaticClass(), FTransform::Identity, Params);
+	GetWorld()->SpawnActor<ATfpsParticleFx>(ATfpsParticleFx::StaticClass(), FTransform::Identity, Params);
 }
 
 void ATfpsGameMode::RestartPlayer(AController* NewPlayer)

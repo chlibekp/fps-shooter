@@ -16,7 +16,7 @@ endif()
 option(TFPS_HOSTILE_FLOAT "Compile NetCore with aggressive float options (GCC: -ffp-contract=fast -march=native, MSVC: /fp:fast /arch:AVX2) to stress the determinism pragmas. Note: clang's -ffp-contract=fast ignores pragmas by design, so clang uses -march=native with its default contraction mode." OFF)
 
 set(NETCORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../Source/TacticalFPS)
-file(GLOB NETCORE_SOURCES ${NETCORE_DIR}/Private/NetCore/*.cpp ${NETCORE_DIR}/Private/Ui/*.cpp ${NETCORE_DIR}/Private/Audio/*.cpp)
+file(GLOB NETCORE_SOURCES ${NETCORE_DIR}/Private/NetCore/*.cpp ${NETCORE_DIR}/Private/Ui/*.cpp ${NETCORE_DIR}/Private/Audio/*.cpp ${NETCORE_DIR}/Private/Fx/*.cpp)
 
 add_library(tfps_netcore STATIC ${NETCORE_SOURCES})
 target_include_directories(tfps_netcore PUBLIC ${NETCORE_DIR}/Public)
@@ -38,7 +38,7 @@ else()
   endif()
 endif()
 
-add_executable(tfps_netcore_tests src/TestMain.cpp src/SimConformanceTest.cpp src/ProtocolTests.cpp src/LiveServerTest.cpp src/MenuTests.cpp src/AudioTests.cpp)
+add_executable(tfps_netcore_tests src/TestMain.cpp src/SimConformanceTest.cpp src/ProtocolTests.cpp src/LiveServerTest.cpp src/MenuTests.cpp src/AudioTests.cpp src/FxTests.cpp)
 target_link_libraries(tfps_netcore_tests PRIVATE tfps_netcore)
 target_compile_definitions(tfps_netcore_tests PRIVATE TFPS_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../..")
 

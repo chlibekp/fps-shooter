@@ -50,6 +50,7 @@ template <typename T> struct TArray : std::vector<T>
 	bool IsValidIndex(int32 I) const { return I >= 0 && I < Num(); }
 	T& Last() { return this->back(); }
 	void SetNumUninitialized(int32 N) { this->resize(static_cast<size_t>(N)); }
+	void SetNum(int32 N) { this->resize(static_cast<size_t>(N)); }
 	T* GetData() { return this->data(); } const T* GetData() const { return this->data(); }
 };
 constexpr int32 INDEX_NONE = -1;
@@ -137,6 +138,7 @@ struct FVector
 	FVector() = default; FVector(double A, double B, double C) : X(A), Y(B), Z(C) {} explicit FVector(double A) : X(A), Y(A), Z(A) {}
 	FVector operator+(const FVector& O) const { return {X + O.X, Y + O.Y, Z + O.Z}; }
 	FVector operator-(const FVector& O) const { return {X - O.X, Y - O.Y, Z - O.Z}; }
+	FVector operator-() const { return {-X, -Y, -Z}; }
 	FVector operator*(double S) const { return {X * S, Y * S, Z * S}; }
 	FVector operator/(double S) const { return {X / S, Y / S, Z / S}; }
 	FVector operator*(const FVector& O) const { return {X * O.X, Y * O.Y, Z * O.Z}; }
@@ -166,8 +168,9 @@ struct FTransform
 	FVector GetLocation() const { return FVector(); } FVector GetScale3D() const { return FVector(1.0); }
 };
 inline const FTransform FTransform::Identity{};
-struct FLinearColor { float R, G, B, A; FLinearColor(float r, float g, float b, float a = 1) : R(r), G(g), B(b), A(a) {} static const FLinearColor Gray; };
+struct FLinearColor { float R, G, B, A; FLinearColor(float r, float g, float b, float a = 1) : R(r), G(g), B(b), A(a) {} static const FLinearColor Gray; static const FLinearColor White; };
 inline const FLinearColor FLinearColor::Gray{0.5f, 0.5f, 0.5f};
+inline const FLinearColor FLinearColor::White{1.0f, 1.0f, 1.0f};
 struct FColor { FColor(uint8, uint8, uint8, uint8 = 255) {} };
 struct FMath
 {
@@ -271,6 +274,9 @@ public:
 	int32 AddInstance(const FTransform&, bool bWorldSpace = false) { (void)bWorldSpace; return 0; }
 	bool GetInstanceTransform(int32, FTransform&, bool bWorldSpace = false) const { (void)bWorldSpace; return true; }
 	bool UpdateInstanceTransform(int32, const FTransform&, bool bWorldSpace = false, bool bMarkRenderStateDirty = false, bool bTeleport = false) { (void)bWorldSpace; (void)bMarkRenderStateDirty; (void)bTeleport; return true; }
+	bool BatchUpdateInstancesTransforms(int32, const TArray<FTransform>&, bool bWorldSpace = false, bool bMarkRenderStateDirty = false, bool bTeleport = false) { (void)bWorldSpace; (void)bMarkRenderStateDirty; (void)bTeleport; return true; }
+	void ClearInstances() {}
+	TArray<int32> AddInstances(const TArray<FTransform>&, bool bShouldReturnIndices, bool bWorldSpace = false) { (void)bShouldReturnIndices; (void)bWorldSpace; return {}; }
 };
 class UCameraComponent : public USceneComponent { public: bool bUsePawnControlRotation = true; void SetFieldOfView(float) {} };
 class UTextRenderComponent : public UPrimitiveComponent

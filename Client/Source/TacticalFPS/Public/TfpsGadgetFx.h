@@ -46,6 +46,8 @@ private:
 		float LastVz = 0.0f;
 		/** Drone motor loop (stopped when the entity goes away). */
 		TWeakObjectPtr<class UAudioComponent> Loop;
+		/** Its smoke is drawn by the particle system (stop the cloud when it goes away). */
+		bool bSmokeCloud = false;
 	};
 
 	UPROPERTY()

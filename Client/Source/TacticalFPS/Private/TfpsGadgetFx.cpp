@@ -1,6 +1,7 @@
 // Copyright TacticalFPS project.
 #include "TfpsGadgetFx.h"
 #include "TfpsAudioSubsystem.h"
+#include "TfpsFxSubsystem.h"
 #include "Components/AudioComponent.h"
 #include "HAL/PlatformTime.h"
 #include "TacticalFPS.h"
@@ -73,6 +74,7 @@ void ATfpsGadgetFx::Tick(float DeltaSeconds)
 	const tfps::ClientCore* Core = Net != nullptr ? Net->GetCore() : nullptr;
 
 	UTfpsAudioSubsystem* Audio = GetGameInstance() ? GetGameInstance()->GetSubsystem<UTfpsAudioSubsystem>() : nullptr;
+	UTfpsFxSubsystem* FxSys = GetGameInstance() ? GetGameInstance()->GetSubsystem<UTfpsFxSubsystem>() : nullptr;
 	const double Now = FPlatformTime::Seconds();
 	for (FSlot& S : Slots)
 	{
@@ -164,6 +166,16 @@ void ATfpsGadgetFx::Tick(float DeltaSeconds)
 				M->SetWorldScale3D(FVector(1.0f));
 				M->SetWorldLocation(Slot->PosCm);
 			}
+			else if (G.Phase == tfps::GadgetPhase::Smoking && FxSys != nullptr)
+			{
+				// The particle cloud is the smoke; hide the grenade itself.
+				const float Radius = Def != nullptr ? Def->Radius : 4.0f;
+				const float Duration = Def != nullptr ? Def->Duration : 15.0f;
+				FxSys->Fx().Cloud(G.Id, UTfpsFxSubsystem::ToMeters(Target), Radius, Duration + 2.0f);
+				Slot->bSmokeCloud = true;
+				M->SetWorldScale3D(FVector(0.001f));
+				M->SetWorldLocation(Target);
+			}
 			else if (G.Phase == tfps::GadgetPhase::Smoking)
 			{
 				Slot->SmokeAge = bNew ? SmokeGrowTime : Slot->SmokeAge + DeltaSeconds;
@@ -222,6 +234,11 @@ void ATfpsGadgetFx::Tick(float DeltaSeconds)
 			S.Mesh->SetVisibility(false);
 			S.bShown = false;
 		}
+		if (!S.bActive && S.bSmokeCloud)
+		{
+			if (FxSys != nullptr) { FxSys->Fx().StopCloud(S.EntityId); }
+			S.bSmokeCloud = false;
+		}
 		if (!S.bActive && S.Loop.IsValid())
 		{
 			S.Loop->Stop();
@@ -234,6 +251,7 @@ void ATfpsGadgetFx::Tick(float DeltaSeconds)
 		for (const FVector& At : Net->GetPendingFlashes())
 		{
 			FlashLight->SetWorldLocation(At * TfpsMetersToUnreal);
+			if (FxSys != nullptr) { FxSys->Fx().Flash(UTfpsFxSubsystem::ToMeters(At * TfpsMetersToUnreal)); }
 			FlashLight->SetIntensity(400000.0f);
 			FlashLife = FlashLightLife;
 		}

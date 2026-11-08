@@ -49,9 +49,6 @@ private:
 
 	/** Pooled client-side physics debris (never replicated). */
 	UPROPERTY()
-	TArray<TObjectPtr<UStaticMeshComponent>> Debris;
-	TArray<float> DebrisLife;
-	int32 NextDebris = 0;
 
 	/** Cell id -> (material mesh index, instance index). */
 	TMap<uint32, TPair<int32, int32>> CellInstances;

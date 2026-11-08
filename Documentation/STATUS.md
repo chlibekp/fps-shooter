@@ -129,7 +129,7 @@ result:
 | Destroy windows, doors, barricades, floors | ✅ | Test arena: glass panes, two wooden doors, a plank barricade, a wooden floor hatch |
 | Movement through new holes, client prediction collides with holes | ✅ | Conformance vectors include 1,876 destroyed cells |
 | Replication of destruction events, full state for joiners | ✅ | CellsDestroyed messages; e2e-tested |
-| Local debris, dust, destruction sounds | 🟡 🔒 | Physics debris from engine cubes (pooled); one breaking sound per material per frame; no dust yet |
+| Local debris, dust, destruction sounds | 🟡 🔒 | Particle effects (`tfps::fx`, 5 native tests): chunks and dust per broken cell that bounce off the map; impact bursts per surface (dust and chips, sparks, glass, splinters, blood); muzzle smoke; explosions (fire, smoke, dust, debris, sparks); flash bursts; smoke-grenade clouds that keep their radius filled (tested ≥95% coverage). Drawn as tinted engine shapes (🔒); one breaking sound per material per frame |
 | Chaos Destruction (fracture meshes) | ❌ | Cosmetic layer for Phase 5 assets; gameplay stays cell-based |
 | Shot-time rewind of destruction for lag compensation | ❌ | Shots use the current destruction state (documented in ARCHITECTURE.md) |
 | Doors that open/close (USE) | ❌ | Doors can only be destroyed for now |
@@ -183,10 +183,10 @@ result:
 | Engine cylinder/sphere/cube "mannequin" for remote players, with pose approximations | `ATfpsRemotePlayer` | Rigged character + animation (Phase 7) |
 | Box viewmodel weapon | `ATfpsPlayerPawn::ViewWeapon` | Blender weapon models + first-person animations |
 | Tracers, impacts and muzzle flash from engine shapes and a point light | `ATfpsShotFx` | Niagara effects, decals |
-| Debris cubes and the sphere-and-light explosion | `ATfpsArenaBuilder`, `ATfpsShotFx` | Chaos fracture, Niagara dust and fireballs |
+| Particles drawn as tinted engine spheres / cubes (opaque; fading shown by shrinking), plus the sphere-and-light explosion | `ATfpsParticleFx`, `ATfpsShotFx` | Niagara systems with authored textures; Chaos fracture |
 | Engine `Entry` map as the boot map, with the level built at runtime | `DefaultEngine.ini` | Authored maps (Phase 5) |
 | Canvas HUD and Canvas-drawn menus | `ATfpsHUD` | UMG widgets with authored art |
-| Gadgets drawn as engine spheres/cubes, smoke as a grey sphere, flash as a point light | `ATfpsGadgetFx` | Blender gadget meshes, Niagara smoke (Phase 5/7) |
+| Gadgets drawn as engine spheres/cubes (until the Blender meshes are imported), flash as a point light | `ATfpsGadgetFx` | Blender gadget meshes (imported) |
 
 ## Known issues
 

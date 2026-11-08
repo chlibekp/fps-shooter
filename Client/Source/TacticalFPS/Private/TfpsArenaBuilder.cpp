@@ -1,6 +1,7 @@
 // Copyright TacticalFPS project.
 #include "TfpsArenaBuilder.h"
 #include "TfpsAudioSubsystem.h"
+#include "TfpsFxSubsystem.h"
 
 #include <cstring>
 #include "TacticalFPS.h"
@@ -107,18 +108,6 @@ void ATfpsArenaBuilder::Tick(float DeltaSeconds)
 		BreakAudio->PlayAt(Cue, B.Value.Sum / static_cast<double>(B.Value.Count), FMath::Min(1.0f, 0.6f + 0.05f * B.Value.Count));
 	}
 	BreakSounds.Reset();
-	for (int32 I = 0; I < Debris.Num(); ++I)
-	{
-		if (DebrisLife[I] > 0.0f)
-		{
-			DebrisLife[I] -= DeltaSeconds;
-			if (DebrisLife[I] <= 0.0f)
-			{
-				Debris[I]->SetSimulatePhysics(false);
-				Debris[I]->SetVisibility(false);
-			}
-		}
-	}
 }
 
 int32 ATfpsArenaBuilder::MeshFor(tfps::EMaterial M)
@@ -333,38 +322,10 @@ void ATfpsArenaBuilder::RemoveCell(uint32 Cell)
 
 void ATfpsArenaBuilder::SpawnDebris(const FVector& CenterCm, const FVector& SizeCm, uint8 Material)
 {
-	constexpr int32 MaxDebris = 160;
-	if (Debris.Num() < MaxDebris)
+	// Chunks and dust come from the particle system (collides with the map, unit tested).
+	if (UTfpsFxSubsystem* FxSys = GetGameInstance()->GetSubsystem<UTfpsFxSubsystem>())
 	{
-		UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
-		C->SetStaticMesh(FTfpsPlaceholderAssets::Cube());
-		C->SetMobility(EComponentMobility::Movable);
-		C->SetCollisionProfileName(TEXT("PhysicsActor"));
-		C->SetupAttachment(GetRootComponent());
-		C->RegisterComponent();
-		Debris.Add(C);
-		DebrisLife.Add(0.0f);
-	}
-	// Three chunks per cell (glass: small shards), short-lived.
-	const bool bGlass = Material == static_cast<uint8>(tfps::EMaterial::Glass);
-	const int32 Chunks = bGlass ? 2 : 3;
-	for (int32 K = 0; K < Chunks; ++K)
-	{
-		const int32 Index = NextDebris;
-		NextDebris = (NextDebris + 1) % Debris.Num();
-		UStaticMeshComponent* C = Debris[Index];
-		if (const int32* MeshIndex = MeshForMaterial.Find(Material))
-		{
-			C->SetMaterial(0, MaterialMeshes[*MeshIndex]->GetMaterial(0));
-		}
-		const FVector Jitter(FMath::FRandRange(-0.3f, 0.3f), FMath::FRandRange(-0.3f, 0.3f), FMath::FRandRange(-0.3f, 0.3f));
-		C->SetSimulatePhysics(false);
-		C->SetWorldLocationAndRotation(CenterCm + SizeCm * Jitter, FRotator(FMath::FRandRange(0.0f, 360.0f), FMath::FRandRange(0.0f, 360.0f), 0.0f));
-		C->SetWorldScale3D(SizeCm / 100.0 * (bGlass ? 0.25f : 0.45f));
-		C->SetVisibility(true);
-		C->SetSimulatePhysics(true);
-		C->SetPhysicsLinearVelocity(FVector(FMath::FRandRange(-150.0f, 150.0f), FMath::FRandRange(-150.0f, 150.0f), FMath::FRandRange(50.0f, 250.0f)));
-		DebrisLife[Index] = bGlass ? 2.0f : 5.0f;
+		FxSys->Fx().Breakage(UTfpsFxSubsystem::ToMeters(CenterCm), UTfpsFxSubsystem::ToMeters(SizeCm), Material);
 	}
 }
 
@@ -383,13 +344,6 @@ void ATfpsArenaBuilder::Rebuild()
 	{
 		return;
 	}
-	for (UStaticMeshComponent* D : Debris)
-	{
-		if (D) { D->DestroyComponent(); }
-	}
-	Debris.Reset();
-	DebrisLife.Reset();
-	NextDebris = 0;
 	CellInstances.Reset();
 	MeshForMaterial.Reset();
 	MeshMaterial.Reset();

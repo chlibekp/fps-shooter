@@ -187,6 +187,13 @@ impl Service {
         }
     }
 
+    /// Names of the maps a match can be played on (sorted).
+    pub fn map_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.maps.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
     pub fn running_games(&self) -> usize {
         self.games.lock().unwrap().len()
     }

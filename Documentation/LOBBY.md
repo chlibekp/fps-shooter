@@ -23,8 +23,15 @@ flow:
 Scripts/run_lobby.sh --bind 0.0.0.0:7700 --public-host <address players can reach>
 ```
 
-Clients start with `-lobby=http://<host>:7700`. Then, in the Unreal
-console:
+The client's main menu has **Host a lobby** and **Join with invite code**.
+The lobby screen shows the invite code and both squads. Everyone can switch
+squad and ready up there; the host also edits the match settings and starts
+the match. The service address is set under Settings > Lobby service, or
+with `-lobby=http://<host>:7700` on the command line (`-invite=CODE` joins
+at start-up). Every lobby response also lists the maps the service can host,
+so the map picker follows the server.
+
+The same operations are available as console commands, for scripting:
 
 | Command | |
 |---------|-|
@@ -36,8 +43,9 @@ console:
 | `TfpsStart` | host: start the match |
 | `TfpsLeave` | leave the lobby |
 
-The console commands are the Phase 6 interface. A widget menu replaces
-them in Phase 7.
+The menu logic (`tfps::ui::Menu`) is engine-independent and unit tested in
+the NetCore test binary. It is drawn with Canvas primitives 🔒, not UMG
+widgets.
 
 ## HTTP API
 

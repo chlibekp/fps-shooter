@@ -155,6 +155,13 @@ bool UTfpsLobbySubsystem::ParseView(const std::string& Json, bool bWithToken)
 		return true;
 	}
 	FView V;
+	if (const tfps::JsonValue* Maps = Root.Find("maps"))
+	{
+		for (const tfps::JsonValue& M : Maps->Items)
+		{
+			V.Maps.Add(UTF8_TO_TCHAR(M.String.c_str()));
+		}
+	}
 	V.Code = Str(*L, "code");
 	V.Status = Str(*L, "status");
 	V.Host = static_cast<int32>(tfps::JsonNumber(*L, "host", 0));

@@ -61,6 +61,16 @@ pub struct LobbyClient {
     pub code: String,
     pub token: String,
     pub lobby: Value,
+    /// Maps the service can host (from the latest response).
+    pub maps: Vec<String>,
+}
+
+fn map_list(v: &Value) -> Option<Vec<String>> {
+    v.get("maps")?.as_array().map(|a| {
+        a.iter()
+            .filter_map(|m| m.as_str().map(String::from))
+            .collect()
+    })
 }
 
 fn ok(status: u16, v: Value) -> Result<Value, LobbyError> {
@@ -92,6 +102,7 @@ impl LobbyClient {
             addr,
             code: lobby["code"].as_str().unwrap_or("").to_string(),
             token: v["token"].as_str().unwrap_or("").to_string(),
+            maps: map_list(&v).unwrap_or_default(),
             lobby,
         }
     }
@@ -138,6 +149,9 @@ impl LobbyClient {
         let v = ok(s, v)?;
         if v.get("lobby").is_some() {
             self.lobby = v["lobby"].clone();
+        }
+        if let Some(m) = map_list(&v) {
+            self.maps = m;
         }
         Ok(&self.lobby)
     }

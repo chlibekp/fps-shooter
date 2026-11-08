@@ -41,6 +41,7 @@ fn host_invites_a_friend_plays_a_1v1_and_the_lobby_reopens() {
     // Host creates a lobby; a friend joins with the invite code.
     let mut host = LobbyClient::create(addr, "Host").unwrap();
     assert_eq!(host.code.len(), 6);
+    assert_eq!(host.maps, ["consulate", "harbor", "test_arena", "villa"]);
     let mut guest = LobbyClient::join(addr, &host.code.to_lowercase(), "Friend").unwrap();
     assert_eq!(guest.lobby["members"].as_array().unwrap().len(), 2);
     assert_eq!(

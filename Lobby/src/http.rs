@@ -13,6 +13,7 @@
 //! | POST | /lobbies/{code}/leave | | member |
 //!
 //! Auth: `Authorization: Bearer <token>` (hex token from create/join).
+//! Every response that carries `"lobby"` also lists the playable `"maps"`.
 //! Responses: JSON; errors are `{"error": "..."}` with 4xx status.
 
 use crate::service::Service;
@@ -154,6 +155,7 @@ fn route(svc: &Service, req: &Request, peer: SocketAddr) -> (u16, Value) {
             .to_string()
     };
     let token = req.token.unwrap_or(0);
+    let maps = svc.map_names();
     let mut st = svc.state.lock().unwrap();
     let result = match (req.method.as_str(), parts.as_slice()) {
         ("GET", ["health"]) => {
@@ -164,13 +166,19 @@ fn route(svc: &Service, req: &Request, peer: SocketAddr) -> (u16, Value) {
         }
         ("POST", ["lobbies"]) => {
             return match st.create(&str_field("name"), now) {
-                Ok((v, t)) => (201, json!({"token": format!("{t:016x}"), "lobby": v})),
+                Ok((v, t)) => (
+                    201,
+                    json!({"token": format!("{t:016x}"), "lobby": v, "maps": maps}),
+                ),
                 Err(e) => err(e),
             }
         }
         ("POST", ["lobbies", "join"]) => {
             return match st.join(&str_field("code"), &str_field("name"), peer.ip(), now) {
-                Ok((v, t)) => (200, json!({"token": format!("{t:016x}"), "lobby": v})),
+                Ok((v, t)) => (
+                    200,
+                    json!({"token": format!("{t:016x}"), "lobby": v, "maps": maps}),
+                ),
                 Err(e) => err(e),
             }
         }
@@ -203,14 +211,14 @@ fn route(svc: &Service, req: &Request, peer: SocketAddr) -> (u16, Value) {
             let code = code.to_string();
             drop(st);
             return match svc.start_match(&code, token) {
-                Ok(v) => (200, json!({ "lobby": v })),
+                Ok(v) => (200, json!({ "lobby": v, "maps": maps })),
                 Err(e) => err(e),
             };
         }
         _ => return (404, json!({"error": "no such endpoint"})),
     };
     match result {
-        Ok(v) => (200, json!({ "lobby": v })),
+        Ok(v) => (200, json!({ "lobby": v, "maps": maps })),
         Err(e) => err(e),
     }
 }

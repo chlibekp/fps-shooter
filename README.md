@@ -138,7 +138,10 @@ python3 Tools/AssetPipeline/build_assets.py
 WASD move · Mouse look · Shift sprint · Alt slow walk · C toggle crouch (Ctrl
 hold) · Z toggle prone · Space jump · Q/E lean · Right mouse aim (ADS) · Left
 mouse fire · R reload · 1/2 or mouse wheel switch weapon · F3 net stats · Esc
-release mouse. Key bindings are in `[/Script/TacticalFPS.TfpsPlayerController]`
-of the input config.
+menu. Keys, mouse sensitivity, FOV, volume and your name are set in
+Settings / Controls and saved to `Saved/TfpsUser.cfg`.
 
-Client command line: `-connect=host:port -name=Name -map=test_arena`.
+The client opens on the main menu: host or join a lobby, or connect
+directly. Command line shortcuts: `-connect=host:port -name=Name
+-map=test_arena` skips the menu, and `-lobby=http://host:7700
+[-invite=CODE]` sets the lobby service.

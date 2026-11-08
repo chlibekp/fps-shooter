@@ -15,9 +15,9 @@
  * connects UTfpsNetSubsystem to the game server with the lobby's join
  * token; when the match ends the lobby is open again.
  *
- * Driven by console commands on ATfpsPlayerController (TfpsHost, TfpsJoin,
- * TfpsSet, TfpsSquad, TfpsReady, TfpsStart, TfpsLeave) and drawn by the
- * HUD. A widget-based menu replaces the commands in Phase 7.
+ * Driven by the front-end menu (tfps::ui::Menu on ATfpsPlayerController,
+ * drawn by ATfpsHUD); the console commands TfpsHost, TfpsJoin, TfpsSet,
+ * TfpsSquad, TfpsReady, TfpsStart and TfpsLeave remain for scripting.
  */
 UCLASS()
 class TACTICALFPS_API UTfpsLobbySubsystem : public UGameInstanceSubsystem, public FTickableGameObject
@@ -39,6 +39,8 @@ public:
 		bool bFriendlyFire = false;
 		FString GameAddress;
 		uint64 JoinToken = 0;
+		/** Maps the service can host. */
+		TArray<FString> Maps;
 	};
 
 	/** Base URL of the lobby service, e.g. http://127.0.0.1:7700 (-lobby= on the command line). */

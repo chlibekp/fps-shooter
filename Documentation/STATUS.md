@@ -163,16 +163,16 @@ result:
 | HUD: scores, timer, round, side, phase, result banner, plant/defuse progress, objective markers | 🟡 | Canvas HUD, mock-checked |
 | Server CLI: `--mode --rounds-to-win --round-time --prep-time --score-limit --time-limit --friendly-fire` | ✅ | |
 | Lobby service: invite codes, squads, ready, host settings (map, mode, 1v1–5v5, rounds, timers, friendly fire, tick rate), start launches a join-token-protected server, lobby reopens after the match | ✅ | `Lobby/` with unit tests and an HTTP → game server → UDP e2e test. See LOBBY.md |
-| Unreal lobby client (console commands, lobby screen, auto-connect with the join token) | 🟡 | `UTfpsLobbySubsystem`, mock-checked; widget menu is Phase 7 |
+| Unreal lobby client (menu, lobby screen, auto-connect with the join token) | 🟡 | `UTfpsLobbySubsystem` + `tfps::ui::Menu`; the menu model is unit tested, the Unreal glue is mock-checked only |
 
 ## Frontend / UI (spec §11)
 
 | Feature | Status |
 |---------|--------|
 | Debug HUD: crosshair, connection status, player list with connection state, net stats (F3), event feed | 🟡 (Canvas HUD, not run) |
-| Main menu, lobby UI, settings screens | 🟡 Lobby via console commands and a Canvas lobby screen (`-lobby=`); direct connect with `-connect= -name= -map=`. Widget menus are Phase 7. |
-| Key bindings | 🟡 Configurable in `DefaultInput.ini` (`[/Script/TacticalFPS.TfpsPlayerController]`); no UI |
-| Mouse sensitivity, FOV | 🟡 Config values; no UI |
+| Main menu, lobby UI, settings screens | 🟡 Main menu (host / join by code / direct connect), lobby screen with squad, ready and host match settings, pause menu, settings. Logic in `tfps::ui::Menu` (8 native unit tests); drawn on Canvas 🔒 and not yet run in the engine. |
+| Key bindings | 🟡 Controls screen: rebind any action (conflicts swap), reset to defaults; saved to `Saved/TfpsUser.cfg` |
+| Mouse sensitivity, FOV | 🟡 Settings screen: sensitivity, aiming sensitivity, invert Y, crouch toggle/hold, FOV, volumes, net stats, lobby service |
 
 ## Placeholders currently in use 🔒
 
@@ -184,7 +184,7 @@ result:
 | Tracers, impacts and muzzle flash from engine shapes and a point light | `ATfpsShotFx` | Niagara effects, decals, audio (Phase 7) |
 | Debris cubes and the sphere-and-light explosion | `ATfpsArenaBuilder`, `ATfpsShotFx` | Chaos fracture, Niagara dust and fireballs |
 | Engine `Entry` map as the boot map, with the level built at runtime | `DefaultEngine.ini` | Authored maps (Phase 5) |
-| Canvas debug HUD | `ATfpsHUD` | UMG tactical HUD (Phase 7) |
+| Canvas HUD and Canvas-drawn menus | `ATfpsHUD` | UMG widgets with authored art |
 | Gadgets drawn as engine spheres/cubes, smoke as a grey sphere, flash as a point light | `ATfpsGadgetFx` | Blender gadget meshes, Niagara smoke (Phase 5/7) |
 
 ## Known issues

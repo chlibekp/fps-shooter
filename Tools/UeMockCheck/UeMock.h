@@ -75,7 +75,7 @@ struct FString
 namespace ESearchCase { enum Type { IgnoreCase }; }
 namespace ESearchDir { enum Type { FromEnd }; }
 struct FText { static FText FromString(const FString&) { return FText(); } };
-struct FName { std::wstring N; FName() = default; FName(const TCHAR* In) : N(In ? In : L"") {} bool operator<(const FName& O) const { return N < O.N; } bool operator==(const FName& O) const { return N == O.N; } };
+struct FName { std::wstring N; FName() = default; FName(const TCHAR* In) : N(In ? In : L"") {} FString ToString() const { return FString(N.c_str()); } bool operator<(const FName& O) const { return N < O.N; } bool operator==(const FName& O) const { return N == O.N; } };
 static const FName NAME_None; static const FName NAME_DGram;
 enum class ESPMode { NotThreadSafe, ThreadSafe };
 template <typename T, ESPMode M = ESPMode::ThreadSafe> struct TSharedRef : std::shared_ptr<T> { using std::shared_ptr<T>::shared_ptr; };
@@ -194,8 +194,9 @@ struct FPaths
 	static FString ProjectContentDir() { return FString(L"C/"); } static FString ProjectDir() { return FString(L"P/"); }
 	template <typename... A> static FString Combine(A... Parts) { FString R; ((R = R + FString(Parts)), ...); return R; }
 	static FString ConvertRelativePathToFull(const FString& P) { return P; }
+	static FString ProjectSavedDir() { return FString(L"S/"); }
 };
-struct FFileHelper { static bool LoadFileToString(FString&, const TCHAR*) { return false; } };
+struct FFileHelper { static bool LoadFileToString(FString&, const TCHAR*) { return false; } static bool SaveStringToFile(const FString&, const TCHAR*) { return true; } };
 struct FUtf8Conv { std::string S; explicit FUtf8Conv(const TCHAR* W) { for (; *W; ++W) S += static_cast<char>(*W); } operator const char*() const { return S.c_str(); } };
 struct FTcharConv { std::wstring S; explicit FTcharConv(const char* C) { for (; *C; ++C) S += static_cast<wchar_t>(*C); } operator const TCHAR*() const { return S.c_str(); } };
 #define TCHAR_TO_UTF8(X) static_cast<const char*>(FUtf8Conv(X))
@@ -296,8 +297,14 @@ class AController;
 class APawn : public AActor { public: bool bUseControllerRotationYaw = true, bUseControllerRotationPitch = false, bUseControllerRotationRoll = false; STATIC_CLASS_IMPL };
 class AController : public AActor { public: void Possess(APawn*) {} APawn* GetPawn() const { return nullptr; } FRotator GetControlRotation() const { return FRotator(); } void SetControlRotation(const FRotator&) {} bool IsLocalController() const { return true; } };
 struct FInputModeGameOnly {}; struct FInputModeGameAndUI {};
-struct FKey { FKey() = default; FKey(const char*) {} bool IsValid() const { return true; } };
-struct EKeys { static const FKey W, S, A, D, SpaceBar, LeftControl, C, LeftShift, LeftAlt, Q, E, RightMouseButton, LeftMouseButton, Z, R, F, F3, Escape, One, Two, Three, Four, Five, Six, MouseScrollUp, MouseScrollDown; };
+struct FKey
+{
+	FKey() = default; FKey(const char*) {} explicit FKey(const FName& InName) : Name(InName) {}
+	bool IsValid() const { return true; } FName GetFName() const { return Name; }
+	bool IsGamepadKey() const { return false; } bool IsTouch() const { return false; } bool IsAxis1D() const { return false; } bool IsAxis2D() const { return false; }
+	FName Name;
+};
+struct EKeys { static void GetAllKeys(TArray<FKey>& Out) { Out.Reset(); } static const FKey W, S, A, D, SpaceBar, LeftControl, C, LeftShift, LeftAlt, Q, E, RightMouseButton, LeftMouseButton, Z, R, F, F3, Escape, One, Two, Three, Four, Five, Six, MouseScrollUp, MouseScrollDown; };
 inline const FKey EKeys::One{"1"}, EKeys::Two{"2"}, EKeys::Three{"3"}, EKeys::Four{"4"}, EKeys::Five{"5"}, EKeys::Six{"6"}, EKeys::MouseScrollUp{"WU"}, EKeys::MouseScrollDown{"WD"};
 inline const FKey EKeys::W{"W"}, EKeys::S{"S"}, EKeys::A{"A"}, EKeys::D{"D"}, EKeys::SpaceBar{"Sp"}, EKeys::LeftControl{"LC"}, EKeys::C{"C"}, EKeys::LeftShift{"LS"}, EKeys::LeftAlt{"LA"}, EKeys::Q{"Q"}, EKeys::E{"E"}, EKeys::RightMouseButton{"RMB"}, EKeys::LeftMouseButton{"LMB"}, EKeys::Z{"Z"}, EKeys::R{"R"}, EKeys::F{"F"}, EKeys::F3{"F3"}, EKeys::Escape{"Esc"};
 class APlayerController : public AController
@@ -309,6 +316,9 @@ public:
 	bool IsInputKeyDown(const FKey) const { return false; }
 	bool WasInputKeyJustPressed(const FKey) const { return false; }
 	void GetInputMouseDelta(float& X, float& Y) const { X = Y = 0; }
+	bool GetMousePosition(float& X, float& Y) const { X = Y = 0; return false; }
+	void GetViewportSize(int32& X, int32& Y) const { X = 1920; Y = 1080; }
+	FString ConsoleCommand(const FString& Cmd, bool bWriteToLog = true) { (void)bWriteToLog; return Cmd; }
 	STATIC_CLASS_IMPL
 };
 class APlayerCameraManager : public AActor { public: FVector GetCameraLocation() const { return FVector(); } };

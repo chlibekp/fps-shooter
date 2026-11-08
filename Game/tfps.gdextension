@@ -1,0 +1,12 @@
+[configuration]
+
+entry_symbol = "tfps_library_init"
+compatibility_minimum = "4.7"
+reloadable = false
+
+[libraries]
+
+linux.x86_64 = "res://bin/libtfps.linux.x86_64.so"
+linux.arm64 = "res://bin/libtfps.linux.arm64.so"
+windows.x86_64 = "res://bin/libtfps.windows.x86_64.dll"
+macos = "res://bin/libtfps.macos.universal.dylib"

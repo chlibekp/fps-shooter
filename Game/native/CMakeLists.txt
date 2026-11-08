@@ -1,8 +1,8 @@
-# Godot extension (GDExtension) with the TacticalFPS client core.
-#   cmake -S Game/native -B build/gdext -DCMAKE_BUILD_TYPE=Release -DGODOTCPP_TARGET=template_release
-#   cmake --build build/gdext --config Release
-# GODOT_CPP_DIR: a godot-cpp checkout (Scripts/godot/build_extension.sh clones it).
-cmake_minimum_required(VERSION 3.20)
+# Godot extension with the TacticalFPS client core. It is written against the
+# plain GDExtension C interface (gdapi/gdextension_interface.h, dumped from
+# the pinned Godot), so no godot-cpp or code generation is needed.
+#   Scripts/godot/build_extension.sh
+cmake_minimum_required(VERSION 3.16)
 project(tfps_gdext CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -12,41 +12,50 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(GODOT_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../build/godot-cpp" CACHE PATH "godot-cpp checkout")
-add_subdirectory("${GODOT_CPP_DIR}" godot-cpp)
-
-set(CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../Client/Source/TacticalFPS")
-file(GLOB CORE_SOURCES
-  "${CORE_DIR}/Private/NetCore/*.cpp"
-  "${CORE_DIR}/Private/Audio/*.cpp")
+set(REPO "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+set(CORE_DIR "${REPO}/Client/Source/TacticalFPS")
+file(GLOB CORE_SOURCES "${CORE_DIR}/Private/NetCore/*.cpp" "${CORE_DIR}/Private/Audio/*.cpp")
 
 add_library(tfps SHARED
-  src/register_types.cpp
-  src/tfps_client.cpp
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../Client/NetCoreTests/src/UdpTransport.cpp"
+  src/gd_bridge.cpp
+  src/tfps_native.cpp
+  "${REPO}/Client/NetCoreTests/src/UdpTransport.cpp"
   ${CORE_SOURCES})
-target_include_directories(tfps PRIVATE
-  "${CORE_DIR}/Public"
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../Client/NetCoreTests/src")
-target_link_libraries(tfps PRIVATE godot-cpp)
+target_include_directories(tfps PRIVATE gdapi src "${CORE_DIR}/Public" "${REPO}/Client/NetCoreTests/src")
 if(WIN32)
   target_link_libraries(tfps PRIVATE ws2_32)
 endif()
-# The movement code must give bit-identical results to the Rust server.
+# Movement must be bit-identical to the Rust server.
 if(MSVC)
-  target_compile_options(tfps PRIVATE /fp:precise)
+  target_compile_options(tfps PRIVATE /fp:precise /W3)
 else()
-  target_compile_options(tfps PRIVATE -ffp-contract=off)
+  target_compile_options(tfps PRIVATE -ffp-contract=off -Wall -Wextra -Wno-unused-parameter)
+  set_target_properties(tfps PROPERTIES CXX_VISIBILITY_PRESET hidden)
+endif()
+if(APPLE)
+  set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
 endif()
 
-get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
-set(OUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../bin")
+# Game/bin/libtfps.<platform>.<arch>.<ext>, as listed in Game/tfps.gdextension.
+if(WIN32)
+  set(PLATFORM windows)
+elseif(APPLE)
+  set(PLATFORM macos)
+else()
+  set(PLATFORM linux)
+endif()
+set(ARCH x86_64)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
+  set(ARCH arm64)
+endif()
+if(APPLE)
+  set(ARCH universal)
+endif()
 set_target_properties(tfps PROPERTIES
-  CXX_VISIBILITY_PRESET hidden
   PREFIX "lib"
-  OUTPUT_NAME "tfps${GODOTCPP_SUFFIX}"
-  LIBRARY_OUTPUT_DIRECTORY "$<1:${OUT_DIR}>"
-  RUNTIME_OUTPUT_DIRECTORY "$<1:${OUT_DIR}>")
+  OUTPUT_NAME "tfps.${PLATFORM}.${ARCH}"
+  LIBRARY_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_SOURCE_DIR}/../bin>"
+  RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_SOURCE_DIR}/../bin>")
 if(APPLE)
   set_target_properties(tfps PROPERTIES SUFFIX ".dylib")
 endif()

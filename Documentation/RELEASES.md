@@ -79,6 +79,30 @@ Optional: `TFPS_UE_IMAGE` picks another image tag. The default is
 engine version. If Epic does not publish that exact tag, use a full version
 such as `dev-slim-5.4.4`.
 
+### Faster on Blacksmith (optional)
+
+The job can run on [Blacksmith](https://www.blacksmith.sh) runners. They
+work as drop-in GitHub Actions runners with a monthly free allowance
+(3,000 x64 2-vCPU minutes per organisation; bigger runners use it up
+faster).
+
+1. Install the Blacksmith GitHub app for the repository's owner.
+2. Set the repository variable `TFPS_UE_RUNNER`, for example
+   `blacksmith-8vcpu-ubuntu-2404`.
+3. Enable Docker container caching in Blacksmith. The Unreal image is then
+   kept between runs instead of downloaded each time.
+
+On Blacksmith the workflow skips the disk clean-up meant for GitHub's
+images and keeps the pulled image. Not checked here:
+* the root disk size of Blacksmith runners (the job prints `df` before
+  pulling);
+* whether personal accounts (not organisations) can install the app.
+
+Blacksmith does not change the Windows / macOS situation. Its Windows and
+macOS runners have no Unreal Engine, like GitHub's. Those minutes also count
+2× (Windows) and 20× (macOS) against the free allowance, so a full Unreal
+build there would not fit the free tier.
+
 Risks:
 * The image needs tens of GB, and a freed runner has roughly 40–70 GB
   across its two disks. If the pull fails for lack of space, the job log

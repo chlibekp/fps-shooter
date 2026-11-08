@@ -19,6 +19,11 @@
 #     TFPS_UE_CONTAINER to 'true'.
 # Optional repository variable TFPS_UE_IMAGE overrides the image
 # (default ghcr.io/epicgames/unreal-engine:dev-slim-5.4).
+# Optional repository variable TFPS_UE_RUNNER picks the runner label
+# (default ubuntu-latest). With Blacksmith (blacksmith.sh, GitHub app,
+# free monthly minutes) use e.g. blacksmith-8vcpu-ubuntu-2404: more cores,
+# and with Blacksmith's Docker container caching enabled the Unreal image
+# stays cached between runs instead of being pulled every time.
 name: Unreal Linux build
 
 on:
@@ -41,7 +46,7 @@ permissions:
 jobs:
   build:
     name: Unreal client (Linux, container)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.TFPS_UE_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 340
     permissions:
       contents: write
@@ -50,6 +55,7 @@ jobs:
       IMAGE: ${{ vars.TFPS_UE_IMAGE || 'ghcr.io/epicgames/unreal-engine:dev-slim-5.4' }}
       GHCR_USER: ${{ vars.EPIC_GHCR_USER || github.repository_owner }}
       GHCR_TOKEN: ${{ secrets.EPIC_GHCR_TOKEN }}
+      RUNNER_LABEL: ${{ vars.TFPS_UE_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Check the Epic registry token
         run: |
@@ -62,7 +68,11 @@ jobs:
         with:
           ref: ${{ inputs.tag != '' && format('refs/tags/{0}', inputs.tag) || inputs.ref || github.ref }}
 
+      # GitHub's runners ship many toolchains this job does not need. Not on
+      # Blacksmith: their VMs are leaner, and moving Docker's store would
+      # bypass Blacksmith's Docker image cache.
       - name: Free disk space
+        if: ${{ !startsWith(vars.TFPS_UE_RUNNER || 'ubuntu-latest', 'blacksmith-') }}
         run: |
           df -h / /mnt || true
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
@@ -90,7 +100,9 @@ jobs:
 
       - name: Pull the Unreal Engine image
         run: |
+          df -h / || true
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          if docker image inspect "$IMAGE" > /dev/null 2>&1; then echo "image already cached on this runner"; fi
           docker pull "$IMAGE"
           docker logout ghcr.io
           df -h / /mnt || true
@@ -110,7 +122,8 @@ jobs:
               -platform=Linux -clientconfig=Shipping \
               -build -cook -stage -pak -archive -archivedirectory=/project/Dist/client-Linux
           ' 2>&1 | tee Logs/unreal-build.log
-          docker image rm "$IMAGE" || true
+          # Free space for packaging on GitHub runners; keep it where a runner caches images.
+          case "${RUNNER_LABEL}" in blacksmith-*) ;; *) docker image rm "$IMAGE" || true ;; esac
 
       - name: Assemble the player download
         id: game

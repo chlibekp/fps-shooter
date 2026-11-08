@@ -4,7 +4,7 @@ A realistic, tactical multiplayer first-person shooter: an **Unreal Engine 5**
 client and an authoritative **Rust** dedicated server, with original assets
 built procedurally in **Blender**.
 
-**Status: Phase 5 (Maps and assets).** Players connect to the Rust server, move
+**Status: Phase 6 (Lobby and game modes).** Players connect to the Rust server, move
 (run, sprint, crouch, prone, lean, ADS) with client-side prediction, and
 fight with data-driven weapons. The server resolves shots with
 lag-compensated hitscan, bullet penetration and damage. Walls, windows,
@@ -13,7 +13,9 @@ collision agrees on and through explosions. Attackers carry frag grenades,
 flashbangs, breaching charges and recon drones. Defenders deploy barricades,
 reinforce walls, and place cameras, motion sensors and jammers. There are
 three production maps (Harbor Warehouse, Hillside Villa, Consulate), and
-the Blender pipeline builds props, map-kit pieces and gadget models. All of this was verified end-to-end with the
+the Blender pipeline builds props, map-kit pieces and gadget models.
+Matches are team deathmatch, elimination (including 1v1) or defuse
+rounds. A lobby service with invite codes runs custom matches. All of this was verified end-to-end with the
 headless Rust and C++ clients. The Unreal client code has **not been
 compiled in Unreal yet**, because the development machine had no Unreal
 Engine; see [`Documentation/STATUS.md`](Documentation/STATUS.md).
@@ -26,6 +28,8 @@ Engine; see [`Documentation/STATUS.md`](Documentation/STATUS.md).
 | [MILESTONE_3.md](Documentation/MILESTONE_3.md) | Phase 3 report: destruction, penetration, explosions |
 | [MILESTONE_4.md](Documentation/MILESTONE_4.md) | Phase 4 report: gadgets, drones, barricades, reinforcement |
 | [MILESTONE_5.md](Documentation/MILESTONE_5.md) | Phase 5 report: three maps, map validation, asset kit and gadget models |
+| [MILESTONE_6.md](Documentation/MILESTONE_6.md) | Phase 6 report: game modes, rounds, lobby with invite codes |
+| [LOBBY.md](Documentation/LOBBY.md) | Lobby service, API and console commands |
 | [ARCHITECTURE.md](Documentation/ARCHITECTURE.md) | Architecture decisions and their reasons |
 | [PROTOCOL.md](Shared/Protocol/PROTOCOL.md) | Wire protocol v1 (byte level) |
 | [ASSET_PIPELINE.md](Documentation/ASSET_PIPELINE.md) | Blender → Unreal pipeline |

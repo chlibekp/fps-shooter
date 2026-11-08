@@ -28,7 +28,7 @@ void UTfpsNetSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
-bool UTfpsNetSubsystem::Connect(const FString& Address, const FString& PlayerName, const FString& MapName)
+bool UTfpsNetSubsystem::Connect(const FString& Address, const FString& PlayerName, const FString& MapName, uint64 JoinToken)
 {
 	Disconnect();
 	FString Error;
@@ -71,6 +71,7 @@ bool UTfpsNetSubsystem::Connect(const FString& Address, const FString& PlayerNam
 	}
 	tfps::ClientConfig Config;
 	Config.Name = TCHAR_TO_UTF8(*PlayerName.Left(24));
+	Config.JoinToken = JoinToken;
 	Core = std::make_unique<tfps::ClientCore>(Config, Map, Weapons, Transport, FPlatformTime::Seconds());
 	ServerAddress = Address;
 	LocalName = PlayerName;

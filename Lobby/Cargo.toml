@@ -1,0 +1,31 @@
+[package]
+name = "tfps-lobby"
+description = "TacticalFPS lobby service: invite codes, match settings, game server launch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "tfps_lobby"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tfps-lobby"
+path = "src/main.rs"
+
+[dependencies]
+tfps-sim.workspace = true
+tfps-server = { path = "../Server" }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["io-util"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+rand.workspace = true
+anyhow.workspace = true
+httparse = "1"
+
+[dev-dependencies]
+tfps-devclient.workspace = true
+tfps-protocol.workspace = true

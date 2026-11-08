@@ -2,6 +2,7 @@
 #include "TfpsPlayerController.h"
 #include "TacticalFPS.h"
 #include "TfpsNetSubsystem.h"
+#include "TfpsLobbySubsystem.h"
 #include "TfpsPlayerPawn.h"
 
 #include "Engine/GameInstance.h"
@@ -31,6 +32,24 @@ void ATfpsPlayerController::BeginPlay()
 	FParse::Value(FCommandLine::Get(), TEXT("connect="), Address);
 	FParse::Value(FCommandLine::Get(), TEXT("name="), Name);
 	FParse::Value(FCommandLine::Get(), TEXT("map="), MapName);
+	PlayerName = Name;
+
+	// With a lobby service (-lobby=http://host:7700) players host or join by
+	// invite code from the console; the lobby connects us when the match starts.
+	FString LobbyUrl;
+	if (FParse::Value(FCommandLine::Get(), TEXT("lobby="), LobbyUrl))
+	{
+		if (UTfpsLobbySubsystem* Lobby = GetGameInstance()->GetSubsystem<UTfpsLobbySubsystem>())
+		{
+			Lobby->SetService(LobbyUrl);
+			FString Invite;
+			if (FParse::Value(FCommandLine::Get(), TEXT("invite="), Invite))
+			{
+				Lobby->Join(Invite, Name);
+			}
+		}
+		return;
+	}
 
 	if (UTfpsNetSubsystem* Net = GetGameInstance()->GetSubsystem<UTfpsNetSubsystem>())
 	{
@@ -39,6 +58,51 @@ void ATfpsPlayerController::BeginPlay()
 			Net->Connect(Address, Name, MapName);
 		}
 	}
+}
+
+UTfpsLobbySubsystem* ATfpsPlayerController::Lobby() const
+{
+	return GetGameInstance() ? GetGameInstance()->GetSubsystem<UTfpsLobbySubsystem>() : nullptr;
+}
+
+void ATfpsPlayerController::TfpsHost()
+{
+	if (UTfpsLobbySubsystem* L = Lobby()) { L->Host(PlayerName); }
+}
+
+void ATfpsPlayerController::TfpsJoin(const FString& Code)
+{
+	if (UTfpsLobbySubsystem* L = Lobby()) { L->Join(Code, PlayerName); }
+}
+
+void ATfpsPlayerController::TfpsSet(const FString& Key, const FString& Value)
+{
+	if (UTfpsLobbySubsystem* L = Lobby()) { L->SetSetting(Key, Value); }
+}
+
+void ATfpsPlayerController::TfpsSquad(int32 Squad)
+{
+	if (UTfpsLobbySubsystem* L = Lobby()) { L->SetSquad(Squad); }
+}
+
+void ATfpsPlayerController::TfpsReady()
+{
+	if (UTfpsLobbySubsystem* L = Lobby()) { L->SetReady(true); }
+}
+
+void ATfpsPlayerController::TfpsUnready()
+{
+	if (UTfpsLobbySubsystem* L = Lobby()) { L->SetReady(false); }
+}
+
+void ATfpsPlayerController::TfpsStart()
+{
+	if (UTfpsLobbySubsystem* L = Lobby()) { L->Start(); }
+}
+
+void ATfpsPlayerController::TfpsLeave()
+{
+	if (UTfpsLobbySubsystem* L = Lobby()) { L->Leave(); }
 }
 
 bool ATfpsPlayerController::KeyDown(const FKey& Key) const

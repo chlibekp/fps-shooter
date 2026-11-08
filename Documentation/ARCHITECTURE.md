@@ -287,3 +287,23 @@ plant in an objective site, defenders defuse) are a state machine in
 * **Server authority.** Planting, defusing and win conditions are decided
   only by the server. Clients render timers by counting down locally from
   the last `MatchState`.
+
+## Decision 15 — A lobby service with invite codes launches in-process game servers
+
+Private matches are organised by a small lobby service (`Lobby/`, HTTP
+JSON) rather than inside the game server:
+* the game server stays a pure, fixed-tick simulation;
+* the lobby is plain request/response traffic that any client can reach
+  (the Unreal HTTP module, tests, bots).
+
+**Join tokens.** On start, the lobby launches a `tfps-server` instance
+through its library API with a random join token. Only lobby members can
+connect, using the join token the protocol has had since Phase 1.
+
+**Match end.** The server reports "match over" through its stats, and the
+lobby then stops it and reopens.
+
+**In-process servers.** Running servers in-process keeps deployment to
+one binary and makes the whole flow testable end to end in `cargo test`.
+Moving servers to separate processes or hosts only changes
+`Service::start_match`.

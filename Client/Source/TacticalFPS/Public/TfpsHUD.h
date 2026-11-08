@@ -24,6 +24,7 @@ public:
 	virtual void DrawHUD() override;
 
 private:
+	void DrawLobby(const class UTfpsLobbySubsystem& Lobby, float Scale);
 	void DrawMatchHud(const UTfpsNetSubsystem& Net, const tfps::ClientCore& Core, float Scale);
 	void DrawCombatHud(const UTfpsNetSubsystem& Net, const tfps::ClientCore& Core, float Scale);
 };

@@ -16,6 +16,7 @@ public class TacticalFPS : ModuleRules
 		{
 			"Core",
 			"CoreUObject",
+			"HTTP",
 			"Engine",
 			"InputCore",
 			"Sockets",

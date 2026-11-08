@@ -503,6 +503,9 @@ impl ServerCore {
     pub fn tick(&mut self, now: Instant) {
         self.handshakes_this_tick = 0;
         self.game.tick();
+        if self.game.match_state.phase == crate::game::MatchPhase::MatchOver {
+            self.stats.match_over.store(true, Relaxed);
+        }
         self.announce_game_events();
         self.check_timeouts(now);
         self.drop_doomed(now);

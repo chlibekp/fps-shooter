@@ -9,6 +9,8 @@
 //! It is driven by calling [`Client::update`] regularly (e.g. every 1-4 ms in
 //! a bot thread, or every frame in a game).
 
+pub mod lobby;
+
 use rand::{Rng, RngCore, SeedableRng};
 use std::collections::{BTreeMap, VecDeque};
 use std::net::{SocketAddr, UdpSocket};

@@ -138,7 +138,7 @@ namespace tfps
 					SkipWs();
 					if (Pos >= Text.size() || Text[Pos] != ':') { return Fail("expected :"); }
 					++Pos;
-					Out.Members.emplace_back(Key, JsonValue());
+					Out.Members.push_back(JsonMember{Key, JsonValue()});
 					if (!ParseValue(Out.Members.back().second, Depth + 1)) { return false; }
 					SkipWs();
 					if (Pos >= Text.size()) { return Fail("unterminated object"); }

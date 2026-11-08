@@ -84,7 +84,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "TacticalFPS")
 	bool IsNetStatsVisible() const { return bShowNetStats; }
 
+	// Lobby console commands (with -lobby=http://host:7700).
+	/** Create a lobby; the invite code is shown on screen. */
+	UFUNCTION(Exec) void TfpsHost();
+	/** Join a friend's lobby by invite code. */
+	UFUNCTION(Exec) void TfpsJoin(const FString& Code);
+	/** Host: map, mode, team_size, rounds_to_win, round_time, prep_time, score_limit, friendly_fire, tick_rate. */
+	UFUNCTION(Exec) void TfpsSet(const FString& Key, const FString& Value);
+	UFUNCTION(Exec) void TfpsSquad(int32 Squad);
+	UFUNCTION(Exec) void TfpsReady();
+	UFUNCTION(Exec) void TfpsUnready();
+	UFUNCTION(Exec) void TfpsStart();
+	UFUNCTION(Exec) void TfpsLeave();
+
 private:
+	class UTfpsLobbySubsystem* Lobby() const;
+	FString PlayerName;
 	bool KeyDown(const FKey& Key) const;
 	void UpdateLook();
 	uint16 SampleButtons() const;

@@ -10,6 +10,8 @@
 
 namespace tfps
 {
+	struct JsonMember;
+
 	struct JsonValue
 	{
 		enum class EKind { Null, Bool, Number, String, Array, Object } Kind = EKind::Null;
@@ -17,17 +19,27 @@ namespace tfps
 		bool Bool = false;
 		std::string String;
 		std::vector<JsonValue> Items;
-		std::vector<std::pair<std::string, JsonValue>> Members;
+		/** Object members in document order (a vector of an incomplete type is valid C++17;
+		 *  std::pair<std::string, JsonValue> here would not be). */
+		std::vector<JsonMember> Members;
 
-		const JsonValue* Find(const char* Key) const
-		{
-			for (const auto& M : Members)
-			{
-				if (M.first == Key) { return &M.second; }
-			}
-			return nullptr;
-		}
+		const JsonValue* Find(const char* Key) const;
 	};
+
+	struct JsonMember
+	{
+		std::string first;
+		JsonValue second;
+	};
+
+	inline const JsonValue* JsonValue::Find(const char* Key) const
+	{
+		for (const JsonMember& M : Members)
+		{
+			if (M.first == Key) { return &M.second; }
+		}
+		return nullptr;
+	}
 
 	/** Parses a complete JSON document. Returns false and sets OutError on failure. */
 	bool ParseJson(const std::string& Text, JsonValue& Out, std::string& OutError);

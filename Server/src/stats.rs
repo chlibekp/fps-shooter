@@ -1,7 +1,7 @@
 //! Server performance counters, shared lock-free with observers (tests,
 //! the stats logger, a future admin endpoint).
 
-use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 
 #[derive(Default)]
 pub struct Stats {
@@ -25,6 +25,8 @@ pub struct Stats {
     pub tick_us_max: AtomicU64,
     pub tick_us_sum: AtomicU64,
     pub tick_count_window: AtomicU64,
+    /// The match is over (a lobby can shut this server down).
+    pub match_over: AtomicBool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

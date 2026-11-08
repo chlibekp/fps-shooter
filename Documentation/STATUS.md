@@ -4,7 +4,7 @@ Legend: ✅ implemented and tested · 🟡 partially implemented / implemented b
 not verified end-to-end · ❌ not started · 🔒 placeholder (explicitly marked
 temporary).
 
-Last updated: Phase 6, part 1 (game modes and match flow). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
+Last updated: Phase 6 (game modes, match flow, lobby with invite codes). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
 
 ## Verification environment caveat
 
@@ -162,14 +162,15 @@ result:
 | Half-time side swap, map reset every round | ✅ | `MapReset`; joiners get the current state |
 | HUD: scores, timer, round, side, phase, result banner, plant/defuse progress, objective markers | 🟡 | Canvas HUD, mock-checked |
 | Server CLI: `--mode --rounds-to-win --round-time --prep-time --score-limit --time-limit --friendly-fire` | ✅ | |
-| Lobby with invite codes, custom match settings | ❌ | Phase 6, part 2 |
+| Lobby service: invite codes, squads, ready, host settings (map, mode, 1v1–5v5, rounds, timers, friendly fire, tick rate), start launches a join-token-protected server, lobby reopens after the match | ✅ | `Lobby/` with unit tests and an HTTP → game server → UDP e2e test. See LOBBY.md |
+| Unreal lobby client (console commands, lobby screen, auto-connect with the join token) | 🟡 | `UTfpsLobbySubsystem`, mock-checked; widget menu is Phase 7 |
 
 ## Frontend / UI (spec §11)
 
 | Feature | Status |
 |---------|--------|
 | Debug HUD: crosshair, connection status, player list with connection state, net stats (F3), event feed | 🟡 (Canvas HUD, not run) |
-| Main menu, lobby UI, settings screens | ❌ The client connects through command-line arguments (`-connect= -name= -map=`). |
+| Main menu, lobby UI, settings screens | 🟡 Lobby via console commands and a Canvas lobby screen (`-lobby=`); direct connect with `-connect= -name= -map=`. Widget menus are Phase 7. |
 | Key bindings | 🟡 Configurable in `DefaultInput.ini` (`[/Script/TacticalFPS.TfpsPlayerController]`); no UI |
 | Mouse sensitivity, FOV | 🟡 Config values; no UI |
 

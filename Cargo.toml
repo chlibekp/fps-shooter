@@ -5,6 +5,7 @@ members = [
     "Shared/Protocol/rust",
     "Server",
     "Tools/DevClient",
+    "Lobby",
 ]
 
 [workspace.package]

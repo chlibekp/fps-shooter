@@ -40,7 +40,7 @@ public:
 
 	/** Loads the map definition and starts connecting. Address is "host:port". */
 	UFUNCTION(BlueprintCallable, Category = "TacticalFPS|Net")
-	bool Connect(const FString& Address, const FString& PlayerName, const FString& MapName);
+	bool Connect(const FString& Address, const FString& PlayerName, const FString& MapName, uint64 JoinToken = 0);
 
 	UFUNCTION(BlueprintCallable, Category = "TacticalFPS|Net")
 	void Disconnect();

@@ -59,6 +59,13 @@ struct FString
 	FString operator+(const FString& O) const { FString R; R.S = S + O.S; return R; }
 	FString operator+(const TCHAR* O) const { FString R; R.S = S + O; return R; }
 	FString& operator+=(const TCHAR* O) { S += O; return *this; }
+	FString& operator+=(TCHAR C) { S += C; return *this; }
+	friend FString operator+(const TCHAR* A, const FString& B) { FString R; R.S = std::wstring(A) + B.S; return R; }
+	bool operator==(const FString& O) const { return S == O.S; }
+	bool operator==(const TCHAR* O) const { return S == O; }
+	bool operator!=(const TCHAR* O) const { return S != O; }
+	bool IsEmpty() const { return S.empty(); }
+	void Reset() { S.clear(); }
 	FString Left(int32 N) const { FString R; R.S = S.substr(0, static_cast<size_t>(N)); return R; }
 	bool Split(const FString& D, FString* L, FString* R, int SearchCase, int Dir) const { (void)D; (void)L; (void)R; (void)SearchCase; (void)Dir; return true; }
 	template <typename... A> static FString Printf(const TCHAR* Fmt, A... Args) { wchar_t B[512]; std::swprintf(B, 512, Fmt, Args...); return FString(B); }
@@ -70,8 +77,10 @@ namespace ESearchDir { enum Type { FromEnd }; }
 struct FText { static FText FromString(const FString&) { return FText(); } };
 struct FName { std::wstring N; FName() = default; FName(const TCHAR* In) : N(In ? In : L"") {} bool operator<(const FName& O) const { return N < O.N; } bool operator==(const FName& O) const { return N == O.N; } };
 static const FName NAME_None; static const FName NAME_DGram;
-template <typename T> struct TSharedRef : std::shared_ptr<T> { using std::shared_ptr<T>::shared_ptr; };
-template <typename T> struct TSharedPtr : std::shared_ptr<T> { TSharedPtr() = default; TSharedPtr(const TSharedRef<T>& R) : std::shared_ptr<T>(R) {} bool IsValid() const { return this->get() != nullptr; } };
+enum class ESPMode { NotThreadSafe, ThreadSafe };
+template <typename T, ESPMode M = ESPMode::ThreadSafe> struct TSharedRef : std::shared_ptr<T> { using std::shared_ptr<T>::shared_ptr; };
+template <typename T, ESPMode M = ESPMode::ThreadSafe> struct TSharedPtr : std::shared_ptr<T> { TSharedPtr() = default; TSharedPtr(const TSharedRef<T, M>& R) : std::shared_ptr<T>(R) {} bool IsValid() const { return this->get() != nullptr; } };
+struct FCString { static int32 Atoi(const TCHAR* S) { return static_cast<int32>(std::wcstol(S, nullptr, 10)); } static float Atof(const TCHAR* S) { return std::wcstof(S, nullptr); } };
 template <typename A, typename B> struct TPair { A Key; B Value; TPair() = default; TPair(const A& InA, const B& InB) : Key(InA), Value(InB) {} };
 template <typename K, typename V> struct TMap
 {
@@ -175,7 +184,6 @@ struct FMath
 	static float Fmod(float A, float B) { return std::fmod(A, B); }
 };
 struct FChar { static bool IsAlnum(TCHAR C) { return std::iswalnum(static_cast<wint_t>(C)) != 0; } };
-struct FCString { static int32 Atoi(const TCHAR* S) { return static_cast<int32>(std::wcstol(S, nullptr, 10)); } };
 struct FPlatformTime { static double Seconds() { return 0.0; } };
 extern uint64 GFrameCounter;
 inline uint64 GFrameCounter = 0;
@@ -332,8 +340,8 @@ struct FActorSpawnParameters { ESpawnActorCollisionHandlingMethod::Type SpawnCol
 class UWorld : public UObject { public: template <typename T> T* SpawnActor(UClass*, const FTransform&, const FActorSpawnParameters&) { return new T(); } };
 class FSubsystemCollectionBase {};
 class USubsystem : public UObject { public: virtual void Initialize(FSubsystemCollectionBase&) {} virtual void Deinitialize() {} };
-class UGameInstanceSubsystem : public USubsystem {};
 class UGameInstance : public UObject { public: template <typename T> T* GetSubsystem() const { return nullptr; } };
+class UGameInstanceSubsystem : public USubsystem { public: UGameInstance* GetGameInstance() const { return nullptr; } };
 enum class ETickableTickType { Conditional, Always, Never };
 class FTickableGameObject
 {

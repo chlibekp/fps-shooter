@@ -3,6 +3,7 @@
 #include "TacticalFPS.h"
 #include "TfpsNetSubsystem.h"
 #include "TfpsPlayerController.h"
+#include "TfpsLobbySubsystem.h"
 
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
@@ -24,6 +25,13 @@ void ATfpsHUD::DrawHUD()
 	}
 	UFont* Font = GEngine->GetSmallFont();
 	const float Scale = FMath::Max(1.0f, Canvas->ClipY / 1080.0f);
+	// Lobby screen while in a lobby and not playing its match.
+	const UTfpsLobbySubsystem* Lobby = GetGameInstance()->GetSubsystem<UTfpsLobbySubsystem>();
+	if (Lobby != nullptr && Lobby->IsConfigured() && Net->GetStatus() != ETfpsConnectionStatus::Connected)
+	{
+		DrawLobby(*Lobby, Scale);
+		return;
+	}
 	const FLinearColor Text(0.92f, 0.93f, 0.90f, 0.95f);
 	const FLinearColor Dim(0.65f, 0.68f, 0.66f, 0.85f);
 	const FLinearColor Warn(1.0f, 0.62f, 0.2f, 1.0f);
@@ -429,4 +437,68 @@ void ATfpsHUD::DrawMatchHud(const UTfpsNetSubsystem& Net, const tfps::ClientCore
 		DrawText(Why, Text, CX - 60.0f * Scale, BY + 40.0f * Scale, Small, Scale);
 	}
 	(void)Net;
+}
+
+void ATfpsHUD::DrawLobby(const UTfpsLobbySubsystem& Lobby, float Scale)
+{
+	UFont* Font = GEngine->GetMediumFont();
+	UFont* Small = GEngine->GetSmallFont();
+	const UTfpsLobbySubsystem::FView& V = Lobby.GetView();
+	const FLinearColor Text(0.92f, 0.93f, 0.90f, 0.95f);
+	const FLinearColor Dim(0.6f, 0.62f, 0.6f, 0.9f);
+	const FLinearColor Ours(0.35f, 0.7f, 1.0f, 0.95f);
+	const FLinearColor Theirs(1.0f, 0.45f, 0.3f, 0.95f);
+	const float X = Canvas->ClipX * 0.5f - 300.0f * Scale;
+	float Y = 120.0f * Scale;
+	const float Line = 22.0f * Scale;
+	DrawRect(FLinearColor(0.02f, 0.025f, 0.03f, 0.8f), X - 20.0f * Scale, Y - 20.0f * Scale, 640.0f * Scale, 520.0f * Scale);
+	if (!Lobby.InLobby() || V.Code.IsEmpty())
+	{
+		DrawText(TEXT("LOBBY"), Text, X, Y, Font, Scale * 1.4f);
+		Y += Line * 2.0f;
+		DrawText(TEXT("Open the console (~) and type:"), Dim, X, Y, Small, Scale);
+		Y += Line;
+		DrawText(TEXT("  TfpsHost            create a lobby and get an invite code"), Text, X, Y, Small, Scale);
+		Y += Line;
+		DrawText(TEXT("  TfpsJoin <CODE>     join a friend's lobby"), Text, X, Y, Small, Scale);
+	}
+	else
+	{
+		DrawText(FString::Printf(TEXT("INVITE CODE  %s"), *V.Code), Text, X, Y, Font, Scale * 1.4f);
+		Y += Line * 2.0f;
+		DrawText(FString::Printf(TEXT("%s  %s  %dv%d  rounds %d  round %.0fs  prep %.0fs  %d Hz%s"), *V.Map, *V.Mode, V.TeamSize, V.TeamSize,
+			V.RoundsToWin, V.RoundTime, V.PrepTime, V.TickRate, V.bFriendlyFire ? TEXT("  friendly fire") : TEXT("")), Dim, X, Y, Small, Scale);
+		Y += Line * 1.5f;
+		for (int32 Squad = 0; Squad < 2; ++Squad)
+		{
+			DrawText(FString::Printf(TEXT("SQUAD %c"), Squad == 0 ? TEXT('A') : TEXT('B')), Squad == 0 ? Ours : Theirs, X + Squad * 300.0f * Scale, Y, Small, Scale);
+		}
+		float RowY[2] = {Y + Line, Y + Line};
+		for (const UTfpsLobbySubsystem::FMember& M : V.Members)
+		{
+			const int32 S = FMath::Clamp(M.Squad, 0, 1);
+			const FString Tag = M.Id == V.Host ? TEXT(" (host)") : (M.bReady ? TEXT(" ready") : TEXT(""));
+			DrawText(M.Name + Tag, M.Id == V.You ? Text : Dim, X + S * 300.0f * Scale, RowY[S], Small, Scale);
+			RowY[S] += Line;
+		}
+		Y = FMath::Max(RowY[0], RowY[1]) + Line;
+		if (V.Status == TEXT("in_game"))
+		{
+			DrawText(FString::Printf(TEXT("Match running on %s"), *V.GameAddress), Ours, X, Y, Small, Scale);
+		}
+		else if (Lobby.IsHost())
+		{
+			DrawText(TEXT("TfpsSet map harbor|villa|consulate   TfpsSet mode defuse|elimination|deathmatch   TfpsSet team_size 1..5"), Dim, X, Y, Small, Scale);
+			Y += Line;
+			DrawText(TEXT("TfpsSquad 0|1   TfpsStart (when everyone is ready)   TfpsLeave"), Dim, X, Y, Small, Scale);
+		}
+		else
+		{
+			DrawText(TEXT("TfpsReady / TfpsUnready   TfpsSquad 0|1   TfpsLeave"), Dim, X, Y, Small, Scale);
+		}
+	}
+	if (!Lobby.GetLastError().IsEmpty())
+	{
+		DrawText(Lobby.GetLastError(), FLinearColor(1.0f, 0.4f, 0.3f, 1.0f), X, 600.0f * Scale, Small, Scale);
+	}
 }

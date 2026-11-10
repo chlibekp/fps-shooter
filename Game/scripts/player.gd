@@ -19,6 +19,9 @@ var _view: Node3D              # view-model root (child of the camera)
 var _weapon: Node3D
 var _weapon_id := -1
 var _team := 0
+var _arms_root: Node3D
+var _arms_rig: TfpsRig
+var _arms_asset := ""
 var _crouch_on := false
 var _prone_on := false
 var _last_weapon_slot := 0
@@ -114,7 +117,8 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 			_weapon = null
 		if id > 0:
 			_weapon = TfpsModels.weapon(TfpsModels.weapon_class(id))
-			TfpsModels.add_arms(_weapon, TfpsModels.weapon_class(id), _team)
+			if not _build_arms():
+				TfpsModels.add_arms(_weapon, TfpsModels.weapon_class(id), _team)
 			for g in _weapon.find_children("*", "GeometryInstance3D", true, false):
 				(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			_weapon.scale = Vector3.ONE * 0.72
@@ -154,6 +158,44 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	pos.y -= equip * 0.25
 	_weapon.position = pos
 	_weapon.rotation_degrees = rot
+	_pose_arms()
+
+
+## First-person arms: the team's skinned operator sleeves and gloves
+## (OperatorAArms / OperatorBArms), shoulders just below the camera, hands
+## placed on the weapon by two-bone IK every frame. False when the asset
+## is not synced (the procedural arms are used instead).
+func _build_arms() -> bool:
+	var asset := "OperatorBArms" if _team == 1 else "OperatorAArms"
+	if _arms_root and _arms_asset == asset:
+		return true
+	if _arms_root:
+		_arms_root.queue_free()
+		_arms_root = null
+		_arms_rig = null
+	var inst := TfpsRig.instance(asset)
+	if inst == null:
+		return false
+	for g in inst.find_children("*", "GeometryInstance3D", true, false):
+		(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_arms_root = inst
+	_arms_asset = asset
+	# The model's eyes (about 1.665 m up, 9 cm forward) near the camera; arms
+	# slightly long, as is usual for a first-person view.
+	_arms_root.scale = Vector3.ONE * 1.12
+	_arms_root.position = Vector3(0, -1.665 * 1.12 + 0.02, 0.09 * 1.12 - 0.17)
+	_view.add_child(_arms_root)
+	_arms_rig = TfpsRig.new(TfpsRig.skeleton_of(_arms_root))
+	return true
+
+
+func _pose_arms() -> void:
+	if _arms_rig == null or _weapon == null:
+		return
+	var r := _arms_rig
+	r.begin()
+	r.hold(_weapon, r.skel.global_transform.affine_inverse())
+	r.commit()
 
 
 ## Where spent casings leave the weapon: the right side of the receiver.

@@ -2,14 +2,14 @@
   "asset": "WeaponCarbine",
   "mesh": "SM_WeaponCarbine",
   "dimensions_m": [
-    0.048,
-    1.0266,
-    0.3375
+    0.0502,
+    0.9395,
+    0.346
   ],
-  "triangles_lod0": 2388,
-  "triangles_lod1": 1074,
+  "triangles_lod0": 17344,
+  "triangles_lod1": 6936,
   "collision_primitives": 0,
-  "texture_size": 512,
+  "texture_size": 1024,
   "files": {
     "BC": "Assets/Exports/WeaponCarbine/T_WeaponCarbine_BC.png",
     "N": "Assets/Exports/WeaponCarbine/T_WeaponCarbine_N.png",
@@ -21,18 +21,18 @@
   },
   "notes": "Weapon model; barrel along +Y (Godot -Z). grip_m / muzzle_m / sight_m in model space (Blender axes).",
   "grip_m": [
-    -0.0,
-    -0.1692,
-    0.1695
+    -0.0029,
+    -0.1277,
+    0.18
   ],
   "muzzle_m": [
-    0.0,
-    0.5158,
-    0.2415
+    -0.0029,
+    0.4723,
+    0.25
   ],
   "sight_m": [
-    -0.0,
-    -0.1192,
-    0.3145
+    -0.0029,
+    -0.0977,
+    0.318
   ]
 }

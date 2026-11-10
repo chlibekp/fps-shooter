@@ -192,6 +192,16 @@ static func procedural_weapon(weapon_class: String) -> Node3D:
 	return root
 
 
+## Where the support (left) hand holds a weapon made by weapon(), in its
+## local space: the handguard, or wrapped around the right hand on a pistol.
+static func support_hand(weapon_root: Node3D) -> Vector3:
+	var muzzle := weapon_root.get_node_or_null("muzzle") as Node3D
+	var m := muzzle.position if muzzle else Vector3(0, 0.04, -0.5)
+	if m.length() < 0.25:
+		return Vector3(-0.03, -0.05, 0.02)
+	return Vector3(0, m.y - 0.04, m.z * 0.55)
+
+
 ## A capsule from `a` to `b` (a forearm, an upper arm).
 static func segment(parent: Node3D, a: Vector3, b: Vector3, radius: float, m: Material, end_radius := -1.0) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()

@@ -1,0 +1,13 @@
+{
+  "asset": "OperatorBArms",
+  "mesh": "SM_OperatorBArms",
+  "triangles_lod0": 12426,
+  "texture_size": 2048,
+  "files": {
+    "BC": "Assets/Exports/OperatorBArms/T_OperatorBArms_BC.png",
+    "N": "Assets/Exports/OperatorBArms/T_OperatorBArms_N.png",
+    "ORM": "Assets/Exports/OperatorBArms/T_OperatorBArms_ORM.png",
+    "fbx_lod0": "Assets/Exports/OperatorBArms/SM_OperatorBArms.fbx"
+  },
+  "notes": "First-person arms: the operator's sleeves and gloves on the full operator rig."
+}

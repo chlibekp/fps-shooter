@@ -472,7 +472,61 @@ def weight_body(body):
 
 
 def material(asset):
-    return tc.painted_material(f"M_{asset}_Proc", grain=0.07, bump_strength=0.3)
+    """Painted material plus cloth detail on fabric (roughness above 0.84):
+    creases from stretched noise and a fine weave, both in the normal bake,
+    and a slightly darker, uneven tone in the folds."""
+    m = tc.painted_material(f"M_{asset}_Proc", grain=0.07, bump_strength=0.25)
+    nt = m.node_tree
+    bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
+    mr = next(n for n in nt.nodes if n.type == 'ATTRIBUTE' and n.attribute_name == "tfps_mr")
+    coord = next(n for n in nt.nodes if n.type == 'TEX_COORD')
+    sep = nt.nodes.new("ShaderNodeSeparateColor")
+    nt.links.new(mr.outputs["Color"], sep.inputs["Color"])
+    cloth = tc.node(nt, "ShaderNodeMapRange")
+    cloth.inputs["From Min"].default_value = 0.8
+    cloth.inputs["From Max"].default_value = 0.86
+    nt.links.new(sep.outputs["Green"], cloth.inputs["Value"])
+    # Creases: noise stretched along the vertical (limbs and torso hang down).
+    mapping = nt.nodes.new("ShaderNodeMapping")
+    mapping.inputs["Scale"].default_value = (1.0, 1.0, 0.35)
+    nt.links.new(coord.outputs["Object"], mapping.inputs["Vector"])
+    folds = tc.node(nt, "ShaderNodeTexNoise")
+    folds.inputs["Scale"].default_value = 9.0
+    folds.inputs["Detail"].default_value = 3.0
+    folds.inputs["Distortion"].default_value = 1.4
+    nt.links.new(mapping.outputs["Vector"], folds.inputs["Vector"])
+    weave = tc.node(nt, "ShaderNodeTexWave")
+    weave.inputs["Scale"].default_value = 260.0
+    weave.inputs["Distortion"].default_value = 2.0
+    nt.links.new(coord.outputs["Object"], weave.inputs["Vector"])
+    height = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY_ADD')
+    nt.links.new(weave.outputs["Fac"], height.inputs[0])
+    height.inputs[1].default_value = 0.08
+    nt.links.new(folds.outputs["Fac"], height.inputs[2])
+    masked = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY')
+    nt.links.new(height.outputs["Value"], masked.inputs[0])
+    nt.links.new(cloth.outputs["Result"], masked.inputs[1])
+    bump = nt.nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.55
+    bump.inputs["Distance"].default_value = 0.004
+    nt.links.new(masked.outputs["Value"], bump.inputs["Height"])
+    old = bsdf.inputs["Normal"].links[0].from_node
+    nt.links.new(bump.outputs["Normal"], old.inputs["Normal"])
+    # Darker in the folds.
+    shade = tc.node(nt, "ShaderNodeMapRange")
+    shade.inputs["To Min"].default_value = 0.8
+    shade.inputs["To Max"].default_value = 1.08
+    nt.links.new(folds.outputs["Fac"], shade.inputs["Value"])
+    shade_mix = tc.node(nt, "ShaderNodeMix", data_type='FLOAT')
+    nt.links.new(cloth.outputs["Result"], shade_mix.inputs["Factor"])
+    shade_mix.inputs[2].default_value = 1.0
+    nt.links.new(shade.outputs["Result"], shade_mix.inputs[3])
+    base_src = bsdf.inputs["Base Color"].links[0].from_socket
+    tint = tc.node(nt, "ShaderNodeVectorMath", operation='SCALE')
+    nt.links.new(base_src, tint.inputs[0])
+    nt.links.new(shade_mix.outputs[0], tint.inputs["Scale"])
+    nt.links.new(tint.outputs["Vector"], bsdf.inputs["Base Color"])
+    return m
 
 
 def build_team(team, colours):
@@ -483,6 +537,8 @@ def build_team(team, colours):
     paint_by(body, lambda co: region(co, colours))
     parts = gear(body, colours)
     weight_body(body)
+    arms = first_person_arms(body, parts, f"SM_{asset}Arms")
+    arms.hide_render = True   # not in the operator preview
     mesh = tc.join([body] + parts, f"SM_{asset}")
     mesh.data.transform(mesh.matrix_world)
     mesh.matrix_world = Matrix.Identity(4)
@@ -501,6 +557,7 @@ def build_team(team, colours):
     mesh.data.materials.append(baked)
     files["fbx_lod0"] = tc.export_fbx([arm, mesh], os.path.join(out_dir, f"SM_{asset}.fbx"))
     files["preview"] = preview(mesh, os.path.join(out_dir, "preview.png"))
+    export_arms(arms, arm, mat, f"{asset}Arms")
     blend_path = os.path.join(tc.REPO, "Assets", "Blender", f"{asset}.blend")
     bpy.ops.wm.save_as_mainfile(filepath=blend_path, compress=True)
     bpy.ops.file.make_paths_relative()
@@ -521,6 +578,63 @@ def build_team(team, colours):
         json.dump(manifest, f, indent=2)
         f.write("\n")
     print("TFPS_ASSET_DONE", json.dumps({"asset": asset, "triangles": manifest["triangles_lod0"]}))
+
+
+ARM_BONES = ("upper_arm", "forearm", "hand")
+
+
+def first_person_arms(body, parts, name):
+    """Sleeves, gloves, cuffs and patches for the first-person view: the
+    arm region of the weighted body plus copies of the gear bound to arm
+    bones, as one mesh (call after weight_body)."""
+    tc.select_only([body])
+    bpy.ops.object.duplicate()
+    arms = bpy.context.active_object
+    bm = bmesh.new()
+    bm.from_mesh(arms.data)
+    keep = lambda co: abs(co.x) > 0.135 and co.z > 0.85 and arm_t(co) > -0.12  # noqa: E731
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if not all(keep(v.co) for v in f.verts)], context='FACES')
+    bm.to_mesh(arms.data)
+    bm.free()
+    extra = []
+    for o in parts:
+        if any(g.name.split(".")[0] in ARM_BONES for g in o.vertex_groups):
+            tc.select_only([o])
+            bpy.ops.object.duplicate()
+            extra.append(bpy.context.active_object)
+    arms = tc.join([arms] + extra, name)
+    arms.data.transform(arms.matrix_world)
+    arms.matrix_world = Matrix.Identity(4)
+    return arms
+
+
+def export_arms(arms, rig, mat, asset):
+    arms.hide_render = False
+    tc.shade_auto_smooth(arms, 60.0)
+    tc.uv_unwrap(arms, 0.002)
+    arms.data.materials.clear()
+    arms.data.materials.append(mat)
+    mod = arms.modifiers.new("Armature", 'ARMATURE')
+    mod.object = rig
+    arms.parent = rig
+    out_dir = os.path.join(tc.REPO, "Assets", "Exports", asset)
+    files, bc, nrm, orm = tc.bake_textures(arms, mat, out_dir, asset)
+    baked = tc.make_baked_material(asset, bc, nrm, orm)
+    arms.data.materials.clear()
+    arms.data.materials.append(baked)
+    files["fbx_lod0"] = tc.export_fbx([rig, arms], os.path.join(out_dir, f"SM_{asset}.fbx"))
+    manifest = {
+        "asset": asset,
+        "mesh": f"SM_{asset}",
+        "triangles_lod0": tc.triangle_count(arms),
+        "texture_size": tc.TEX_SIZE,
+        "files": files,
+        "notes": "First-person arms: the operator's sleeves and gloves on the full operator rig.",
+    }
+    import json
+    with open(os.path.join(out_dir, "manifest.json"), "w", newline="\n") as f:
+        json.dump(manifest, f, indent=2)
+        f.write("\n")
 
 
 def decimate(o, target_tris):

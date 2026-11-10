@@ -2,14 +2,14 @@
   "asset": "WeaponShotgun",
   "mesh": "SM_WeaponShotgun",
   "dimensions_m": [
-    0.044,
-    1.075,
-    0.1886
+    0.046,
+    1.11,
+    0.1863
   ],
-  "triangles_lod0": 1196,
-  "triangles_lod1": 538,
+  "triangles_lod0": 4740,
+  "triangles_lod1": 1888,
   "collision_primitives": 0,
-  "texture_size": 512,
+  "texture_size": 1024,
   "files": {
     "BC": "Assets/Exports/WeaponShotgun/T_WeaponShotgun_BC.png",
     "N": "Assets/Exports/WeaponShotgun/T_WeaponShotgun_N.png",
@@ -22,17 +22,17 @@
   "notes": "Weapon model; barrel along +Y (Godot -Z). grip_m / muzzle_m / sight_m in model space (Blender axes).",
   "grip_m": [
     0.0,
-    -0.1225,
-    0.1046
+    -0.135,
+    0.0943
   ],
   "muzzle_m": [
     0.0,
-    0.5375,
-    0.1696
+    0.555,
+    0.1493
   ],
   "sight_m": [
     0.0,
-    0.1775,
-    0.1886
+    0.165,
+    0.1763
   ]
 }

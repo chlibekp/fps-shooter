@@ -2,14 +2,14 @@
   "asset": "WeaponSMG",
   "mesh": "SM_WeaponSMG",
   "dimensions_m": [
-    0.053,
-    0.625,
-    0.357
+    0.0671,
+    0.6285,
+    0.356
   ],
-  "triangles_lod0": 1964,
-  "triangles_lod1": 882,
+  "triangles_lod0": 8452,
+  "triangles_lod1": 3380,
   "collision_primitives": 0,
-  "texture_size": 512,
+  "texture_size": 1024,
   "files": {
     "BC": "Assets/Exports/WeaponSMG/T_WeaponSMG_BC.png",
     "N": "Assets/Exports/WeaponSMG/T_WeaponSMG_N.png",
@@ -21,18 +21,18 @@
   },
   "notes": "Weapon model; barrel along +Y (Godot -Z). grip_m / muzzle_m / sight_m in model space (Blender axes).",
   "grip_m": [
-    0.0035,
-    -0.0025,
-    0.2
+    -0.0076,
+    -0.0582,
+    0.188
   ],
   "muzzle_m": [
-    0.0035,
-    0.3125,
-    0.255
+    -0.0076,
+    0.3167,
+    0.248
   ],
   "sight_m": [
-    0.0035,
-    0.0375,
-    0.334
+    -0.0076,
+    -0.0282,
+    0.328
   ]
 }

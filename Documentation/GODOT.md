@@ -20,6 +20,7 @@ else from the server's snapshots.
 | `scripts/props.gd` | Blender props over matching map solids, and gadget models (`Scripts/godot/sync_assets.sh` copies them into `Game/assets`) |
 | `scripts/effects.gd` | Tracers, muzzle flashes, spent casings, impacts per surface, bullet holes, explosions, breaking, flashbangs, volumetric smoke |
 | `scripts/audio.gd` | 3D audio from the native synthesiser |
+| `scripts/rig.gd` | Procedural skeleton posing: bone aim, two-bone IK, hands on a weapon |
 | `scripts/hud.gd` | HUD |
 | `scripts/menu.gd`, `scripts/lobby_client.gd`, `scripts/settings.gd`, `scripts/controls.gd` | Menus, lobby service client, settings, key bindings |
 | `scripts/local_services.gd` | Starts the bundled server, bots and lobby (Practice, hosting) |
@@ -134,7 +135,6 @@ They take a screenshot with scripted input, then quit.
 
 ## Not done yet
 
-* Operators are skinned, but their skeleton is posed procedurally (no
-  animation clips); first-person arms are simple procedural shapes in the
-  team colour.
+* Operators and first-person arms are skinned, but their skeletons are
+  posed procedurally (`scripts/rig.gd`: IK, no animation clips).
 * Nothing has been played on a GPU, on Windows or on macOS yet.

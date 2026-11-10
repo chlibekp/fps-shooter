@@ -33,13 +33,7 @@ var _skinned := false
 
 # Skinned character.
 var _char: Node3D
-var _skel: Skeleton3D
-var _bone := {}             # name -> index
-var _rest_local: Array[Transform3D] = []
-var _pose: Array[Transform3D] = []   # this frame's pose, skeleton space
-var _len := {}              # limb lengths from the rest pose
-
-static var _scenes := {}
+var _rig: TfpsRig
 
 
 func _init() -> void:
@@ -68,138 +62,46 @@ func _make_label() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_skinned(t: int) -> void:
-	var asset := "OperatorB" if t == 1 else "OperatorA"
 	if _char:
 		_char.queue_free()
-	if not _scenes.has(asset):
-		_scenes[asset] = load("res://assets/%s/SM_%s.fbx" % [asset, asset])
-	_char = (_scenes[asset] as PackedScene).instantiate()
+	_char = TfpsRig.instance("OperatorB" if t == 1 else "OperatorA")
 	add_child(_char)
-	var mat := TfpsProps.material(asset)
-	for n in _char.find_children("*", "MeshInstance3D", true, false):
-		var mi := n as MeshInstance3D
-		mi.material_override = mat
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	_skel = _char.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
-	_bone.clear()
-	_rest_local.clear()
-	_pose.clear()
-	for i in _skel.get_bone_count():
-		_bone[_skel.get_bone_name(i)] = i
-		_rest_local.append(_skel.get_bone_rest(i))
-		_pose.append(_skel.get_bone_global_rest(i))
-	for side in ["L", "R"]:
-		_len["upper_arm." + side] = _rest_dist("upper_arm." + side, "forearm." + side)
-		_len["forearm." + side] = _rest_dist("forearm." + side, "hand." + side)
-		_len["thigh." + side] = _rest_dist("thigh." + side, "shin." + side)
-		_len["shin." + side] = _rest_dist("shin." + side, "foot." + side)
-
-
-func _rest_dist(a: String, b: String) -> float:
-	return _skel.get_bone_global_rest(_bone[a]).origin.distance_to(_skel.get_bone_global_rest(_bone[b]).origin)
-
-
-## Starts a bone at its rest placement under the (already posed) parent.
-func _base(i: int) -> Transform3D:
-	var p := _skel.get_bone_parent(i)
-	return (_pose[p] if p >= 0 else Transform3D.IDENTITY) * _rest_local[i]
-
-
-## Poses bone `name` from its rest placement, rotated by `rot` (skeleton
-## space, about the bone's origin), and stores it.
-func _rotate(name: String, rot: Basis, offset := Vector3.ZERO) -> void:
-	var i: int = _bone[name]
-	var b := _base(i)
-	b.basis = rot * b.basis
-	b.origin += offset
-	_pose[i] = b
-
-
-## Poses bone `name` so that it points (its +Y) along `dir` (skeleton space).
-func _aim(name: String, dir: Vector3) -> void:
-	var i: int = _bone[name]
-	var b := _base(i)
-	var cur := b.basis.y.normalized()
-	if dir.length() > 0.0001 and cur.dot(dir.normalized()) < 0.99999:
-		b.basis = Basis(Quaternion(cur, dir.normalized())) * b.basis
-	_pose[i] = b
-
-
-func _keep(name: String) -> void:
-	_pose[_bone[name]] = _base(_bone[name])
-
-
-## Two-bone limb: aims `upper` and `lower` so the end reaches `target`,
-## bending toward `pole` (all skeleton space).
-func _limb(upper: String, lower: String, target: Vector3, pole: Vector3) -> void:
-	_keep(upper)
-	var root := _pose[_bone[upper]].origin
-	var elbow := _elbow(root, target, pole, _len[upper], _len[lower])
-	_aim(upper, elbow - root)
-	_aim(lower, target - elbow)
-
-
-func _commit() -> void:
-	for i in _pose.size():
-		var p := _skel.get_bone_parent(i)
-		var local := (_pose[p].affine_inverse() if p >= 0 else Transform3D.IDENTITY) * _pose[i]
-		_skel.set_bone_pose_position(i, local.origin)
-		_skel.set_bone_pose_rotation(i, local.basis.get_rotation_quaternion())
+	_rig = TfpsRig.new(TfpsRig.skeleton_of(_char))
 
 
 func _animate_skinned(stride: float, on_ground: bool) -> void:
-	# Skeleton space is the model's own: X right of the model's left... the
-	# model faces +Y with Z up; convert node-space points with this.
-	var to_skel := _skel.global_transform.affine_inverse()
+	# Skeleton space is the model's own (faces +Y, Z up, right side +X).
+	var r := _rig
+	var to_skel := r.skel.global_transform.affine_inverse()
 	var fwd := Vector3(0, 1, 0)
 	var up := Vector3(0, 0, 1)
-	# Hips: lowered by crouching and the walk bounce.
+	r.begin()
+	# Hips lowered by crouching and the walk bounce; spine lean; pitch shared
+	# by chest, neck and head.
 	var drop := _crouch * 0.38 + absf(sin(_phase)) * 0.03 * stride
-	_rotate("hips", Basis(Vector3.RIGHT, -_crouch * 0.12), -up * drop)
-	_rotate("spine", Basis(fwd, _lean * 0.18) * Basis(Vector3.RIGHT, _crouch * 0.25))
+	r.rotate("hips", Basis(Vector3.RIGHT, -_crouch * 0.12), -up * drop)
+	r.rotate("spine", Basis(fwd, _lean * 0.18) * Basis(Vector3.RIGHT, _crouch * 0.25))
 	var pitch := deg_to_rad(_pitch)
-	_rotate("chest", Basis(fwd, _lean * 0.18) * Basis(Vector3.RIGHT, pitch * 0.35))
-	_rotate("neck", Basis(Vector3.RIGHT, pitch * 0.25))
-	_rotate("head", Basis(Vector3.RIGHT, pitch * 0.3))
+	r.rotate("chest", Basis(fwd, _lean * 0.18) * Basis(Vector3.RIGHT, pitch * 0.35))
+	r.rotate("neck", Basis(Vector3.RIGHT, pitch * 0.25))
+	r.rotate("head", Basis(Vector3.RIGHT, pitch * 0.3))
 	# Legs: feet step forward and back, lifting on the forward swing; IK
-	# keeps them planted otherwise (so crouching bends the knees).
-	for side in ["L", "R"]:
-		var sgn := 1.0 if side == "R" else -1.0   # the model's right is +X
-		var ph := _phase + (0.0 if side == "L" else PI)
-		var ankle_rest := _skel.get_bone_global_rest(_bone["foot." + side]).origin
-		var step := sin(ph) * 0.28 * stride
-		var lift := maxf(0.0, cos(ph)) * 0.12 * stride + (0.0 if on_ground else 0.18)
-		var ankle := ankle_rest + fwd * (step + _crouch * 0.05) + up * lift + Vector3(sgn * _crouch * 0.05, 0, 0)
-		var hip := _base(_bone["thigh." + side]).origin
-		_limb("thigh." + side, "shin." + side, ankle, hip + fwd * 0.6 + up * -0.1)
-		_keep("foot." + side)
-		_pose[_bone["foot." + side]].basis = _skel.get_bone_global_rest(_bone["foot." + side]).basis
-		_keep("toe." + side)
-	# Arms: hands on the weapon.
-	_keep("clavicle.L")
-	_keep("clavicle.R")
-	var right_hand: Vector3
-	var left_hand: Vector3
-	if _weapon:
-		right_hand = to_skel * _weapon.global_position
-		var muzzle := _weapon.get_node_or_null("muzzle") as Node3D
-		var m := muzzle.position if muzzle else Vector3(0, 0.04, -0.5)
-		var pistol := m.length() < 0.25
-		var grip_left := Vector3(-0.03, -0.05, 0.02) if pistol else Vector3(0, m.y - 0.04, m.z * 0.55)
-		left_hand = to_skel * _weapon.to_global(grip_left)
-	else:
-		right_hand = _pose[_bone["chest"]].origin + Vector3(0.28, 0.1, -0.15)
-		left_hand = _pose[_bone["chest"]].origin + Vector3(-0.28, 0.1, -0.15)
+	# keeps them planted otherwise, so crouching bends the knees.
 	for side in ["L", "R"]:
 		var sgn := 1.0 if side == "R" else -1.0
-		var target := left_hand if side == "L" else right_hand
-		var shoulder := _base(_bone["upper_arm." + side]).origin
-		# Reach the palm, not the wrist: stop a hand's width short.
-		var to_t := target - shoulder
-		target = shoulder + to_t.normalized() * maxf(0.05, to_t.length() - 0.06)
-		_limb("upper_arm." + side, "forearm." + side, target, shoulder + Vector3(sgn * 0.5, -0.25, -0.6))
-		_keep("hand." + side)
-	_commit()
+		var ph := _phase + (0.0 if side == "L" else PI)
+		var step := sin(ph) * 0.28 * stride
+		var lift := maxf(0.0, cos(ph)) * 0.12 * stride + (0.0 if on_ground else 0.18)
+		var ankle := r.rest_origin("foot." + side) + fwd * (step + _crouch * 0.05) + up * lift + Vector3(sgn * _crouch * 0.05, 0, 0)
+		var hip := r.base("thigh." + side).origin
+		r.limb("thigh." + side, "shin." + side, ankle, hip + fwd * 0.6 - up * 0.1)
+		r.orient("foot." + side, r.rest_basis("foot." + side))
+	# Arms: hands on the weapon, or hanging relaxed without one.
+	r.keep("clavicle.L")
+	r.keep("clavicle.R")
+	if _weapon:
+		r.hold(_weapon, to_skel)
+	r.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -350,7 +252,7 @@ func _animate(delta: float, flags: int) -> void:
 	rotation.x = -_prone * 1.45
 	rotation.z = _dead * 1.4
 	if _skinned:
-		if _skel:
+		if _rig:
 			_animate_skinned(stride, on_ground)
 	else:
 		_animate_primitive(flags, stride)
@@ -374,15 +276,3 @@ func _animate_primitive(flags: int, stride: float) -> void:
 	_weapon_pivot.rotation.x = deg_to_rad(_pitch)
 	if _prone > 0.01 or _dead > 0.01:
 		_hips.position.y = lerpf(_hips.position.y, 0.2, maxf(_prone, _dead))
-
-
-
-static func _elbow(shoulder: Vector3, hand: Vector3, pole: Vector3, a: float, b: float) -> Vector3:
-	var d := hand - shoulder
-	var dist := clampf(d.length(), 0.05, a + b - 0.001)
-	var dir := d.normalized() if d.length() > 0.001 else Vector3.DOWN
-	var cos_s := clampf((a * a + dist * dist - b * b) / (2.0 * a * dist), -1.0, 1.0)
-	var bend := pole - shoulder
-	bend -= dir * bend.dot(dir)
-	bend = bend.normalized() if bend.length() > 0.001 else Vector3.DOWN
-	return shoulder + dir * a * cos_s + bend * a * sqrt(1.0 - cos_s * cos_s)

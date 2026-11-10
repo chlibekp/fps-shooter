@@ -78,11 +78,24 @@ one texture set:
 
 ## Weapons
 
-`build_weapons.py` builds the five weapons from bevelled extruded
-silhouettes and cylinders. Optics are open tubes, so the eye looks through
-them when aiming. Each weapon is modelled along +X, then turned so the
-barrel points along Blender +Y (Godot -Z). The manifest adds three points
-in the exported model's space (metres, Blender axes):
+`build_weapons.py` builds the five weapons at real-world proportions:
+* **Rails and handguards:** Picatinny rails with teeth every 10 mm, and
+  octagonal free-float handguards with M-LOK slots cut through (Boolean).
+* **Muzzles:** slotted flash hiders and a ported muzzle brake.
+* **Receivers:** ejection ports, forward assist, charging handles,
+  selectors, pins and trigger guards.
+* **Furniture:** curved ribbed magazines, and adjustable stocks on buffer
+  tubes.
+* **Optics:** open-tube red dots and a scope with rings and turrets, so
+  the eye looks through them when aiming.
+* **Finishes:** anodised aluminium, parkerised and blued steel, polymer,
+  FDE and OD furniture. Worn parts show lighter bare metal on convex edges
+  (curvature), and a bevel shader rounds every edge in the baked normal
+  map. Textures are 1024 px.
+
+Each weapon is modelled along +X, then turned so the barrel points along
+Blender +Y (Godot -Z). The manifest adds three points in the exported
+model's space (metres, Blender axes):
 
 | Field | Point |
 |-------|-------|
@@ -116,6 +129,11 @@ Build one weapon only: `TFPS_WEAPON=WeaponPistol python3 Tools/AssetPipeline/bui
   facing +Y. The body is weighted by distance to the bone segments (three
   nearest); gear is bound rigidly to one bone.
 * **Textures:** 2048 px. One FBX holds the mesh and the armature.
+* **Cloth:** fabric regions (roughness above 0.84) get creases and a fine
+  weave in the normal bake, and darker tone in the folds.
+* **First-person arms:** `Operator{A,B}Arms` holds the sleeves, gloves,
+  cuffs and patches cut from the same weighted body, on the same rig. It
+  has its own 2048 px texture set, for close viewing.
 
 `TfpsOperator` poses the skeleton procedurally:
 * the hips drop and the spine leans;

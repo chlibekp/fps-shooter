@@ -8,6 +8,7 @@ static var quality := 2
 
 var map_name := ""
 var solid_nodes := {}          # solid index -> MeshInstance3D (intact solids)
+var props := {}                # solid index -> prop drawn instead of the box (Blender asset)
 var broken := {}               # solid index -> MultiMeshInstance3D (cells)
 var cell_slot := {}            # cell id -> [solid index, instance index]
 var net: TfpsNet
@@ -21,6 +22,7 @@ func build(world: Dictionary, p_net: TfpsNet) -> void:
 	for c in get_children():
 		c.queue_free()
 	solid_nodes.clear()
+	props.clear()
 	broken.clear()
 	cell_slot.clear()
 	_solids = world.get("solids", [])
@@ -71,6 +73,16 @@ func _add_solid(s: Dictionary) -> void:
 	_style(mi, mat, tag, box)
 	add_child(mi)
 	solid_nodes[int(s["index"])] = mi
+	# Dress it with a Blender asset when one matches (the box stays for breaking).
+	var prop := TfpsProps.for_solid(tag, box)
+	if prop != null:
+		add_child(prop)
+		props[int(s["index"])] = prop
+		mi.visible = false
+	elif mat == TfpsMaterials.GLASS and tag == "window_glass":
+		var frame := TfpsProps.window_frame(box)
+		if frame != null:
+			add_child(frame)
 
 
 func _style(gi: GeometryInstance3D, mat: int, tag: String, box: AABB) -> void:
@@ -144,6 +156,9 @@ func _break_solid(index: int) -> void:
 	if solid_nodes.has(index):
 		solid_nodes[index].queue_free()
 		solid_nodes.erase(index)
+	if props.has(index):
+		props[index].queue_free()
+		props.erase(index)
 
 
 ## A wall panel was reinforced: its surface becomes steel plate.

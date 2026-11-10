@@ -169,6 +169,14 @@ func _update_gadgets(list: Array) -> void:
 
 
 func _gadget_model(kind: int) -> Node3D:
+	# The Blender models when they were imported (Game/assets), else primitives.
+	var asset: String = {0: "FragGrenade", 1: "FragGrenade", 2: "FragGrenade", 3: "BreachCharge", 4: "ReconDrone", 5: "WallCamera"}.get(kind, "")
+	if asset != "":
+		var model := TfpsProps.instance(asset)
+		if model != null:
+			var holder := Node3D.new()
+			holder.add_child(model)
+			return holder
 	var n := Node3D.new()
 	var dark := TfpsModels.mat("gadget_dark", Color(0.12, 0.13, 0.12), 0.5, 0.4)
 	var olive := TfpsModels.mat("gadget_olive", Color(0.3, 0.33, 0.22), 0.7)

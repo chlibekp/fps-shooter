@@ -13,6 +13,7 @@ DIR="$PRESET"
 mkdir -p "$REPO_ROOT/Game/defs/maps"
 cp "$REPO_ROOT"/Shared/Definitions/maps/*.json "$REPO_ROOT/Game/defs/maps/"
 cp "$REPO_ROOT"/Shared/Definitions/weapons.json "$REPO_ROOT"/Shared/Definitions/gadgets.json "$REPO_ROOT/Game/defs/"
+"$REPO_ROOT/Scripts/godot/sync_assets.sh" > /dev/null
 rm -rf "$REPO_ROOT/build/export/$DIR"
 mkdir -p "$REPO_ROOT/build/export/$DIR"
 "$REPO_ROOT/Scripts/godot/godot.sh" --headless --path "$REPO_ROOT/Game" --import > /dev/null 2>&1 || true

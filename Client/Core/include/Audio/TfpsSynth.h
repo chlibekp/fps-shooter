@@ -58,6 +58,7 @@ enum class Cue : uint8_t
 	BarricadePlace,
 	DoorOpen,
 	DoorClose,
+	BulletWhiz,
 	// Feedback and interface
 	HitMarker,
 	KillConfirm,

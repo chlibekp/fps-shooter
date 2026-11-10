@@ -627,6 +627,17 @@ Buf Synthesize(Cue C, Rng& R)
 		Noise(B, R, 0.07f, 0.012f, BP(2400.0f, 2.0f), 0.3f, 0.0f, 0.004f);
 		return B;
 	}
+	case Cue::BulletWhiz:
+	{
+		// A supersonic round passing close: a sharp crack (the shock wave)
+		// then a short falling hiss.
+		Buf B = Make(0.35f);
+		Noise(B, R, 0.0f, 0.004f, HP(3000.0f, 0.7f), 1.0f, 0.0f, 0.0012f);
+		Noise(B, R, 0.002f, 0.03f, BP(1800.0f * R.Vary(0.15f), 1.5f), 0.5f, 0.0f, 0.008f);
+		Tone(B, 0.004f, 0.25f, 2600.0f * R.Vary(0.1f), 700.0f, 0.06f, 0.18f, 0.002f, 0.06f);
+		Noise(B, R, 0.004f, 0.3f, BP(1200.0f, 0.8f), 0.25f, 0.003f, 0.07f);
+		return B;
+	}
 	case Cue::HitMarker:
 	{
 		Buf B = Make(0.06f);
@@ -722,6 +733,7 @@ const CueInfo kInfo[kCueCount] = {
 	{"barricade_place", false, true, 30.0f, 1, 0.65f},
 	{"door_open", false, true, 30.0f, 1, 0.6f},
 	{"door_close", false, true, 35.0f, 1, 0.75f},
+	{"bullet_whiz", false, false, 0.0f, 3, 0.7f},
 	{"hit_marker", false, false, 0.0f, 1, 0.5f},
 	{"kill_confirm", false, false, 0.0f, 1, 0.5f},
 	{"round_start", false, false, 0.0f, 1, 0.55f},

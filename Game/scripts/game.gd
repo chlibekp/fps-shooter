@@ -265,6 +265,29 @@ func _handle_shots(shots: Array) -> void:
 			effects.shell(player.ejection_position(), throw + TfpsNet.vec(hud.state.get("velocity", [0, 0, 0])), wid == 5)
 		else:
 			audio.play_at(cue, origin)
+			_suppress(sh, origin, end)
+
+
+## An enemy round passing close to the head suppresses: vignette, shake and
+## a supersonic crack (only for rounds that came near, not hits on us).
+func _suppress(sh: Dictionary, origin: Vector3, end: Vector3) -> void:
+	var shooter = operators.get(int(sh.get("shooter", -1)))
+	if shooter != null and (shooter as TfpsOperator).team == int(hud.state.get("side", -1)):
+		return
+	var head := player.camera.global_position
+	var seg := end - origin
+	if seg.length() < 0.01:
+		return
+	var t := clampf((head - origin).dot(seg) / seg.length_squared(), 0.0, 1.0)
+	if t <= 0.0 or t >= 1.0 and origin.distance_to(end) < origin.distance_to(head):
+		return   # the round stopped before reaching us
+	var d := head.distance_to(origin + seg * t)
+	if d > 2.0 or d < 0.05:
+		return
+	var k := 1.0 - d / 2.0
+	hud.suppression = minf(1.0, hud.suppression + 0.35 + 0.4 * k)
+	effects.shake = maxf(effects.shake, 0.25 * k)
+	audio.play_2d(audio.cue("bullet_whiz"), 0.5 + 0.5 * k)
 
 
 func _handle_events(events: Array) -> void:

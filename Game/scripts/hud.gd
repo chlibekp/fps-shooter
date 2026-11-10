@@ -21,7 +21,9 @@ var flash_time := -10.0
 var flash_strength := 0.0
 var flash_hold := 3.0
 var center_message := ""
-var prompt := ""                 # interaction hint under the crosshair ("F  OPEN DOOR")
+var prompt := ""
+var suppression := 0.0           # 0..1, from enemy rounds passing close; fades
+var _vignette: GradientTexture2D                 # interaction hint under the crosshair ("F  OPEN DOOR")
 var remote_view := ""           # "DRONE" / "CAMERA" while viewing through one
 var spots := {}                  # player id -> {position, until}
 var objectives: Array = []
@@ -39,7 +41,8 @@ func _now() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	suppression = move_toward(suppression, 0.0, delta * 0.55)
 	queue_redraw()
 
 
@@ -188,6 +191,20 @@ func _draw() -> void:
 		var st: Dictionary = state.get("stats", {})
 		_text("ping %.0f ms   tick %d Hz   corrections %d   in %.0f kB   out %.0f kB" % [float(st.get("rtt_ms", 0)), int(st.get("tick_rate", 0)),
 			int(st.get("corrections", 0)), float(st.get("bytes_in", 0)) / 1024.0, float(st.get("bytes_out", 0)) / 1024.0], Vector2(30, 30) * s, int(14 * s), DIM)
+	# Suppression: dark, slightly blurred-looking edges that close in.
+	if suppression > 0.01:
+		if _vignette == null:
+			_vignette = GradientTexture2D.new()
+			_vignette.fill = GradientTexture2D.FILL_RADIAL
+			_vignette.fill_from = Vector2(0.5, 0.5)
+			_vignette.fill_to = Vector2(1.0, 0.5)
+			var g := Gradient.new()
+			g.set_color(0, Color(0, 0, 0, 0))
+			g.set_offset(0, 0.35)
+			g.set_color(1, Color(0.02, 0.02, 0.02, 0.9))
+			_vignette.gradient = g
+		draw_texture_rect(_vignette, Rect2(Vector2.ZERO, vs), false, Color(1, 1, 1, clampf(suppression, 0.0, 1.0) * 0.85))
+		draw_rect(Rect2(Vector2.ZERO, vs), Color(0.35, 0.35, 0.33, suppression * 0.12))
 	# Flashbang whiteout (drawn last, over everything).
 	var ft := now - flash_time
 	if ft < flash_hold + 1.5:

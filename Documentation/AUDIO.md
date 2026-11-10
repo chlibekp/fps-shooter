@@ -21,7 +21,7 @@ The synthesiser is engine-independent C++17 and deterministic:
 | Weapons | rifle, SMG, marksman rifle, pistol and shotgun shots (3–4 variations each), dry fire, magazine out / in, bolt |
 | Movement | footsteps on concrete, wood, metal and dirt (6 variations each), landing |
 | Impacts | concrete, wood, metal, glass, flesh |
-| Destruction and gadgets | glass / wood / wall breaking, explosion, flashbang, tinnitus, smoke hiss, grenade bounce, drone motor (seamless loop), device beep, reinforcement, barricade, door opening (latch and hinge creak) and closing (slam and latch) |
+| Destruction and gadgets | glass / wood / wall breaking, explosion, flashbang, tinnitus, smoke hiss, grenade bounce, drone motor (seamless loop), device beep, reinforcement, barricade, door opening (latch and hinge creak) and closing (slam and latch), near-miss crack and whiz (suppression) |
 | Feedback | hit marker, kill confirmation, round start / win / loss, menu move / accept |
 
 Each cue carries:

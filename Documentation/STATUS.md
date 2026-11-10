@@ -104,7 +104,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Hit confirm, damage direction, kill feed messages | ✅ | |
 | Bullet penetration, material resistance | ✅ | Phase 3: thickness × resistance against a per-weapon budget, damage loss per layer |
 | Armour classes | ✅ | Light (90 HP, +10 % speed), medium (100 HP), heavy (120 HP, -10 % speed), chosen in Settings (or `--armor`), sent at connect (protocol v10) and kept in the replicated movement state, so prediction moves at the same speed (C++ mirror; conformance unchanged for medium). Unit test; HUD shows the class |
-| Suppression effects | ❌ | |
+| Suppression effects | ✅ client | An enemy round passing within 2 m of the head (not one that stopped short) darkens the screen edges, shakes the view and plays a synthesised supersonic crack and whiz; it fades over about 2 s. Visual and audio only (no gameplay effect) |
 | Attachments (affect recoil/spread) | ❌ | The data model has room for multipliers |
 | Weapon inspection, shell ejection, weapon-specific animations, sound variation | 🟡 | Per-weapon gunshots with 3–4 variations each, reload and dry-fire sounds; spent casings eject from the local weapon (cosmetic, no collision); no inspection or weapon animations |
 | Muzzle flash, tracers, impacts | 🟡 🔒 | Pooled engine-shape placeholders plus a point-light flash (`ATfpsShotFx`) |
@@ -120,7 +120,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Blender asset pipeline | ✅ Procedural and headless. 17 assets (props, gadgets and weapons with LOD1), UCX collision and baked PBR maps: 3 props (crate, jersey barrier, container); a map kit (wooden door, window frame, brick wall panel); 4 gadgets (recon drone, breaching charge, frag grenade, wall camera); 5 weapons; a skinned operator for each team. Multi-surface paint system with per-texel metallic. |
 | Blender props in the Godot client | ✅ | Crates, barriers, containers, doors and window frames dress matching map solids; gadgets use their models. Walls and floors stay procedural surfaces |
 | Weapon models | 🟡 Five detailed Blender weapons (rails, M-LOK slots, flash hiders, ejection ports, curved magazines, adjustable stocks, open optics, worn anodised and steel finishes) for the view model and other players; aim reticle. No animated weapon parts (bolt, slide, magazine) |
-| Audio | 🟡 Procedural synthesis (`tfps::audio`, 40 cues, 100 variations; unit tested, rendered to WAV). Godot plays it in 3D (AudioStreamPlayer3D, reverb bus): gunshots, impacts by surface, footsteps by floor material, landing, reloads, destruction, explosions, flashbang and tinnitus, drone motor, feedback and round sounds. Not listened to yet (no audio device here); no occlusion. |
+| Audio | 🟡 Procedural synthesis (`tfps::audio`, 41 cues, 103 variations; unit tested, rendered to WAV). Godot plays it in 3D (AudioStreamPlayer3D, reverb bus): gunshots, impacts by surface, footsteps by floor material, landing, reloads, destruction, explosions, flashbang and tinnitus, drone motor, feedback and round sounds. Not listened to yet (no audio device here); no occlusion. |
 
 ## Destruction (spec §5) — Phase 3
 

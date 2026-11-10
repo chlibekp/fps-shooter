@@ -43,6 +43,9 @@ func _initialize() -> void:
 	cam.fov = 50
 	root3d.add_child(cam)
 	cam.look_at_from_position(Vector3(0.2, 1.4, 4.2), Vector3(0, 0.95, 0))
+	if args.size() > 2:   # close-up: "x,y,z,tx,ty,tz"
+		var c := (args[2] as String).split(",")
+		cam.look_at_from_position(Vector3(float(c[0]), float(c[1]), float(c[2])), Vector3(float(c[3]), float(c[4]), float(c[5])))
 	var poses := [
 		{"x": -1.6, "team": 0, "flags": 0x1 | 0x8 | 0x20, "pitch": 0.0, "weapon": 1, "move": 0.0},   # reloading
 		{"x": -0.5, "team": 0, "flags": 0x1 | 0x8, "pitch": -15.0, "weapon": 4, "move": 3.0},

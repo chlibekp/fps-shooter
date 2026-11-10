@@ -488,30 +488,88 @@ def material(asset):
     cloth.inputs["From Min"].default_value = 0.8
     cloth.inputs["From Max"].default_value = 0.86
     nt.links.new(sep.outputs["Green"], cloth.inputs["Value"])
-    # Creases: noise stretched along the vertical (limbs and torso hang down).
+    # Creases: noise stretched along the vertical (limbs and torso hang
+    # down), sharpened into folds a few millimetres deep.
     mapping = nt.nodes.new("ShaderNodeMapping")
-    mapping.inputs["Scale"].default_value = (1.0, 1.0, 0.35)
+    mapping.inputs["Scale"].default_value = (1.0, 1.0, 0.3)
     nt.links.new(coord.outputs["Object"], mapping.inputs["Vector"])
     folds = tc.node(nt, "ShaderNodeTexNoise")
-    folds.inputs["Scale"].default_value = 9.0
-    folds.inputs["Detail"].default_value = 3.0
-    folds.inputs["Distortion"].default_value = 1.4
+    folds.inputs["Scale"].default_value = 16.0
+    folds.inputs["Detail"].default_value = 4.0
+    folds.inputs["Distortion"].default_value = 2.2
     nt.links.new(mapping.outputs["Vector"], folds.inputs["Vector"])
-    weave = tc.node(nt, "ShaderNodeTexWave")
-    weave.inputs["Scale"].default_value = 110.0
-    weave.inputs["Distortion"].default_value = 2.0
-    nt.links.new(coord.outputs["Object"], weave.inputs["Vector"])
-    height = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY_ADD')
-    nt.links.new(weave.outputs["Fac"], height.inputs[0])
-    height.inputs[1].default_value = 0.04
-    nt.links.new(folds.outputs["Fac"], height.inputs[2])
+    # Ripstop: a 5 mm grid of slightly raised threads.
+    rip = None
+    for axis in ('X', 'Z'):
+        wave = tc.node(nt, "ShaderNodeTexWave")
+        wave.bands_direction = axis
+        wave.inputs["Scale"].default_value = 63.0   # period 0.314 / scale m: about 5 mm
+        wave.inputs["Distortion"].default_value = 0.0
+        nt.links.new(coord.outputs["Object"], wave.inputs["Vector"])
+        sharp = tc.node(nt, "ShaderNodeMapRange")
+        sharp.inputs["From Min"].default_value = 0.85
+        sharp.inputs["From Max"].default_value = 1.0
+        nt.links.new(wave.outputs["Fac"], sharp.inputs["Value"])
+        if rip is None:
+            rip = sharp
+        else:
+            mx = tc.node(nt, "ShaderNodeMath", operation='MAXIMUM')
+            nt.links.new(rip.outputs[0], mx.inputs[0])
+            nt.links.new(sharp.outputs["Result"], mx.inputs[1])
+            rip = mx
+    # MOLLE on the gear (roughness 0.86: vest, pouches, belt): 25 mm webbing
+    # rows slit every 38 mm; the gaps are recessed and darker.
+    gear_lo = tc.node(nt, "ShaderNodeMapRange")
+    gear_lo.inputs["From Min"].default_value = 0.85
+    gear_lo.inputs["From Max"].default_value = 0.855
+    nt.links.new(sep.outputs["Green"], gear_lo.inputs["Value"])
+    gear_hi = tc.node(nt, "ShaderNodeMapRange")
+    gear_hi.inputs["From Min"].default_value = 0.875
+    gear_hi.inputs["From Max"].default_value = 0.87
+    nt.links.new(sep.outputs["Green"], gear_hi.inputs["Value"])
+    gear = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY')
+    nt.links.new(gear_lo.outputs["Result"], gear.inputs[0])
+    nt.links.new(gear_hi.outputs["Result"], gear.inputs[1])
+    rows = tc.node(nt, "ShaderNodeTexWave")
+    rows.bands_direction = 'Z'
+    rows.inputs["Scale"].default_value = 6.3   # 50 mm period: 25 mm webbing, 25 mm gap
+    rows.inputs["Distortion"].default_value = 0.0
+    nt.links.new(coord.outputs["Object"], rows.inputs["Vector"])
+    rows_sq = tc.node(nt, "ShaderNodeMapRange")
+    rows_sq.inputs["From Min"].default_value = 0.45
+    rows_sq.inputs["From Max"].default_value = 0.55
+    nt.links.new(rows.outputs["Fac"], rows_sq.inputs["Value"])
+    slits = tc.node(nt, "ShaderNodeTexWave")
+    slits.bands_direction = 'X'
+    slits.inputs["Scale"].default_value = 8.3   # slits every 38 mm
+    slits.inputs["Distortion"].default_value = 0.0
+    nt.links.new(coord.outputs["Object"], slits.inputs["Vector"])
+    slits_sq = tc.node(nt, "ShaderNodeMapRange")
+    slits_sq.inputs["From Min"].default_value = 0.04
+    slits_sq.inputs["From Max"].default_value = 0.1
+    nt.links.new(slits.outputs["Fac"], slits_sq.inputs["Value"])
+    molle = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY')
+    nt.links.new(rows_sq.outputs["Result"], molle.inputs[0])
+    nt.links.new(slits_sq.outputs["Result"], molle.inputs[1])
+    molle_g = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY')
+    nt.links.new(molle.outputs[0], molle_g.inputs[0])
+    nt.links.new(gear.outputs[0], molle_g.inputs[1])
+    # Height: folds + weave on all fabric, webbing on the gear.
+    h1 = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY_ADD')
+    nt.links.new(rip.outputs[0], h1.inputs[0])
+    h1.inputs[1].default_value = 0.015
+    nt.links.new(folds.outputs["Fac"], h1.inputs[2])
     masked = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY')
-    nt.links.new(height.outputs["Value"], masked.inputs[0])
+    nt.links.new(h1.outputs["Value"], masked.inputs[0])
     nt.links.new(cloth.outputs["Result"], masked.inputs[1])
+    height = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY_ADD')
+    nt.links.new(molle_g.outputs[0], height.inputs[0])
+    height.inputs[1].default_value = 0.35
+    nt.links.new(masked.outputs["Value"], height.inputs[2])
     bump = nt.nodes.new("ShaderNodeBump")
-    bump.inputs["Strength"].default_value = 0.55
-    bump.inputs["Distance"].default_value = 0.004
-    nt.links.new(masked.outputs["Value"], bump.inputs["Height"])
+    bump.inputs["Strength"].default_value = 1.0
+    bump.inputs["Distance"].default_value = 0.012
+    nt.links.new(height.outputs["Value"], bump.inputs["Height"])
     old = bsdf.inputs["Normal"].links[0].from_node
     nt.links.new(bump.outputs["Normal"], old.inputs["Normal"])
     # Darker in the folds.
@@ -523,10 +581,20 @@ def material(asset):
     nt.links.new(cloth.outputs["Result"], shade_mix.inputs["Factor"])
     shade_mix.inputs[2].default_value = 1.0
     nt.links.new(shade.outputs["Result"], shade_mix.inputs[3])
+    gap = tc.node(nt, "ShaderNodeMath", operation='SUBTRACT')
+    nt.links.new(gear.outputs[0], gap.inputs[0])
+    nt.links.new(molle_g.outputs[0], gap.inputs[1])
+    gap_dark = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY_ADD')
+    nt.links.new(gap.outputs[0], gap_dark.inputs[0])
+    gap_dark.inputs[1].default_value = -0.3
+    gap_dark.inputs[2].default_value = 1.0
+    shade_total = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY')
+    nt.links.new(shade_mix.outputs[0], shade_total.inputs[0])
+    nt.links.new(gap_dark.outputs[0], shade_total.inputs[1])
     base_src = bsdf.inputs["Base Color"].links[0].from_socket
     tint = tc.node(nt, "ShaderNodeVectorMath", operation='SCALE')
     nt.links.new(base_src, tint.inputs[0])
-    nt.links.new(shade_mix.outputs[0], tint.inputs["Scale"])
+    nt.links.new(shade_total.outputs[0], tint.inputs["Scale"])
     nt.links.new(tint.outputs["Vector"], bsdf.inputs["Base Color"])
     return m
 

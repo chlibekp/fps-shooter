@@ -129,8 +129,10 @@ Build one weapon only: `TFPS_WEAPON=WeaponPistol python3 Tools/AssetPipeline/bui
   facing +Y. The body is weighted by distance to the bone segments (three
   nearest); gear is bound rigidly to one bone.
 * **Textures:** 2048 px. One FBX holds the mesh and the armature.
-* **Cloth:** fabric regions (roughness above 0.84) get creases and a fine
-  weave in the normal bake, and darker tone in the folds.
+* **Cloth:** fabric regions (roughness above 0.84) get creases a few
+  millimetres deep and a 5 mm ripstop grid in the normal bake, and a darker
+  tone in the folds. Gear (vest, pouches, belt: roughness 0.86) carries
+  MOLLE webbing: 25 mm rows slit every 38 mm, recessed and darker between.
 * **First-person arms:** `Operator{A,B}Arms` holds the sleeves and
   patches cut from the same weighted body, on the same rig, plus modelled
   gloved hands (coyote for team A, grey for team B): palm, jointed fingers,

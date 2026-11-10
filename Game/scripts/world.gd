@@ -183,8 +183,8 @@ func _add_solid(s: Dictionary) -> void:
 	var tag: String = s.get("tag", "")
 	var mi := MeshInstance3D.new()
 	mi.position = box.get_center()
-	if tag == "container" and minf(box.size.x, minf(box.size.y, box.size.z)) < 0.2:
-		mi.mesh = TfpsDressing.container_panel(box.size)   # corrugated sheet
+	if (tag == "container" and minf(box.size.x, minf(box.size.y, box.size.z)) < 0.2) or tag == "siding":
+		mi.mesh = TfpsDressing.container_panel(box.size)   # corrugated sheet (containers, warehouse cladding)
 	else:
 		mi.mesh = _box_mesh
 		mi.scale = box.size

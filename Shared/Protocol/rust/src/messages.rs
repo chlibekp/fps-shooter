@@ -18,6 +18,7 @@ pub mod msg_type {
     pub const SOLID_REINFORCED: u8 = 12;
     pub const MATCH_STATE: u8 = 13;
     pub const MAP_RESET: u8 = 14;
+    pub const DOOR_STATE: u8 = 15;
 }
 
 /// Maximum cell ids per CellsDestroyed message (fits the 400-byte per-packet
@@ -128,6 +129,9 @@ pub enum Message {
     /// S -> all. Solid `index` was reinforced (its material is now
     /// Reinforced: bullets and explosives no longer affect it).
     SolidReinforced { index: u16 },
+    /// S -> all (and joiners: every open door). Door solid `index` was
+    /// opened or closed; an open door does not collide.
+    DoorState { index: u16, open: bool },
     /// S -> all (and joiners). Game mode and match progress; sent when it
     /// changes. Clients count `time_left_ds` down locally.
     MatchState(MatchInfo),
@@ -158,6 +162,7 @@ impl Message {
             Message::Spotted { .. } => msg_type::SPOTTED,
             Message::SolidAdded { .. } => msg_type::SOLID_ADDED,
             Message::SolidReinforced { .. } => msg_type::SOLID_REINFORCED,
+            Message::DoorState { .. } => msg_type::DOOR_STATE,
             Message::MatchState(_) => msg_type::MATCH_STATE,
             Message::MapReset => msg_type::MAP_RESET,
         }
@@ -241,6 +246,10 @@ impl Message {
                 w.u8(*destructible as u8);
             }
             Message::SolidReinforced { index } => w.u16(*index),
+            Message::DoorState { index, open } => {
+                w.u16(*index);
+                w.u8(*open as u8);
+            }
             Message::MatchState(m) => {
                 w.u8(m.mode);
                 w.u8(m.phase);
@@ -352,6 +361,10 @@ impl Message {
                 destructible: r.u8()? != 0,
             },
             msg_type::SOLID_REINFORCED => Message::SolidReinforced { index: r.u16()? },
+            msg_type::DOOR_STATE => Message::DoorState {
+                index: r.u16()?,
+                open: r.u8()? != 0,
+            },
             msg_type::MATCH_STATE => Message::MatchState(MatchInfo {
                 mode: r.u8()?,
                 phase: r.u8()?,
@@ -439,6 +452,10 @@ mod tests {
                 destructible: true,
             },
             Message::SolidReinforced { index: 12 },
+            Message::DoorState {
+                index: 7,
+                open: true,
+            },
             Message::MatchState(MatchInfo {
                 mode: 2,
                 phase: 2,

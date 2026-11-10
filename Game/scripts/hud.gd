@@ -21,6 +21,7 @@ var flash_time := -10.0
 var flash_strength := 0.0
 var flash_hold := 3.0
 var center_message := ""
+var prompt := ""                 # interaction hint under the crosshair ("F  OPEN DOOR")
 var remote_view := ""           # "DRONE" / "CAMERA" while viewing through one
 var spots := {}                  # player id -> {position, until}
 var objectives: Array = []
@@ -159,6 +160,8 @@ func _draw() -> void:
 			continue
 		_text(e["text"], Vector2(vs.x / s - 520, ky) * s, int(16 * s), ACCENT if e["mine"] else TEXT, HORIZONTAL_ALIGNMENT_RIGHT, 490 * s)
 		ky += 24.0
+	if prompt != "" and int(state.get("action", 0)) == 0:
+		_text(prompt, Vector2(c.x / s - 150, c.y / s + 60) * s, int(15 * s), TEXT, HORIZONTAL_ALIGNMENT_CENTER, 300 * s)
 	# Hold action (plant / defuse / reinforce).
 	var action := int(state.get("action", 0))
 	if action > 0:

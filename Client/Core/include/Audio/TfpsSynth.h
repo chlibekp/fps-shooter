@@ -56,6 +56,8 @@ enum class Cue : uint8_t
 	DeviceBeep,
 	Reinforce,
 	BarricadePlace,
+	DoorOpen,
+	DoorClose,
 	// Feedback and interface
 	HitMarker,
 	KillConfirm,

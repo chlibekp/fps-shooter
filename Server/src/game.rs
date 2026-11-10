@@ -249,6 +249,8 @@ pub struct Player {
     pub gadget_cooldown: f32,
     /// Buttons of the previous simulated command (edge detection).
     pub prev_buttons: u16,
+    /// USE was spent on a door: no hold action until it is released.
+    pub use_latched: bool,
     /// Remote-controlling a drone this tick (the body stands still).
     pub droning: bool,
     /// View of the body while droning (replicated instead of the drone camera).
@@ -411,6 +413,10 @@ pub struct GameWorld {
     /// Every reinforced solid, and those reinforced during the last tick.
     pub reinforced: Vec<u16>,
     pub reinforced_this_tick: Vec<u16>,
+    /// Solid indices of the map's doors, the open ones, and changes this tick.
+    pub doors: Vec<usize>,
+    pub open_doors: Vec<u16>,
+    pub doors_this_tick: Vec<(u16, bool)>,
     pending_shots: Vec<(u16, u32, Shot)>,
     destruction: Destruction,
     trace_buf: Vec<Obstacle>,
@@ -422,6 +428,9 @@ pub struct GameWorld {
     pub map_reset_this_tick: bool,
 }
 
+/// How far a player can reach a door with USE (metres from the eye).
+pub const DOOR_REACH: f32 = 2.0;
+
 impl GameWorld {
     pub fn new(
         map: MapDef,
@@ -432,6 +441,13 @@ impl GameWorld {
     ) -> Self {
         let collision = CollisionWorld::from_map(&map);
         let destruction = Destruction::new(&collision);
+        let doors = map
+            .solids
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.tag == "door")
+            .map(|(i, _)| i)
+            .collect();
         // One second of history (enough for any accepted rewind).
         let history = LagHistory::new(tick_rate as usize + 8);
         Self {
@@ -456,6 +472,9 @@ impl GameWorld {
             solids_added_this_tick: Vec::new(),
             reinforced: Vec::new(),
             reinforced_this_tick: Vec::new(),
+            doors,
+            open_doors: Vec::new(),
+            doors_this_tick: Vec::new(),
             entity_buf: Vec::with_capacity(64),
             pending_shots: Vec::with_capacity(64),
             destruction,
@@ -583,6 +602,7 @@ impl GameWorld {
             gadgets: gadget_stock,
             gadget_cooldown: 0.0,
             prev_buttons: 0,
+            use_latched: false,
             droning: false,
             body_yaw_q: yaw_q,
             body_pitch_q: 0,
@@ -647,6 +667,7 @@ impl GameWorld {
         self.destruction.destroyed_this_tick.clear();
         self.solids_added_this_tick.clear();
         self.reinforced_this_tick.clear();
+        self.doors_this_tick.clear();
         self.update_match();
         self.pending_shots.clear();
         let dt = self.dt;
@@ -726,7 +747,18 @@ impl GameWorld {
             {
                 self.use_gadget(i, &cmd);
             }
-            self.update_use_action(i, &cmd, remote);
+            if cmd.buttons & buttons::USE == 0 {
+                self.players[i].use_latched = false;
+            } else if pressed & buttons::USE != 0 && !remote && self.toggle_door(i, &cmd) {
+                self.players[i].use_latched = true;
+            }
+            if self.players[i].use_latched {
+                self.players[i].action = rounds::action::NONE;
+                self.players[i].reinforce_target = None;
+                self.players[i].reinforce_progress = 0.0;
+            } else {
+                self.update_use_action(i, &cmd, remote);
+            }
             if self.players[i].state.pos.z < kill_z {
                 if self.respawns_enabled() {
                     self.respawn(i);
@@ -1503,6 +1535,77 @@ impl GameWorld {
             .push(self.added_solids.len() - 1);
     }
 
+    /// USE pressed while looking at a door within reach opens or closes it.
+    /// A door does not close on a player; a damaged door no longer moves.
+    /// Returns true if a door was toggled.
+    fn toggle_door(&mut self, i: usize, cmd: &MoveInput) -> bool {
+        let p = &self.players[i];
+        if !p.alive || self.doors.is_empty() {
+            return false;
+        }
+        let eye = p.state.eye_position(cmd.yaw_q);
+        let dir = combat::direction(
+            tfps_sim::math::dequantize_yaw_deg(cmd.yaw_q),
+            tfps_sim::math::dequantize_pitch_deg(cmd.pitch_q),
+        );
+        let mut obs = std::mem::take(&mut self.trace_buf);
+        destruction::trace(&self.collision, eye, dir, DOOR_REACH, &mut obs);
+        let first = obs.first().map(|o| (o.t_in, o.solid));
+        self.trace_buf = obs;
+        // Nearest door along the ray: a closed one is the first obstacle; an
+        // open one (not traced) must be closer than the first obstacle.
+        let mut target: Option<(f32, usize)> = None;
+        for &si in &self.doors {
+            let s = &self.collision.solids[si];
+            if !s.open {
+                if first.map(|(_, f)| f) == Some(si) {
+                    let t = first.unwrap().0;
+                    if target.is_none_or(|(bt, _)| t < bt) {
+                        target = Some((t, si));
+                    }
+                }
+                continue;
+            }
+            if let Some((t, _)) = combat::ray_aabb_interval(eye, dir, &s.bounds) {
+                let blocked = first.is_some_and(|(ft, _)| ft < t);
+                if t <= DOOR_REACH && !blocked && target.is_none_or(|(bt, _)| t < bt) {
+                    target = Some((t, si));
+                }
+            }
+        }
+        let Some((_, si)) = target else {
+            return false;
+        };
+        let damaged = self
+            .collision
+            .cells_of_solid(si)
+            .any(|c| self.collision.is_destroyed(c));
+        if damaged {
+            return false;
+        }
+        let open = !self.collision.solids[si].open;
+        if !open {
+            let b = self.collision.solids[si].bounds;
+            if self
+                .players
+                .iter()
+                .any(|q| q.alive && q.state.bounds().overlaps(&b))
+            {
+                return false;
+            }
+        }
+        self.collision.solids[si].open = open;
+        self.collision.revision = self.collision.revision.wrapping_add(1);
+        let index = si as u16;
+        if open {
+            self.open_doors.push(index);
+        } else {
+            self.open_doors.retain(|&d| d != index);
+        }
+        self.doors_this_tick.push((index, open));
+        true
+    }
+
     /// Defenders hold USE on a destructible wall (not glass) to reinforce it.
     fn update_reinforcing(&mut self, i: usize, cmd: &MoveInput, remote: bool) {
         let p = &self.players[i];
@@ -1530,6 +1633,7 @@ impl GameWorld {
                             | tfps_sim::Material::Drywall
                             | tfps_sim::Material::Brick
                     )
+                    && !self.doors.contains(&si)
             });
             self.trace_buf = obs;
             t
@@ -2500,6 +2604,54 @@ mod tests {
             a.step(aim_only, cmd(0), 24);
         }
         assert!(broken > 0, "bullets break barricade cells");
+    }
+
+    #[test]
+    fn doors_open_and_close_with_use_and_never_close_on_a_player() {
+        let door =
+            r#",{"min":[18.85,-0.5,0],"max":[18.95,0.5,2.1],"material":"wood","tag":"door"}"#;
+        let mut a = Arena::new(&format!("{DOORWAY}{door}"), MatchRules::default());
+        let si = a.w.collision.solids.len() - 1;
+        assert_eq!(a.w.doors, vec![si]);
+        let face = |b: u16| MoveInput {
+            buttons: b,
+            yaw_q: quantize_yaw_deg(180.0),
+            pitch_q: 0,
+            slot: 0,
+        };
+        // Closed: the defender (x = 20, facing -X) cannot walk through.
+        a.step(cmd(0), face(buttons::FORWARD), 64);
+        assert!(
+            a.w.player(2).unwrap().state.pos.x > 18.95,
+            "closed door blocks"
+        );
+        // USE opens it (one press), and it is replicated once.
+        a.step(cmd(0), face(buttons::USE), 1);
+        assert!(a.w.collision.solids[si].open);
+        assert_eq!(a.w.open_doors, vec![si as u16]);
+        assert_eq!(a.w.doors_this_tick, vec![(si as u16, true)]);
+        // Holding USE does not toggle it again.
+        a.step(cmd(0), face(buttons::USE), 10);
+        assert!(a.w.collision.solids[si].open);
+        assert!(a.w.doors_this_tick.is_empty());
+        // Open: walk through.
+        a.step(cmd(0), face(buttons::FORWARD), 64 * 2);
+        assert!(
+            a.w.player(2).unwrap().state.pos.x < 18.8,
+            "walked through the open door"
+        );
+        // Someone in the doorway: it does not close.
+        a.w.player_mut(2).unwrap().state.pos = Vec3::new(19.9, 0.0, 0.0);
+        a.w.player_mut(1).unwrap().state.pos = Vec3::new(18.9, 0.0, 0.0);
+        a.step(cmd(0), cmd(0), 1);
+        a.step(cmd(0), face(buttons::USE), 1);
+        assert!(a.w.collision.solids[si].open, "does not close on a player");
+        // Clear: it closes.
+        a.w.player_mut(1).unwrap().state.pos = Vec3::new(5.0, 0.0, 0.0);
+        a.step(cmd(0), cmd(0), 1);
+        a.step(cmd(0), face(buttons::USE), 1);
+        assert!(!a.w.collision.solids[si].open);
+        assert!(a.w.open_doors.is_empty());
     }
 
     #[test]

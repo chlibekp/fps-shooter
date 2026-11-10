@@ -179,6 +179,9 @@ TFPS_TEST(GoldenDataPacketsMatchRust)
 	TFPS_EXPECT(M.EncodePayload() == Payload);
 	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
 	TFPS_EXPECT(M.Type == MsgType::MapReset && Payload.empty());
+	TFPS_REQUIRE(Rx.Pop(Type, Payload) && M.Decode(Type, Payload));
+	TFPS_EXPECT(M.Type == MsgType::DoorState && M.SolidIndex == 23 && M.bOpen);
+	TFPS_EXPECT(M.EncodePayload() == Payload);
 	TFPS_EXPECT(!Rx.Pop(Type, Payload));
 	TFPS_REQUIRE(R.U8() == static_cast<uint8_t>(EBodyKind::Snapshot));
 	SnapshotHeader SH;

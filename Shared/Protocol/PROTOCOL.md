@@ -1,4 +1,4 @@
-# TacticalFPS wire protocol — version 8
+# TacticalFPS wire protocol — version 9
 
 Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
 stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions),
@@ -6,7 +6,8 @@ v4 (Phase 4: gadget slots, gadget entities in snapshots, flashbangs),
 v5 (three gadget slots, drone remote control, Spotted),
 v6 (four gadget slots; cameras, motion sensors, jammers),
 v7 (runtime solids for barricades, wall reinforcement),
-v8 (game modes: MatchState, MapReset, hold-action kind).
+v8 (game modes: MatchState, MapReset, hold-action kind),
+v9 (doors: DoorState).
 
 Implementations:
 
@@ -116,6 +117,7 @@ Message types (S→C):
 | 12 | SolidReinforced | `u16 index` — the solid's material becomes Reinforced (6): bullets and explosives no longer affect it. Sent to joiners too |
 | 13 | MatchState | `u8 mode, u8 phase, u8 round, u8 score[2], u8 attacking_squad, u16 time_left_ds, u8 rounds_to_win, u8 device_site, i32 device_pos_mm[3], u8 last_winner, u8 last_reason` — to everyone whenever it changes and to joining players. mode 0 team deathmatch / 1 elimination / 2 defuse; phase 0 warmup / 1 preparation / 2 action / 3 round end / 4 match over; scores per squad (rounds won, kills in deathmatch); `time_left_ds` = seconds × 10 left in the phase or on the device fuse (clients count down locally); `rounds_to_win` is the kill limit in deathmatch; `device_site` 255 = not planted; `last_winner` 255 = none; reasons 1 eliminated, 2 time up, 3 detonated, 4 defused, 5 score limit |
 | 14 | MapReset | no payload — a new round started: rebuild the collision world from the map definition (destruction, barricades, reinforcements and gadgets are gone). Sent before any other message of that tick |
+| 15 | DoorState | `u16 index, u8 open` — door solid `index` was opened (1) or closed (0); to everyone, and every open door to joining players. An open door is skipped by collision queries (movement, prediction, shots, explosions), in both implementations. MapReset closes all doors |
 | 10 | Spotted | `u16 target, u16 spotter, i32 pos_mm[3], u8 duration_ds` — to the spotter's team only; show a marker at the pinned position for `duration_ds` / 10 s |
 | 9 | Flash | `i32 pos_mm[3], u8 intensity` — to everyone; `intensity` (0..255) is how strongly *the receiving player* is blinded (0 = only the bang is visible) |
 

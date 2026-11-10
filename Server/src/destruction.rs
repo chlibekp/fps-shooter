@@ -58,6 +58,9 @@ pub struct Obstacle {
 pub fn trace(world: &CollisionWorld, origin: Vec3, dir: Vec3, max_t: f32, out: &mut Vec<Obstacle>) {
     out.clear();
     for (si, s) in world.solids.iter().enumerate() {
+        if s.open {
+            continue;
+        }
         let Some((t0, t1)) = ray_aabb_interval(origin, dir, &s.bounds) else {
             continue;
         };
@@ -203,7 +206,7 @@ impl Destruction {
         };
         let mut hits: Vec<(u32, f32)> = Vec::new();
         for (si, s) in world.solids.iter().enumerate() {
-            if s.grid.is_none() || !s.bounds.overlaps(&q) {
+            if s.grid.is_none() || s.open || !s.bounds.overlaps(&q) {
                 continue;
             }
             let mult = props(s.material).explosive_mult;

@@ -15,6 +15,7 @@ var net: TfpsNet
 var _box_mesh := BoxMesh.new()
 var _solids: Array = []
 var dressing := {}             # solid index -> [nodes] drawn over it (hidden when it breaks)
+var doors := {}                # door solid index -> {node, closed, hinge, box, open, t}
 var _container_tints := {}
 
 
@@ -26,6 +27,7 @@ func build(world: Dictionary, p_net: TfpsNet) -> void:
 		c.queue_free()
 	solid_nodes.clear()
 	props.clear()
+	doors.clear()
 	broken.clear()
 	cell_slot.clear()
 	_solids = world.get("solids", [])
@@ -169,6 +171,11 @@ func _add_solid(s: Dictionary) -> void:
 		add_child(prop)
 		props[int(s["index"])] = prop
 		mi.visible = false
+	if tag == "door":
+		var node: Node3D = prop if prop != null else mi
+		var along_x := box.size.x >= box.size.z
+		var hinge := Vector3(box.position.x, box.position.y, box.get_center().z) if along_x else Vector3(box.get_center().x, box.position.y, box.position.z)
+		doors[int(s["index"])] = {"node": node, "closed": node.transform, "hinge": hinge, "box": box, "open": false, "t": 0.0}
 	elif mat == TfpsMaterials.GLASS and tag == "window_glass":
 		var frame := TfpsProps.window_frame(box)
 		if frame != null:
@@ -218,6 +225,51 @@ func destroy_cells(ids: Array) -> Array:
 	return info
 
 
+## A door opened or closed (server state): it swings 95 degrees about its
+## hinge over a fraction of a second (visual only).
+func set_door(index: int, open: bool) -> void:
+	if not doors.has(index):
+		return
+	doors[index]["open"] = open
+
+
+func _process(delta: float) -> void:
+	for index in doors:
+		var d: Dictionary = doors[index]
+		var goal := 1.0 if d["open"] else 0.0
+		if absf(float(d["t"]) - goal) < 0.0001:
+			continue
+		d["t"] = move_toward(float(d["t"]), goal, delta * 2.4)
+		var node: Node3D = d["node"]
+		if not is_instance_valid(node):
+			continue
+		var k := float(d["t"])
+		var ease := k * k * (3.0 - 2.0 * k)
+		var h: Vector3 = d["hinge"]
+		var swing := Transform3D(Basis(Vector3.UP, deg_to_rad(-95.0) * ease), Vector3.ZERO)
+		node.transform = Transform3D(Basis(), h) * swing * Transform3D(Basis(), -h) * (d["closed"] as Transform3D)
+
+
+## The door the view ray hits within `reach` metres (index), or -1.
+func door_in_view(origin: Vector3, dir: Vector3, reach: float) -> int:
+	var best := -1
+	var best_t := reach
+	for index in doors:
+		var d: Dictionary = doors[index]
+		var box: AABB = d["box"]
+		if float(d["t"]) > 0.5:
+			# Open: the leaf stands beside the hinge, perpendicular to the frame.
+			var node: Node3D = d["node"]
+			box = node.global_transform * AABB(Vector3(-0.5, -0.5, -0.5), Vector3.ONE) if node is MeshInstance3D else box
+		var hit = box.intersects_ray(origin, dir)
+		if hit != null:
+			var t := origin.distance_to(hit)
+			if t < best_t:
+				best_t = t
+				best = int(index)
+	return best
+
+
 func _break_solid(index: int) -> void:
 	var s: Dictionary = _solids[index]
 	if not s.get("destructible", false):
@@ -249,6 +301,7 @@ func _break_solid(index: int) -> void:
 	broken[index] = mmi
 	for n in dressing.get(index, []):
 		(n as Node3D).visible = false
+	doors.erase(index)
 	if solid_nodes.has(index):
 		solid_nodes[index].queue_free()
 		solid_nodes.erase(index)

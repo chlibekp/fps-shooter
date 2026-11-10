@@ -466,6 +466,10 @@ namespace tfps
 		case MsgType::SolidReinforced:
 			SolidIndex = R.U16();
 			break;
+		case MsgType::DoorState:
+			SolidIndex = R.U16();
+			bOpen = R.U8() != 0;
+			break;
 		case MsgType::MatchState:
 			Match.Mode = R.U8(); Match.Phase = R.U8(); Match.Round = R.U8();
 			Match.Score[0] = R.U8(); Match.Score[1] = R.U8(); Match.AttackingSquad = R.U8();
@@ -522,6 +526,7 @@ namespace tfps
 			W.U8(bDestructible ? 1 : 0);
 			break;
 		case MsgType::SolidReinforced: W.U16(SolidIndex); break;
+		case MsgType::DoorState: W.U16(SolidIndex); W.U8(bOpen ? 1 : 0); break;
 		case MsgType::MatchState:
 			W.U8(Match.Mode); W.U8(Match.Phase); W.U8(Match.Round); W.U8(Match.Score[0]); W.U8(Match.Score[1]);
 			W.U8(Match.AttackingSquad); W.U16(Match.TimeLeftDs); W.U8(Match.RoundsToWin); W.U8(Match.DeviceSite);

@@ -183,6 +183,8 @@ namespace tfps
 		/** Next solid added at runtime (barricade) or reinforced since the last call (visuals). Returns false when none. */
 		bool PollAddedSolid(uint32_t& OutSolidIndex);
 		bool PollReinforcedSolid(uint32_t& OutSolidIndex);
+		/** Next door opened or closed since the last call. Returns false when none. */
+		bool PollDoorChange(uint32_t& OutSolidIndex, bool& bOutOpen);
 		/** SolidAdded messages that skipped an index (must stay 0). */
 		uint32_t SolidDesyncs() const { return SolidDesyncCount; }
 		/** Gadget entities (grenades, placed charges, smoke) in the newest snapshot. */
@@ -230,6 +232,7 @@ namespace tfps
 		std::vector<GadgetEntityState> GadgetBuf;
 		std::deque<uint32_t> AddedSolids;
 		std::deque<uint32_t> ReinforcedSolids;
+		std::deque<std::pair<uint32_t, bool>> DoorChanges;
 		uint32_t SolidDesyncCount = 0;
 		uint8_t LocalReinforcements = 0;
 		uint8_t LocalAction = 0;

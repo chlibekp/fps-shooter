@@ -18,7 +18,7 @@
 namespace tfps
 {
 	constexpr uint16_t kMagic = 0x4654;
-	constexpr uint16_t kProtocolVersion = 8;
+	constexpr uint16_t kProtocolVersion = 9;
 	constexpr size_t kMaxPacketSize = 1200;
 	constexpr size_t kHandshakePacketSize = 256;
 	constexpr size_t kMaxNameLen = 24;
@@ -84,6 +84,7 @@ namespace tfps
 		constexpr uint8_t SolidReinforced = 12;
 		constexpr uint8_t MatchState = 13;
 		constexpr uint8_t MapReset = 14;
+		constexpr uint8_t DoorState = 15;
 	}
 	constexpr size_t kMaxCellsPerMessage = 90;
 
@@ -271,6 +272,7 @@ namespace tfps
 		int32_t MaxMm[3] = {0, 0, 0};
 		uint8_t Material = 0;
 		bool bDestructible = false;
+		bool bOpen = false;               // DoorState (SolidIndex = door)
 		MatchInfo Match;                  // MatchState
 		uint8_t DurationDs = 0;           // Spotted: marker lifetime in tenths of a second (PlayerId = target, OtherId = spotter, FromMm = position)
 

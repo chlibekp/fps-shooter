@@ -120,7 +120,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Blender asset pipeline | ✅ Procedural and headless. 17 assets (props, gadgets and weapons with LOD1), UCX collision and baked PBR maps: 3 props (crate, jersey barrier, container); a map kit (wooden door, window frame, brick wall panel); 4 gadgets (recon drone, breaching charge, frag grenade, wall camera); 5 weapons; a skinned operator for each team. Multi-surface paint system with per-texel metallic. |
 | Blender props in the Godot client | ✅ | Crates, barriers, containers, doors and window frames dress matching map solids; gadgets use their models. Walls and floors stay procedural surfaces |
 | Weapon models | 🟡 Five detailed Blender weapons (rails, M-LOK slots, flash hiders, ejection ports, curved magazines, adjustable stocks, open optics, worn anodised and steel finishes) for the view model and other players; aim reticle. No animated weapon parts (bolt, slide, magazine) |
-| Audio | 🟡 Procedural synthesis (`tfps::audio`, 38 cues, 98 variations; unit tested, rendered to WAV). Godot plays it in 3D (AudioStreamPlayer3D, reverb bus): gunshots, impacts by surface, footsteps by floor material, landing, reloads, destruction, explosions, flashbang and tinnitus, drone motor, feedback and round sounds. Not listened to yet (no audio device here); no occlusion. |
+| Audio | 🟡 Procedural synthesis (`tfps::audio`, 40 cues, 100 variations; unit tested, rendered to WAV). Godot plays it in 3D (AudioStreamPlayer3D, reverb bus): gunshots, impacts by surface, footsteps by floor material, landing, reloads, destruction, explosions, flashbang and tinnitus, drone motor, feedback and round sounds. Not listened to yet (no audio device here); no occlusion. |
 
 ## Destruction (spec §5) — Phase 3
 
@@ -137,7 +137,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Local debris, dust, destruction sounds | 🟡 🔒 | Particle effects (`tfps::fx`, 5 native tests): chunks and dust per broken cell that bounce off the map; impact bursts per surface (dust and chips, sparks, glass, splinters, blood); muzzle smoke; explosions (fire, smoke, dust, debris, sparks); flash bursts; smoke-grenade clouds that keep their radius filled (tested ≥95% coverage). Drawn as tinted engine shapes (🔒); one breaking sound per material per frame |
 | Chaos Destruction (fracture meshes) | ❌ | Cosmetic layer for Phase 5 assets; gameplay stays cell-based |
 | Shot-time rewind of destruction for lag compensation | ❌ | Shots use the current destruction state (documented in ARCHITECTURE.md) |
-| Doors that open/close (USE) | ❌ | Doors can only be destroyed for now |
+| Doors that open/close (USE) | ✅ | USE on a door within 2 m toggles it (never closes on a player; a damaged door no longer moves). Replicated with DoorState (protocol v9) to everyone and joiners; an open door does not collide for movement, prediction, shots or explosions. Unit and e2e tests (prediction walks through with no corrections). The client swings the door about its hinge, plays a creak or slam, and shows a USE prompt |
 | Reinforced surfaces | ✅ | Defenders reinforce wood, drywall and brick walls (Phase 4) |
 
 ## Gadgets (spec §6) — Phase 4

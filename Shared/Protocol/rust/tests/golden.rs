@@ -272,6 +272,10 @@ fn vectors() -> String {
                 last_reason: 3,
             }),
             Message::MapReset,
+            Message::DoorState {
+                index: 23,
+                open: true,
+            },
         ] {
             tx.queue(m.msg_type(), m.encode_payload()).unwrap();
         }

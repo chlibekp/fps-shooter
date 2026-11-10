@@ -29,7 +29,7 @@ func _initialize() -> void:
 	var world := _req({"op": "world"})
 	_check(world.get("solids", []).size() > 10, "world has solids")
 	var sounds := _req({"op": "sounds"})
-	_check(sounds.get("cues", []).size() == 38, "38 sound cues")
+	_check(sounds.get("cues", []).size() == 40, "40 sound cues")
 	var pcm := Marshalls.base64_to_raw(_req({"op": "sound", "cue": 0, "variant": 0}).get("pcm", ""))
 	_check(pcm.size() > 48000, "rifle shot renders (%d bytes)" % pcm.size())
 	var c := _req({"op": "connect", "address": server, "name": "GodotTest", "join_token": "0"})

@@ -369,6 +369,10 @@ impl ServerCore {
             let m = Message::SolidReinforced { index };
             let _ = conn.rel_tx.queue(m.msg_type(), m.encode_payload());
         }
+        for &index in &self.game.open_doors {
+            let m = Message::DoorState { index, open: true };
+            let _ = conn.rel_tx.queue(m.msg_type(), m.encode_payload());
+        }
         let destroyed: Vec<u32> = self.game.collision.destroyed_cells().collect();
         for chunk in destroyed.chunks(MAX_CELLS_PER_MESSAGE) {
             let m = Message::CellsDestroyed {
@@ -653,6 +657,10 @@ impl ServerCore {
         let reinforced = self.game.reinforced_this_tick.clone();
         for index in reinforced {
             self.broadcast_except(u16::MAX, &Message::SolidReinforced { index });
+        }
+        let doors = self.game.doors_this_tick.clone();
+        for (index, open) in doors {
+            self.broadcast_except(u16::MAX, &Message::DoorState { index, open });
         }
         // Destruction: replicate events, never debris.
         let destroyed: Vec<u32> = self.game.destroyed_this_tick().to_vec();

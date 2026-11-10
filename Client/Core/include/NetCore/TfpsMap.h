@@ -110,6 +110,8 @@ namespace tfps
 		EMaterial Material = EMaterial::Concrete;
 		bool bHasGrid = false;
 		CellGrid Grid;
+		/** An open door: it does not collide (mirror of `open` in map.rs). */
+		bool bOpen = false;
 	};
 
 	/**
@@ -147,7 +149,7 @@ namespace tfps
 			Q.Max = Vec3(Query.Max.X + Margin, Query.Max.Y + Margin, Query.Max.Z + Margin);
 			for (const WorldSolid& S : Solids)
 			{
-				if (!S.Bounds.Overlaps(Q)) { continue; }
+				if (S.bOpen || !S.Bounds.Overlaps(Q)) { continue; }
 				if (!S.bHasGrid)
 				{
 					if (!Fn(S.Bounds, kNoCell)) { return; }

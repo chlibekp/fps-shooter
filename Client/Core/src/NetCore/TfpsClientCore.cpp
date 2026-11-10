@@ -394,6 +394,7 @@ namespace tfps
 			DestroyedCells.clear();
 			AddedSolids.clear();
 			ReinforcedSolids.clear();
+			DoorChanges.clear();
 			bMapResetPending = true;
 			E.Type = ClientEvent::EType::MapReset;
 			break;
@@ -447,6 +448,13 @@ namespace tfps
 			{
 				Collision.Solids[M.SolidIndex].Material = EMaterial::Reinforced;
 				ReinforcedSolids.push_back(M.SolidIndex);
+			}
+			return;
+		case MsgType::DoorState:
+			if (M.SolidIndex < Collision.Solids.size())
+			{
+				Collision.Solids[M.SolidIndex].bOpen = M.bOpen;
+				DoorChanges.push_back({M.SolidIndex, M.bOpen});
 			}
 			return;
 		case MsgType::CellsDestroyed:
@@ -686,6 +694,15 @@ namespace tfps
 		if (AddedSolids.empty()) { return false; }
 		OutSolidIndex = AddedSolids.front();
 		AddedSolids.pop_front();
+		return true;
+	}
+
+	bool ClientCore::PollDoorChange(uint32_t& OutSolidIndex, bool& bOutOpen)
+	{
+		if (DoorChanges.empty()) { return false; }
+		OutSolidIndex = DoorChanges.front().first;
+		bOutOpen = DoorChanges.front().second;
+		DoorChanges.pop_front();
 		return true;
 	}
 

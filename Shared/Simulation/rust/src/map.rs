@@ -290,6 +290,8 @@ pub struct WorldSolid {
     pub bounds: Aabb,
     pub material: Material,
     pub grid: Option<CellGrid>,
+    /// An open door: it does not collide (movement, shots, explosions).
+    pub open: bool,
 }
 
 /// Collision world used by the movement simulation.
@@ -347,6 +349,7 @@ impl CollisionWorld {
         self.destroyed
             .resize(self.cell_count.div_ceil(64) as usize, 0);
         self.solids.push(WorldSolid {
+            open: false,
             bounds,
             material,
             grid,
@@ -431,7 +434,7 @@ impl CollisionWorld {
             ),
         };
         for s in &self.solids {
-            if !s.bounds.overlaps(&q) {
+            if s.open || !s.bounds.overlaps(&q) {
                 continue;
             }
             if s.grid.is_none() {

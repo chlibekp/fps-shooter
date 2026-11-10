@@ -889,6 +889,78 @@ fn drone_is_driven_over_the_network_and_spots_for_its_team_only() {
 }
 
 #[test]
+fn doors_open_over_the_network_for_everyone_including_late_joiners() {
+    // A door in a doorway (wall x = 5.8..6.0) in front of the defender at x = 7.5.
+    let map = || {
+        MapDef::from_json(
+            r#"{"name":"doors","solids":[{"min":[-30,-30,-1],"max":[30,30,0],"material":"dirt"},
+                {"min":[5.8,-6,0],"max":[6.0,-0.5,3],"material":"concrete"},
+                {"min":[5.8,0.5,0],"max":[6.0,6,3],"material":"concrete"},
+                {"min":[5.8,-0.5,2.1],"max":[6.0,0.5,3],"material":"concrete"},
+                {"min":[5.85,-0.5,0],"max":[5.95,0.5,2.1],"material":"wood","tag":"door"}],
+                "spawns":[{"pos":[-7.5,0,0],"team":0},{"pos":[7.5,0,0],"yaw":180,"team":1}]}"#,
+        )
+        .unwrap()
+    };
+    let srv = tfps_server::start_with_data(test_cfg(), map(), weapons(), gadgets()).unwrap();
+    let mut a =
+        Client::connect(ClientConfig::new(srv.local_addr, "A"), &map(), &weapons()).unwrap();
+    let mut b =
+        Client::connect(ClientConfig::new(srv.local_addr, "B"), &map(), &weapons()).unwrap();
+    connect_all(&mut [&mut a, &mut b]);
+    run(&mut [&mut a, &mut b], Duration::from_millis(400));
+    let door = a.world().solids.len() - 1;
+    let face = |buttons: u16| MoveInput {
+        buttons,
+        yaw_q: tfps_sim::math::quantize_yaw_deg(180.0),
+        pitch_q: 0,
+        slot: 0,
+    };
+    // B walks up to the door (it stops there), then presses USE.
+    b.set_input(face(buttons::FORWARD));
+    run(&mut [&mut a, &mut b], Duration::from_millis(800));
+    assert!(
+        b.predicted.pos.x > 5.95,
+        "closed door blocks: {:?}",
+        b.predicted.pos
+    );
+    b.set_input(face(buttons::USE));
+    run(&mut [&mut a, &mut b], Duration::from_millis(100));
+    b.set_input(face(0));
+    assert!(
+        pump_until(&mut a, Duration::from_secs(2), |a| a.world().solids[door]
+            .open),
+        "door state replicated"
+    );
+    // B's prediction collides with the same world: walks through, no corrections.
+    let corrections = b.stats.corrections;
+    b.set_input(face(buttons::FORWARD));
+    run(&mut [&mut a, &mut b], Duration::from_millis(800));
+    assert!(
+        b.predicted.pos.x < 5.8,
+        "walked through the open door: {:?}",
+        b.predicted.pos
+    );
+    assert_eq!(
+        b.stats.corrections, corrections,
+        "prediction agrees with the server"
+    );
+    // A late joiner gets the open door.
+    let mut c = Client::connect(
+        ClientConfig::new(srv.local_addr, "Late"),
+        &map(),
+        &weapons(),
+    )
+    .unwrap();
+    connect_all(&mut [&mut a, &mut b, &mut c]);
+    assert!(
+        pump_until(&mut c, Duration::from_secs(2), |c| c.world().solids[door]
+            .open),
+        "late joiner sees the door open"
+    );
+}
+
+#[test]
 fn barricades_and_reinforcements_replicate_to_everyone_including_late_joiners() {
     // Spawns 15 m apart; a doorway (wall x = 5.8..6.0, opening y = -0.5..0.5)
     // in front of the defender at x = 7.5, and a brick wall to reinforce.

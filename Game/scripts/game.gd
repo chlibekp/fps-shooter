@@ -105,6 +105,17 @@ func _process(delta: float) -> void:
 		world.add_runtime_solids(w, added)
 		for i in added:
 			audio.play_at(audio.cue("barricade_place"), player.camera.global_position)
+	for dc in s.get("doors", []):
+		world.set_door(int(dc["index"]), bool(dc["open"]))
+		var db: AABB = world.doors[int(dc["index"])]["box"] if world.doors.has(int(dc["index"])) else AABB()
+		audio.play_at(audio.cue("door_open" if dc["open"] else "door_close"), db.get_center())
+	# Interaction hint: the door in front of the crosshair, within reach.
+	hud.prompt = ""
+	if s.get("alive", false):
+		var door := world.door_in_view(player.camera.global_position, -player.camera.global_basis.z, 2.0)
+		if door >= 0:
+			var verb := "CLOSE" if world.doors[door]["open"] else "OPEN"
+			hud.prompt = "%s  %s DOOR" % [TfpsControls.describe("use"), verb]
 	var reinforced: Array = s.get("reinforced_solids", [])
 	if not reinforced.is_empty():
 		world.reinforce(reinforced)

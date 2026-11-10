@@ -143,6 +143,7 @@ impl GameWorld {
         self.drone_cmds.clear();
         self.added_solids.clear();
         self.reinforced.clear();
+        self.open_doors.clear();
         self.map_reset_this_tick = true;
     }
 

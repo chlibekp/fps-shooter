@@ -543,6 +543,12 @@ std::string TfpsNative::Frame(const tfps::JsonValue& R)
 	{
 		O.Int(Id);
 	}
+	O.EndArr().Key("doors").Arr();
+	bool bOpen = false;
+	while (Core->PollDoorChange(Id, bOpen))
+	{
+		O.Obj().Key("index").Int(Id).Key("open").Bool(bOpen).EndObj();
+	}
 	O.EndArr().Key("map_reset").Bool(Core->PollMapReset());
 	O.EndObj();
 	return O.S;

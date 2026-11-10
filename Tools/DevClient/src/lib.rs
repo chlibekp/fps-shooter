@@ -896,6 +896,11 @@ impl Client {
                     s.material = tfps_sim::Material::Reinforced;
                 }
             }
+            Message::DoorState { index, open } => {
+                if let Some(s) = self.world.solids.get_mut(index as usize) {
+                    s.open = open;
+                }
+            }
             Message::CellsDestroyed { cells } => {
                 for c in cells {
                     if self.world.destroy_cell(c) {

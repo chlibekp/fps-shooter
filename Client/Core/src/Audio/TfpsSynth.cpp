@@ -594,6 +594,39 @@ Buf Synthesize(Cue C, Rng& R)
 		Noise(B, R, 0.02f, 0.3f, HP(2000.0f), 0.2f, 0.02f, 0.1f);
 		return B;
 	}
+	case Cue::DoorOpen:
+	{
+		// Latch click, then a hinge creak: stick-slip pulses whose rate and
+		// pitch rise and fall as the door swings, over a soft wood body.
+		Buf B = Make(0.9f);
+		Noise(B, R, 0.0f, 0.012f, HP(2800.0f), 0.5f, 0.0f, 0.003f);
+		Noise(B, R, 0.01f, 0.05f, BP(450.0f, 1.0f), 0.35f, 0.001f, 0.015f);
+		float T = 0.06f;
+		while (T < 0.75f)
+		{
+			const float U = (T - 0.06f) / 0.69f;
+			const float Swing = std::sin(U * kPi);
+			const float Pitch = 700.0f + 900.0f * Swing + R.Range(-60.0f, 60.0f);
+			Noise(B, R, T, 0.006f, BP(Pitch, 6.0f), 0.32f * (0.4f + Swing), 0.0f, 0.002f);
+			T += 0.016f - 0.008f * Swing + R.Range(0.0f, 0.002f);
+		}
+		const float F[3] = {110.0f, 260.0f, 590.0f};
+		const float A[3] = {0.5f, 0.3f, 0.15f};
+		Modes(B, 0.05f, F, A, 3, 0.2f, 0.25f, 0.6f);
+		return B;
+	}
+	case Cue::DoorClose:
+	{
+		// Wooden slam against the frame and the latch catching.
+		Buf B = Make(0.6f);
+		const float F[4] = {95.0f, 230.0f, 480.0f, 1050.0f};
+		const float A[4] = {1.0f, 0.6f, 0.35f, 0.15f};
+		Modes(B, 0.0f, F, A, 4, 0.12f, 0.9f, 0.5f);
+		Noise(B, R, 0.0f, 0.06f, LP(900.0f), 0.8f, 0.0005f, 0.02f);
+		Noise(B, R, 0.05f, 0.01f, HP(3200.0f), 0.45f, 0.0f, 0.003f);
+		Noise(B, R, 0.07f, 0.012f, BP(2400.0f, 2.0f), 0.3f, 0.0f, 0.004f);
+		return B;
+	}
 	case Cue::HitMarker:
 	{
 		Buf B = Make(0.06f);
@@ -687,6 +720,8 @@ const CueInfo kInfo[kCueCount] = {
 	{"device_beep", false, true, 30.0f, 1, 0.5f},
 	{"reinforce", false, true, 40.0f, 1, 0.75f},
 	{"barricade_place", false, true, 30.0f, 1, 0.65f},
+	{"door_open", false, true, 30.0f, 1, 0.6f},
+	{"door_close", false, true, 35.0f, 1, 0.75f},
 	{"hit_marker", false, false, 0.0f, 1, 0.5f},
 	{"kill_confirm", false, false, 0.0f, 1, 0.5f},
 	{"round_start", false, false, 0.0f, 1, 0.55f},

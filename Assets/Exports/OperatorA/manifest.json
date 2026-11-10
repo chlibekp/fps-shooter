@@ -1,0 +1,43 @@
+{
+  "asset": "OperatorA",
+  "mesh": "SM_OperatorA",
+  "dimensions_m": [
+    1.249,
+    0.4256,
+    1.802
+  ],
+  "triangles_lod0": 47204,
+  "texture_size": 2048,
+  "files": {
+    "BC": "Assets/Exports/OperatorA/T_OperatorA_BC.png",
+    "N": "Assets/Exports/OperatorA/T_OperatorA_N.png",
+    "ORM": "Assets/Exports/OperatorA/T_OperatorA_ORM.png",
+    "fbx_lod0": "Assets/Exports/OperatorA/SM_OperatorA.fbx",
+    "preview": "Assets/Exports/OperatorA/preview.png",
+    "blend": "Assets/Blender/OperatorA.blend"
+  },
+  "notes": "Skinned operator; faces +Y (Godot -Z), A-pose. Bones: see build_character.py.",
+  "bones": [
+    "hips",
+    "spine",
+    "chest",
+    "neck",
+    "head",
+    "clavicle.R",
+    "upper_arm.R",
+    "forearm.R",
+    "hand.R",
+    "thigh.R",
+    "shin.R",
+    "foot.R",
+    "toe.R",
+    "clavicle.L",
+    "upper_arm.L",
+    "forearm.L",
+    "hand.L",
+    "thigh.L",
+    "shin.L",
+    "foot.L",
+    "toe.L"
+  ]
+}

@@ -24,7 +24,7 @@ SCRIPTS = {
     "window": "build_window.py",
     "brick_panel": "build_brick_panel.py",
     "weapons": "build_weapons.py",
-    "operator": "build_operator.py",
+    "operator": "build_character.py",
 }
 
 

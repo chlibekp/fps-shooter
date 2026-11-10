@@ -1,8 +1,9 @@
-## Another player: the operator model animated from the replicated state:
-## walk cycle from speed, crouch, prone, lean, aim pitch, death, and arms that
-## reach the weapon (two-bone IK). Uses the Blender body parts
-## (Operator<team><part>, joints from their manifests) when they are synced,
-## otherwise a figure built from primitives.
+## Another player, animated from the replicated state: walk cycle from
+## speed, crouch, prone, lean, aim pitch, death. Uses the skinned Blender
+## operator (Assets/Exports/Operator<A|B>, one per team) when it is synced:
+## its skeleton is posed procedurally, legs and arms by two-bone IK (feet
+## on the ground, hands on the weapon). Otherwise a figure built from
+## primitives.
 class_name TfpsOperator
 extends Node3D
 
@@ -14,7 +15,7 @@ var team := -1
 var _hips: Node3D
 var _torso: Node3D
 var _head: Node3D
-var _legs: Array[Node3D] = []   # [left thigh, left shin, right thigh, right shin]
+var _legs: Array[Node3D] = []   # primitive figure: [left thigh, left shin, right thigh, right shin]
 var _weapon_pivot: Node3D
 var _weapon: Node3D
 var _weapon_id := -1
@@ -28,81 +29,27 @@ var _dead := 0.0
 var _lean := 0.0
 var _pitch := 0.0
 var _materials := {}
-var _use_assets := false
-var _arms: Array[Node3D] = []   # [right upper, right fore, left upper, left fore]
+var _skinned := false
 
-const UPPER_ARM := 0.3
-const FOREARM := 0.29
-const SHOULDER := Vector3(0.2, 0.52, 0.0)
+# Skinned character.
+var _char: Node3D
+var _skel: Skeleton3D
+var _bone := {}             # name -> index
+var _rest_local: Array[Transform3D] = []
+var _pose: Array[Transform3D] = []   # this frame's pose, skeleton space
+var _len := {}              # limb lengths from the rest pose
+
+static var _scenes := {}
 
 
 func _init() -> void:
 	_make_label()
-	_use_assets = TfpsProps.available("OperatorATorso") and TfpsProps.available("OperatorBTorso")
-	if not _use_assets:
+	_skinned = ResourceLoader.exists("res://assets/OperatorA/SM_OperatorA.fbx") and ResourceLoader.exists("res://assets/OperatorB/SM_OperatorB.fbx")
+	if _skinned:
+		_weapon_pivot = Node3D.new()
+		add_child(_weapon_pivot)
+	else:
 		_build()
-
-
-## A body part placed so its joint is at the returned node's origin; `mirror`
-## flips it for the left side.
-static func _part(asset: String, mirror := false) -> Node3D:
-	var joint := Node3D.new()
-	var inst := TfpsProps.instance(asset)
-	if inst == null:
-		return joint
-	var j := Vector3.ZERO
-	var f := FileAccess.open("res://assets/%s/manifest.json" % asset, FileAccess.READ)
-	if f != null:
-		var m: Variant = JSON.parse_string(f.get_as_text())
-		if m is Dictionary and (m as Dictionary).has("joint_m"):
-			var v: Array = m["joint_m"]
-			j = Vector3(float(v[0]), float(v[2]), -float(v[1]))
-	var holder := Node3D.new()
-	if mirror:
-		holder.scale = Vector3(-1, 1, 1)
-	joint.add_child(holder)
-	holder.add_child(inst)
-	inst.position = -j
-	return joint
-
-
-func _build_assets(t: int) -> void:
-	var letter := "A" if t <= 0 else "B"
-	if _hips:
-		_hips.queue_free()
-	_legs.clear()
-	_arms.clear()
-	_weapon = null
-	_weapon_id = -1
-	_hips = Node3D.new()
-	_hips.position = Vector3(0, 0.95, 0)
-	add_child(_hips)
-	for side in [-1.0, 1.0]:
-		var thigh := _part("Operator%sThigh" % letter, side < 0.0)
-		thigh.position = Vector3(0.105 * side, 0, 0)
-		_hips.add_child(thigh)
-		var shin := _part("Operator%sShin" % letter, side < 0.0)
-		shin.position = Vector3(0, -0.46, 0)
-		thigh.add_child(shin)
-		_legs.append(thigh)
-		_legs.append(shin)
-	_torso = _part("Operator%sTorso" % letter)
-	_hips.add_child(_torso)
-	_head = _part("Operator%sHead" % letter)
-	_head.position = Vector3(0, 0.6, 0)
-	_torso.add_child(_head)
-	for side in [1.0, -1.0]:
-		var upper := _part("Operator%sUpperArm" % letter, side < 0.0)
-		upper.position = Vector3(SHOULDER.x * side, SHOULDER.y, SHOULDER.z)
-		_torso.add_child(upper)
-		var fore := _part("Operator%sForearm" % letter, side < 0.0)
-		fore.position = Vector3(0, -UPPER_ARM, 0)
-		upper.add_child(fore)
-		_arms.append(upper)
-		_arms.append(fore)
-	_weapon_pivot = Node3D.new()
-	_weapon_pivot.position = Vector3(0, 0.5, 0)
-	_torso.add_child(_weapon_pivot)
 
 
 func _make_label() -> void:
@@ -115,6 +62,149 @@ func _make_label() -> void:
 	_label.no_depth_test = false
 	add_child(_label)
 
+
+# ---------------------------------------------------------------------------
+# Skinned character
+# ---------------------------------------------------------------------------
+
+func _build_skinned(t: int) -> void:
+	var asset := "OperatorB" if t == 1 else "OperatorA"
+	if _char:
+		_char.queue_free()
+	if not _scenes.has(asset):
+		_scenes[asset] = load("res://assets/%s/SM_%s.fbx" % [asset, asset])
+	_char = (_scenes[asset] as PackedScene).instantiate()
+	add_child(_char)
+	var mat := TfpsProps.material(asset)
+	for n in _char.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_skel = _char.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	_bone.clear()
+	_rest_local.clear()
+	_pose.clear()
+	for i in _skel.get_bone_count():
+		_bone[_skel.get_bone_name(i)] = i
+		_rest_local.append(_skel.get_bone_rest(i))
+		_pose.append(_skel.get_bone_global_rest(i))
+	for side in ["L", "R"]:
+		_len["upper_arm." + side] = _rest_dist("upper_arm." + side, "forearm." + side)
+		_len["forearm." + side] = _rest_dist("forearm." + side, "hand." + side)
+		_len["thigh." + side] = _rest_dist("thigh." + side, "shin." + side)
+		_len["shin." + side] = _rest_dist("shin." + side, "foot." + side)
+
+
+func _rest_dist(a: String, b: String) -> float:
+	return _skel.get_bone_global_rest(_bone[a]).origin.distance_to(_skel.get_bone_global_rest(_bone[b]).origin)
+
+
+## Starts a bone at its rest placement under the (already posed) parent.
+func _base(i: int) -> Transform3D:
+	var p := _skel.get_bone_parent(i)
+	return (_pose[p] if p >= 0 else Transform3D.IDENTITY) * _rest_local[i]
+
+
+## Poses bone `name` from its rest placement, rotated by `rot` (skeleton
+## space, about the bone's origin), and stores it.
+func _rotate(name: String, rot: Basis, offset := Vector3.ZERO) -> void:
+	var i: int = _bone[name]
+	var b := _base(i)
+	b.basis = rot * b.basis
+	b.origin += offset
+	_pose[i] = b
+
+
+## Poses bone `name` so that it points (its +Y) along `dir` (skeleton space).
+func _aim(name: String, dir: Vector3) -> void:
+	var i: int = _bone[name]
+	var b := _base(i)
+	var cur := b.basis.y.normalized()
+	if dir.length() > 0.0001 and cur.dot(dir.normalized()) < 0.99999:
+		b.basis = Basis(Quaternion(cur, dir.normalized())) * b.basis
+	_pose[i] = b
+
+
+func _keep(name: String) -> void:
+	_pose[_bone[name]] = _base(_bone[name])
+
+
+## Two-bone limb: aims `upper` and `lower` so the end reaches `target`,
+## bending toward `pole` (all skeleton space).
+func _limb(upper: String, lower: String, target: Vector3, pole: Vector3) -> void:
+	_keep(upper)
+	var root := _pose[_bone[upper]].origin
+	var elbow := _elbow(root, target, pole, _len[upper], _len[lower])
+	_aim(upper, elbow - root)
+	_aim(lower, target - elbow)
+
+
+func _commit() -> void:
+	for i in _pose.size():
+		var p := _skel.get_bone_parent(i)
+		var local := (_pose[p].affine_inverse() if p >= 0 else Transform3D.IDENTITY) * _pose[i]
+		_skel.set_bone_pose_position(i, local.origin)
+		_skel.set_bone_pose_rotation(i, local.basis.get_rotation_quaternion())
+
+
+func _animate_skinned(stride: float, on_ground: bool) -> void:
+	# Skeleton space is the model's own: X right of the model's left... the
+	# model faces +Y with Z up; convert node-space points with this.
+	var to_skel := _skel.global_transform.affine_inverse()
+	var fwd := Vector3(0, 1, 0)
+	var up := Vector3(0, 0, 1)
+	# Hips: lowered by crouching and the walk bounce.
+	var drop := _crouch * 0.38 + absf(sin(_phase)) * 0.03 * stride
+	_rotate("hips", Basis(Vector3.RIGHT, -_crouch * 0.12), -up * drop)
+	_rotate("spine", Basis(fwd, _lean * 0.18) * Basis(Vector3.RIGHT, _crouch * 0.25))
+	var pitch := deg_to_rad(_pitch)
+	_rotate("chest", Basis(fwd, _lean * 0.18) * Basis(Vector3.RIGHT, pitch * 0.35))
+	_rotate("neck", Basis(Vector3.RIGHT, pitch * 0.25))
+	_rotate("head", Basis(Vector3.RIGHT, pitch * 0.3))
+	# Legs: feet step forward and back, lifting on the forward swing; IK
+	# keeps them planted otherwise (so crouching bends the knees).
+	for side in ["L", "R"]:
+		var sgn := 1.0 if side == "R" else -1.0   # the model's right is +X
+		var ph := _phase + (0.0 if side == "L" else PI)
+		var ankle_rest := _skel.get_bone_global_rest(_bone["foot." + side]).origin
+		var step := sin(ph) * 0.28 * stride
+		var lift := maxf(0.0, cos(ph)) * 0.12 * stride + (0.0 if on_ground else 0.18)
+		var ankle := ankle_rest + fwd * (step + _crouch * 0.05) + up * lift + Vector3(sgn * _crouch * 0.05, 0, 0)
+		var hip := _base(_bone["thigh." + side]).origin
+		_limb("thigh." + side, "shin." + side, ankle, hip + fwd * 0.6 + up * -0.1)
+		_keep("foot." + side)
+		_pose[_bone["foot." + side]].basis = _skel.get_bone_global_rest(_bone["foot." + side]).basis
+		_keep("toe." + side)
+	# Arms: hands on the weapon.
+	_keep("clavicle.L")
+	_keep("clavicle.R")
+	var right_hand: Vector3
+	var left_hand: Vector3
+	if _weapon:
+		right_hand = to_skel * _weapon.global_position
+		var muzzle := _weapon.get_node_or_null("muzzle") as Node3D
+		var m := muzzle.position if muzzle else Vector3(0, 0.04, -0.5)
+		var pistol := m.length() < 0.25
+		var grip_left := Vector3(-0.03, -0.05, 0.02) if pistol else Vector3(0, m.y - 0.04, m.z * 0.55)
+		left_hand = to_skel * _weapon.to_global(grip_left)
+	else:
+		right_hand = _pose[_bone["chest"]].origin + Vector3(0.28, 0.1, -0.15)
+		left_hand = _pose[_bone["chest"]].origin + Vector3(-0.28, 0.1, -0.15)
+	for side in ["L", "R"]:
+		var sgn := 1.0 if side == "R" else -1.0
+		var target := left_hand if side == "L" else right_hand
+		var shoulder := _base(_bone["upper_arm." + side]).origin
+		# Reach the palm, not the wrist: stop a hand's width short.
+		var to_t := target - shoulder
+		target = shoulder + to_t.normalized() * maxf(0.05, to_t.length() - 0.06)
+		_limb("upper_arm." + side, "forearm." + side, target, shoulder + Vector3(sgn * 0.5, -0.25, -0.6))
+		_keep("hand." + side)
+	_commit()
+
+
+# ---------------------------------------------------------------------------
+# Primitive figure (fallback)
+# ---------------------------------------------------------------------------
 
 func _m(key: String, color: Color, rough := 0.8) -> StandardMaterial3D:
 	if not _materials.has(key):
@@ -180,14 +270,15 @@ func _build() -> void:
 		(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 
 
+
 func set_team(t: int) -> void:
 	if t == team:
 		return
 	team = t
 	var i := clampi(t, 0, 1)
 	_label.modulate = TEAM_ACCENT[i].lightened(0.3)
-	if _use_assets:
-		_build_assets(t)
+	if _skinned:
+		_build_skinned(i)
 		return
 	_materials["uniform"].albedo_color = TEAM_UNIFORM[i]
 	_materials["helmet"].albedo_color = TEAM_UNIFORM[i].darkened(0.15)
@@ -206,12 +297,12 @@ func set_weapon(id: int) -> void:
 		_weapon = null
 	if id > 0:
 		_weapon = TfpsModels.weapon(TfpsModels.weapon_class(id))
-		if not _use_assets:
+		if not _skinned:
 			_weapon.position = Vector3(0.05, -0.1, -0.28)
 		elif TfpsModels.weapon_class(id) == "pistol":
-			_weapon.position = Vector3(0.0, -0.02, -0.4)   # both hands, arms extended
+			_weapon.position = Vector3(0.03, -0.08, -0.42)   # both hands, arms extended
 		else:
-			_weapon.position = Vector3(0.04, -0.08, -0.22)
+			_weapon.position = Vector3(0.09, -0.06, -0.3)   # stock in the right shoulder
 		_weapon_pivot.add_child(_weapon)
 
 
@@ -247,6 +338,26 @@ func _animate(delta: float, flags: int) -> void:
 	var on_ground := (flags & TfpsNet.F_ON_GROUND) != 0
 	var stride := clampf(_speed / 4.5, 0.0, 1.4)
 	_phase += delta * (4.0 + _speed * 1.6) * (1.0 if stride > 0.05 else 0.0)
+	# The weapon pivots at the shoulders with the aim pitch and lean.
+	var shoulder_y := 1.42 - _crouch * 0.4
+	if _skinned:
+		_weapon_pivot.position = Vector3(0, shoulder_y, 0)
+	else:
+		_weapon_pivot.position = Vector3(0, 0.5, 0)
+	_weapon_pivot.rotation.x = deg_to_rad(_pitch)
+	_weapon_pivot.rotation.z = -_lean * 0.3
+	# Prone and death lay the body down (prone face first, death to the side).
+	rotation.x = -_prone * 1.45
+	rotation.z = _dead * 1.4
+	if _skinned:
+		if _skel:
+			_animate_skinned(stride, on_ground)
+	else:
+		_animate_primitive(flags, stride)
+
+
+func _animate_primitive(flags: int, stride: float) -> void:
+	var on_ground := (flags & TfpsNet.F_ON_GROUND) != 0
 	var swing := sin(_phase) * 0.55 * stride
 	# Legs: alternate swing; knees bend on the back stroke; crouch bends both.
 	var crouch_bend := _crouch * 1.1
@@ -261,42 +372,9 @@ func _animate(delta: float, flags: int) -> void:
 	_torso.rotation.z = -_lean * 0.3
 	_head.rotation.x = deg_to_rad(_pitch) * 0.5
 	_weapon_pivot.rotation.x = deg_to_rad(_pitch)
-	# Prone and death lay the body down (prone face first, death to the side).
-	rotation.x = -_prone * 1.45
-	rotation.z = _dead * 1.4
 	if _prone > 0.01 or _dead > 0.01:
 		_hips.position.y = lerpf(_hips.position.y, 0.2, maxf(_prone, _dead))
-	if _use_assets and _arms.size() == 4:
-		_solve_arms()
 
-
-## Places both arms so the right hand holds the grip and the left the
-## handguard (or the right hand, for a pistol); elbows point down and out.
-func _solve_arms() -> void:
-	var tb := _torso.global_basis
-	var right_hand: Vector3
-	var left_hand: Vector3
-	if _weapon:
-		right_hand = _weapon.global_position
-		var muzzle := _weapon.get_node_or_null("muzzle") as Node3D
-		var m := muzzle.position if muzzle else Vector3(0, 0.04, -0.5)
-		var pistol := m.length() < 0.25
-		var grip_left := Vector3(-0.03, -0.05, 0.02) if pistol else Vector3(0, m.y - 0.04, m.z * 0.55)
-		left_hand = _weapon.to_global(grip_left)
-	else:
-		right_hand = _torso.to_global(Vector3(0.2, 0.0, -0.05))
-		left_hand = _torso.to_global(Vector3(-0.2, 0.0, -0.05))
-	for i in 2:
-		var side := 1.0 if i == 0 else -1.0
-		var upper := _arms[i * 2]
-		var fore := _arms[i * 2 + 1]
-		var shoulder := upper.global_position
-		var hand := right_hand if i == 0 else left_hand
-		var pole := shoulder + tb * Vector3(side * 0.35, -0.6, 0.25)
-		var elbow := _elbow(shoulder, hand, pole, UPPER_ARM, FOREARM)
-		upper.global_basis = _limb_basis(shoulder, elbow, tb.x)
-		fore.global_position = elbow
-		fore.global_basis = _limb_basis(elbow, hand, tb.x)
 
 
 static func _elbow(shoulder: Vector3, hand: Vector3, pole: Vector3, a: float, b: float) -> Vector3:
@@ -308,13 +386,3 @@ static func _elbow(shoulder: Vector3, hand: Vector3, pole: Vector3, a: float, b:
 	bend -= dir * bend.dot(dir)
 	bend = bend.normalized() if bend.length() > 0.001 else Vector3.DOWN
 	return shoulder + dir * a * cos_s + bend * a * sqrt(1.0 - cos_s * cos_s)
-
-
-## Basis for a limb hanging along its -Y axis from `from` toward `to`.
-static func _limb_basis(from: Vector3, to: Vector3, right: Vector3) -> Basis:
-	var y := (from - to).normalized()
-	var z := right.cross(y).normalized()
-	if z.length() < 0.5:
-		z = Vector3.FORWARD
-	var x := y.cross(z).normalized()
-	return Basis(x, y, z)

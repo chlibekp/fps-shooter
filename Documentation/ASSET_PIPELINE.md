@@ -61,7 +61,7 @@ Assets/Exports/<Asset>/manifest.json          dimensions, triangle counts, files
 | WeaponMarksman | 0.052 × 1.334 × 0.294 | 2,540 / 1,142 | 0 | 512² | M-308 Marksman (3) |
 | WeaponPistol | 0.032 × 0.217 × 0.165 | 1,048 / 470 | 0 | 512² | P-9 Pistol (4) |
 | WeaponShotgun | 0.044 × 1.075 × 0.189 | 1,196 / 538 | 0 | 512² | SG-12 shotgun (5) |
-| Operator{A,B}{Torso, Head, Thigh, Shin, UpperArm, Forearm} | body parts | 3,456 · 4,008 · 512 · 1,076 · 484 · 860 (LOD1 half) | 0 | 512² | other players, per team |
+| OperatorA, OperatorB | 0.55 × 0.41 × 1.8 (A-pose) | 47,204 | 0 | 2048² | other players (skinned, 21 bones), per team |
 
 Previews: `Assets/Exports/*/preview.png`.
 
@@ -96,18 +96,36 @@ Build one weapon only: `TFPS_WEAPON=WeaponPistol python3 Tools/AssetPipeline/bui
 
 ## Operator
 
-`build_operator.py` builds the operator as six body parts per team: A
-(attackers: olive uniform, coyote gear, orange patches) and B (defenders:
-slate uniform, black gear, blue patches). The parts are the torso with
-plate carrier, the head with helmet, goggles and ear protection, and the
-thigh, shin with boot, upper arm and forearm with glove. Each part is
-modelled around its joint: hip, neck, knee, shoulder or elbow. Limbs hang
-along -Z and are built for the right side; the game mirrors them. The
-manifest records the joint as `joint_m`. `TfpsOperator` turns the parts at
-the joints and solves the arms with two-bone IK onto the weapon. Without
-the parts, it falls back to primitives.
+`build_character.py` builds one skinned character per team. Team A
+(attackers) has an olive uniform, coyote gear and orange patches. Team B
+(defenders) has a slate uniform, black gear and blue patches.
+
+* **Body:** anatomical volumes (lofted elliptical limbs, torso, pelvis,
+  deltoids, head and jaw) are merged into one surface by voxel remeshing,
+  then smoothed and decimated. There are no separate blocks.
+* **Clothing:** the body itself, painted by region: shirt, trousers,
+  gloves, boots, and a balaclava with an eye opening.
+* **Garments:** the plate carrier and belt are shells cut from the body
+  surface and thickened outward, with straight hems, so they follow the
+  body.
+* **Modelled parts:** pouches, straps, cummerbund, knee pads, gaiters,
+  glove cuffs, a high-cut helmet with rails, shroud and counterweight,
+  goggles, ear protection, radio and holster.
+* **Rig:** 21 bones (hips, spine, chest, neck, head, and on each side the
+  clavicle, upper arm, forearm, hand, thigh, shin, foot and toe), A-pose,
+  facing +Y. The body is weighted by distance to the bone segments (three
+  nearest); gear is bound rigidly to one bone.
+* **Textures:** 2048 px. One FBX holds the mesh and the armature.
+
+`TfpsOperator` poses the skeleton procedurally:
+* the hips drop and the spine leans;
+* the chest, neck and head share the aim pitch;
+* the feet step on a walk cycle, and the legs reach them by two-bone IK, so
+  a crouch bends the knees;
+* the arms reach the weapon's grip and handguard by two-bone IK.
 
 Preview: `Scripts/godot/godot.sh --path Game -s res://tools/operator_preview.gd -- operators.png 160`.
+Skeleton dump: `Scripts/godot/godot.sh --headless --path Game -s res://tools/skeleton_dump.gd -- OperatorA`.
 
 ## Using the assets in the game
 

@@ -61,6 +61,7 @@ Assets/Exports/<Asset>/manifest.json          dimensions, triangle counts, files
 | WeaponMarksman | 0.052 × 1.334 × 0.294 | 2,540 / 1,142 | 0 | 512² | M-308 Marksman (3) |
 | WeaponPistol | 0.032 × 0.217 × 0.165 | 1,048 / 470 | 0 | 512² | P-9 Pistol (4) |
 | WeaponShotgun | 0.044 × 1.075 × 0.189 | 1,196 / 538 | 0 | 512² | SG-12 shotgun (5) |
+| Operator{A,B}{Torso, Head, Thigh, Shin, UpperArm, Forearm} | body parts | 3,456 · 4,008 · 512 · 1,076 · 484 · 860 (LOD1 half) | 0 | 512² | other players, per team |
 
 Previews: `Assets/Exports/*/preview.png`.
 
@@ -92,6 +93,21 @@ in the exported model's space (metres, Blender axes):
 Godot maps a Blender point (x, y, z) to (x, z, -y).
 
 Build one weapon only: `TFPS_WEAPON=WeaponPistol python3 Tools/AssetPipeline/build_assets.py weapons`.
+
+## Operator
+
+`build_operator.py` builds the operator as six body parts per team: A
+(attackers: olive uniform, coyote gear, orange patches) and B (defenders:
+slate uniform, black gear, blue patches). The parts are the torso with
+plate carrier, the head with helmet, goggles and ear protection, and the
+thigh, shin with boot, upper arm and forearm with glove. Each part is
+modelled around its joint: hip, neck, knee, shoulder or elbow. Limbs hang
+along -Z and are built for the right side; the game mirrors them. The
+manifest records the joint as `joint_m`. `TfpsOperator` turns the parts at
+the joints and solves the arms with two-bone IK onto the weapon. Without
+the parts, it falls back to primitives.
+
+Preview: `Scripts/godot/godot.sh --path Game -s res://tools/operator_preview.gd -- operators.png 160`.
 
 ## Using the assets in the game
 

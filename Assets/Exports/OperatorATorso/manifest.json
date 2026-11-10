@@ -1,0 +1,28 @@
+{
+  "asset": "OperatorATorso",
+  "mesh": "SM_OperatorATorso",
+  "dimensions_m": [
+    0.45,
+    0.375,
+    0.745
+  ],
+  "triangles_lod0": 3456,
+  "triangles_lod1": 1728,
+  "collision_primitives": 0,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/OperatorATorso/T_OperatorATorso_BC.png",
+    "N": "Assets/Exports/OperatorATorso/T_OperatorATorso_N.png",
+    "ORM": "Assets/Exports/OperatorATorso/T_OperatorATorso_ORM.png",
+    "fbx_lod0": "Assets/Exports/OperatorATorso/SM_OperatorATorso.fbx",
+    "fbx_lod1": "Assets/Exports/OperatorATorso/SM_OperatorATorso_LOD1.fbx",
+    "preview": "Assets/Exports/OperatorATorso/preview.png",
+    "blend": "Assets/Blender/OperatorATorso.blend"
+  },
+  "notes": "Operator body part; faces +Y (Godot -Z), limbs along -Z. joint_m in model space (Blender axes).",
+  "joint_m": [
+    0.0,
+    -0.0025,
+    0.035
+  ]
+}

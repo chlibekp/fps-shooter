@@ -1,0 +1,28 @@
+{
+  "asset": "OperatorAUpperArm",
+  "mesh": "SM_OperatorAUpperArm",
+  "dimensions_m": [
+    0.12,
+    0.13,
+    0.335
+  ],
+  "triangles_lod0": 484,
+  "triangles_lod1": 242,
+  "collision_primitives": 0,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/OperatorAUpperArm/T_OperatorAUpperArm_BC.png",
+    "N": "Assets/Exports/OperatorAUpperArm/T_OperatorAUpperArm_N.png",
+    "ORM": "Assets/Exports/OperatorAUpperArm/T_OperatorAUpperArm_ORM.png",
+    "fbx_lod0": "Assets/Exports/OperatorAUpperArm/SM_OperatorAUpperArm.fbx",
+    "fbx_lod1": "Assets/Exports/OperatorAUpperArm/SM_OperatorAUpperArm_LOD1.fbx",
+    "preview": "Assets/Exports/OperatorAUpperArm/preview.png",
+    "blend": "Assets/Blender/OperatorAUpperArm.blend"
+  },
+  "notes": "Operator body part; faces +Y (Godot -Z), limbs along -Z. joint_m in model space (Blender axes).",
+  "joint_m": [
+    0.0,
+    0.0,
+    0.305
+  ]
+}

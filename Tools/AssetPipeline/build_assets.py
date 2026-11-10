@@ -3,7 +3,7 @@
 
 Usage: python3 Tools/AssetPipeline/build_assets.py [asset ...]
        assets: crate, barrier, container, drone, breach_charge, frag, camera, door,
-               window, brick_panel, weapons (default: all)
+               window, brick_panel, weapons, operator (default: all)
 Env:   BLENDER=/path/to/blender  TFPS_TEX_SIZE=512  TFPS_BAKE_SAMPLES=16
 """
 import os
@@ -24,6 +24,7 @@ SCRIPTS = {
     "window": "build_window.py",
     "brick_panel": "build_brick_panel.py",
     "weapons": "build_weapons.py",
+    "operator": "build_operator.py",
 }
 
 

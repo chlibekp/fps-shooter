@@ -13,7 +13,7 @@ else from the server's snapshots.
 | `scripts/main.gd` | Entry point: menus over a live map backdrop, starting and leaving matches, command line |
 | `scripts/game.gd` | A match: moves the frame state between the core, world, player, operators, gadgets, effects, audio and HUD |
 | `scripts/net.gd` | Wraps the native client (`TfpsNative`): load definitions, connect, one `frame` request per rendered frame |
-| `scripts/world.gd` | Builds the map from the server's own map data; destruction cells, reinforcement, barricades, lighting, environment, quality presets |
+| `scripts/world.gd`, `scripts/dressing.gd` | Builds the map from the server's own map data; destruction cells, reinforcement, barricades, architectural dressing, distant backdrop, lighting, environment, quality presets |
 | `scripts/materials.gd`, `shaders/world_surface.gdshader`, `shaders/sky.gdshader` | Procedural materials per map material and a procedural sky (no texture files) |
 | `scripts/player.gd` | Mouse look, input, first-person camera and weapon view model (sway, bob, recoil, aim, reload, equip) |
 | `scripts/operator.gd`, `scripts/models.gd` | Other players (skinned Blender operator per team, skeleton posed procedurally with leg and arm IK) and weapons per class; procedural fallbacks |
@@ -75,6 +75,26 @@ fine detail faded by pixel footprint (no moiré). Each surface type is:
 * yard slabs with joints and oil stains.
 
 Containers and props get per-object paint.
+
+`scripts/dressing.gd` adds visual-only detail over the gameplay solids. It
+has no collision. When a solid breaks, its dressing is hidden.
+* **Containers:** corrugated sheet panels (real geometry), corner posts,
+  rails, corner castings, door locking bars, and container paint colours.
+* **Buildings:** plinths, string courses between floors, parapet coping,
+  window sills and lintels, downpipes and gutters, and wall units (air
+  conditioners, electrical boxes, lamps).
+
+The ground has:
+* concrete slabs with patches of asphalt;
+* hairline cracks, oil stains and tyre tracks;
+* glossy puddles that reflect, with screen-space reflections from High
+  quality up.
+
+Walls get rain streaks and grime near the floor.
+
+Beyond the map, `shaders/backdrop.gdshader` draws distant city blocks with
+storeys and window grids, gantry cranes at the harbour, and tree belts
+elsewhere. Exponential fog gives aerial perspective.
 
 ## Commands
 

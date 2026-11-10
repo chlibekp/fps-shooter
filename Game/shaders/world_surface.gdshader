@@ -67,7 +67,7 @@ vec4 surface(vec2 uv, int pat, float detail) {
 		float speck = mix(0.5, fbm(uv * 40.0), detail);
 		// Bricks use the dark end (0..0.3), mortar the light end (1); far away both blend to their average.
 		float brick_c = mix(0.15, brick_var * 0.25 + speck * 0.1, detail);
-		float c = mix(mix(brick_c, 0.28, 1.0 - detail), 1.0, mortar);
+		float c = mix(mix(brick_c, 0.2, 1.0 - detail), 1.0, mortar);
 		float h = (1.0 - mortar) * (0.8 + 0.2 * speck);
 		return vec4(c, h, mortar * 0.1, mortar);
 	}
@@ -103,18 +103,32 @@ vec4 surface(vec2 uv, int pat, float detail) {
 		float n = fbm(uv * 4.0);
 		return vec4(n * 0.5, studs * 0.4 + bolt, -0.1, 0.0);
 	}
-	if (pat == 7) { // gravel ground
-		// Yard: 6 m concrete slabs with sealed joints, oil stains and wear.
+	if (pat == 7) { // yard ground
+		// Concrete slabs (6 m, sealed joints) with patches of asphalt; hairline
+		// cracks, oil stains, tyre tracks, grit and puddles.
+		float region = fbm(uv * 0.022 + seed * 0.1);
+		float asphalt = smoothstep(0.5, 0.56, region);
 		vec2 cell = floor(uv / 6.0);
 		vec2 f = abs(fract(uv / 6.0) - 0.5) * 6.0;
-		float joint = (1.0 - smoothstep(0.008, 0.02, 3.0 - max(f.x, f.y))) * mix(0.4, 1.0, detail);
-		float slab = hash12(cell + seed) * 0.25;
+		float joint = (1.0 - smoothstep(0.008, 0.02, 3.0 - max(f.x, f.y))) * mix(0.4, 1.0, detail) * (1.0 - asphalt);
+		float slab = hash12(cell + seed) * 0.22;
 		float big = fbm(uv * 0.08);
 		float mid = fbm(uv * 0.9);
-		float oil = smoothstep(0.62, 0.78, fbm(uv * 0.35 + 5.0)) * 0.6;
+		// Hairline cracks: thin ridges of a warped noise.
+		float cn = fbm(uv * 0.45 + vec2(fbm(uv * 0.9), fbm(uv * 0.9 + 3.1)) * 0.6);
+		float crack = (1.0 - smoothstep(0.0012, 0.0035, abs(cn - 0.5))) * smoothstep(0.55, 0.68, fbm(uv * 0.2 + 7.0)) * detail;
+		float oil = smoothstep(0.64, 0.8, fbm(uv * 0.35 + 5.0)) * 0.7;
+		float tracks = asphalt * smoothstep(0.55, 0.75, fbm(vec2(uv.x * 0.08, uv.y * 1.6) + 2.0)) * 0.5;
 		float grit = vnoise(uv * 70.0) * detail;
-		float c = clamp(slab + big * 0.35 + mid * 0.25 - oil * 0.6 + joint * 0.8, 0.0, 1.0);
-		return vec4(c, mid * 0.2 + grit * 0.15 - joint * 0.5, -oil * 0.3, max(joint, oil * 0.3));
+		float aggregate = smoothstep(0.6, 0.9, vnoise(uv * 160.0)) * detail;
+		float concrete_c = clamp(slab + big * 0.3 + mid * 0.22 - oil * 0.55 + joint * 0.8 + crack * 0.45, 0.0, 1.0);
+		float asphalt_c = clamp(0.82 + mid * 0.12 - aggregate * 0.25 + tracks * 0.15 - oil * 0.1, 0.0, 1.0);
+		float c = mix(concrete_c, asphalt_c, asphalt);
+		// Puddles in low spots: dark and glossy.
+		float puddle = smoothstep(0.66, 0.7, fbm(uv * 0.11 + 13.0)) * (0.6 + 0.4 * asphalt);
+		float h = mix(mid * 0.2 + grit * 0.15 - joint * 0.5 - crack * 0.6, aggregate * 0.25 + grit * 0.1, asphalt) * (1.0 - puddle);
+		float rough = -oil * 0.3 - puddle * 0.88 + asphalt * 0.0;
+		return vec4(clamp(c + puddle * 0.25, 0.0, 1.0), h, rough, max(max(joint, crack), oil * 0.3));
 	}
 	// concrete: mottled, with stains and fine pores; formwork seams every 1.2 m
 	float mott = fbm(uv * 1.2);
@@ -167,9 +181,11 @@ void fragment() {
 		col = mix(col, vec3(0.30, 0.16, 0.09), rust);
 		metal = mix(0.05, 0.85, bare) * (1.0 - rust);
 	}
-	// Grime collects low on walls (within half a metre of the floor level below).
+	// Grime collects low on walls (within half a metre of the floor level
+	// below), and rain leaves vertical streaks on outer walls.
 	float grime = (1.0 - smoothstep(0.0, 0.6, fract(wpos.y / 3.5) * 3.5)) * (1.0 - an.y) * 0.25;
-	col *= 1.0 - grime;
+	float streaks = smoothstep(0.5, 0.75, fbm(vec2(uv.x * 2.2, wpos.y * 0.25) + seed)) * (1.0 - an.y) * 0.18;
+	col *= (1.0 - grime) * (1.0 - streaks);
 	ALBEDO = col;
 	ROUGHNESS = clamp(roughness_base + s.z, 0.05, 1.0);
 	METALLIC = metal;

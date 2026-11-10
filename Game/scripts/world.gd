@@ -14,11 +14,14 @@ var cell_slot := {}            # cell id -> [solid index, instance index]
 var net: TfpsNet
 var _box_mesh := BoxMesh.new()
 var _solids: Array = []
+var dressing := {}             # solid index -> [nodes] drawn over it (hidden when it breaks)
+var _container_tints := {}
 
 
 ## Builds the map from the native world description (Godot space, metres).
 func build(world: Dictionary, p_net: TfpsNet) -> void:
 	net = p_net
+	map_name = net.map_name if net else ""
 	for c in get_children():
 		c.queue_free()
 	solid_nodes.clear()
@@ -26,6 +29,7 @@ func build(world: Dictionary, p_net: TfpsNet) -> void:
 	broken.clear()
 	cell_slot.clear()
 	_solids = world.get("solids", [])
+	_container_tints = TfpsDressing.container_tints(_solids)
 	_build_environment()
 	var ceilings: Array[AABB] = []
 	for s in _solids:
@@ -34,6 +38,7 @@ func build(world: Dictionary, p_net: TfpsNet) -> void:
 		if box.size.y < 0.6 and box.position.y > 2.4 and box.size.x * box.size.z > 12.0 and s.get("tag", "") != "ground":
 			ceilings.append(box)
 	_build_interior_lights(ceilings)
+	dressing = TfpsDressing.build(self, _solids)
 	_build_surroundings()
 
 
@@ -53,6 +58,84 @@ func _build_surroundings() -> void:
 	mi.set_instance_shader_parameter("tint", Color(0.78, 0.8, 0.7))
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+	_build_backdrop(y)
+
+
+## Distant scenery beyond the map (drawn only): building silhouettes all
+## round, gantry cranes at the harbour, tree belts elsewhere. Fog gives it
+## aerial perspective.
+func _build_backdrop(ground_y: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(map_name) if map_name != "" else 7
+	var extent := 0.0
+	for s in _solids:
+		var b := _aabb(s)
+		extent = maxf(extent, maxf(absf(b.position.x), absf(b.end.x)))
+		extent = maxf(extent, maxf(absf(b.position.z), absf(b.end.z)))
+	var harbour := map_name.contains("harbor")
+	var mm_box := MultiMesh.new()
+	mm_box.transform_format = MultiMesh.TRANSFORM_3D
+	mm_box.use_colors = true
+	var boxes: Array = []
+	for i in 120:
+		var a := rng.randf() * TAU
+		var r := rng.randf_range(extent + 170.0, extent + 700.0)
+		var w := rng.randf_range(14.0, 55.0)
+		var d := rng.randf_range(14.0, 45.0)
+		var h := rng.randf_range(7.0, 24.0) if rng.randf() < 0.85 else rng.randf_range(28.0, 60.0)
+		var p := Vector3(cos(a) * r, ground_y + h * 0.5, sin(a) * r)
+		var shade := rng.randf_range(0.2, 0.36)
+		var col := Color(shade, shade * rng.randf_range(0.97, 1.03), shade * rng.randf_range(0.98, 1.08))
+		boxes.append([Transform3D(Basis.from_euler(Vector3(0, rng.randf() * TAU, 0)).scaled(Vector3(w, h, d)), p), col])
+	if harbour:
+		for i in 4:
+			var a := -0.4 + i * 0.25
+			var r := extent + 120.0 + i * 15.0
+			var base := Vector3(cos(a) * r, ground_y, sin(a) * r)
+			var yaw := Basis.from_euler(Vector3(0, a, 0))
+			var steel := Color(0.55, 0.22, 0.12) if i % 2 == 0 else Color(0.2, 0.32, 0.45)
+			for leg in [Vector3(-8, 0, -6), Vector3(8, 0, -6), Vector3(-8, 0, 6), Vector3(8, 0, 6)]:
+				boxes.append([Transform3D(Basis().scaled(Vector3(1.2, 38, 1.2)), base + yaw * (leg + Vector3(0, 19, 0))), steel])
+			boxes.append([Transform3D(yaw.scaled(Vector3(2.5, 2.5, 70)), base + yaw * Vector3(0, 40, 10)), steel])
+			boxes.append([Transform3D(yaw.scaled(Vector3(18, 2, 2)), base + yaw * Vector3(0, 36, -6)), steel])
+			boxes.append([Transform3D(yaw.scaled(Vector3(6, 4, 6)), base + yaw * Vector3(0, 42, 0)), Color(0.75, 0.75, 0.72)])
+	mm_box.mesh = BoxMesh.new()
+	mm_box.instance_count = boxes.size()
+	for i in boxes.size():
+		mm_box.set_instance_transform(i, boxes[i][0])
+		mm_box.set_instance_color(i, boxes[i][1])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm_box
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/backdrop.gdshader")
+	mmi.material_override = m
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
+	if not harbour:
+		var trees := MultiMesh.new()
+		trees.transform_format = MultiMesh.TRANSFORM_3D
+		trees.use_colors = true
+		var sphere := SphereMesh.new()
+		sphere.radial_segments = 10
+		sphere.rings = 6
+		trees.mesh = sphere
+		trees.instance_count = 420
+		for i in 420:
+			var a := rng.randf() * TAU
+			var r := rng.randf_range(extent + 35.0, extent + 160.0)
+			var s := rng.randf_range(4.0, 9.0)
+			var p := Vector3(cos(a) * r, ground_y + s * 0.7, sin(a) * r)
+			trees.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(s, s * 1.15, s)), p))
+			var g := rng.randf_range(0.07, 0.13)
+			trees.set_instance_color(i, Color(g * 0.85, g * 1.15, g * 0.6))
+		var tm := MultiMeshInstance3D.new()
+		tm.multimesh = trees
+		var leaves := ShaderMaterial.new()
+		leaves.shader = load("res://shaders/backdrop.gdshader")
+		leaves.set_shader_parameter("foliage", true)
+		tm.material_override = leaves
+		tm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(tm)
 
 
 static func _aabb(s: Dictionary) -> AABB:
@@ -66,11 +149,16 @@ func _add_solid(s: Dictionary) -> void:
 	var mat := int(s.get("material", 0))
 	var tag: String = s.get("tag", "")
 	var mi := MeshInstance3D.new()
-	mi.mesh = _box_mesh
 	mi.position = box.get_center()
-	mi.scale = box.size
+	if tag == "container" and minf(box.size.x, minf(box.size.y, box.size.z)) < 0.2:
+		mi.mesh = TfpsDressing.container_panel(box.size)   # corrugated sheet
+	else:
+		mi.mesh = _box_mesh
+		mi.scale = box.size
 	mi.material_override = TfpsMaterials.get_material(mat)
 	_style(mi, mat, tag, box)
+	if _container_tints.has(int(s["index"])):
+		mi.set_instance_shader_parameter("tint", _container_tints[int(s["index"])])
 	add_child(mi)
 	solid_nodes[int(s["index"])] = mi
 	# Dress it with a Blender asset when one matches (the box stays for breaking).
@@ -151,8 +239,12 @@ func _break_solid(index: int) -> void:
 	var mat := int(s["material"])
 	mmi.material_override = TfpsMaterials.get_material(mat)
 	_style(mmi, mat, s.get("tag", ""), _aabb(s))
+	if _container_tints.has(index):
+		mmi.set_instance_shader_parameter("tint", _container_tints[index])
 	add_child(mmi)
 	broken[index] = mmi
+	for n in dressing.get(index, []):
+		(n as Node3D).visible = false
 	if solid_nodes.has(index):
 		solid_nodes[index].queue_free()
 		solid_nodes.erase(index)
@@ -180,8 +272,8 @@ func _build_environment() -> void:
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 1.3
-	env.tonemap_exposure = 1.15
+	env.ambient_light_energy = 0.85
+	env.tonemap_exposure = 1.0
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
 	env.tonemap_white = 6.0
@@ -189,6 +281,10 @@ func _build_environment() -> void:
 	env.ssao_radius = 1.2
 	env.ssao_intensity = 2.0
 	env.ssil_enabled = quality >= 2
+	env.ssr_enabled = quality >= 2
+	env.ssr_max_steps = 48
+	env.ssr_fade_in = 0.2
+	env.ssr_fade_out = 2.0
 	env.sdfgi_enabled = quality >= 3
 	env.sdfgi_use_occlusion = true
 	env.sdfgi_cascades = 4
@@ -201,22 +297,29 @@ func _build_environment() -> void:
 	env.volumetric_fog_albedo = Color(0.9, 0.88, 0.85)
 	env.volumetric_fog_anisotropy = 0.6
 	env.volumetric_fog_length = 64.0
+	env.fog_enabled = true
+	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
+	env.fog_density = 0.0028
+	env.fog_aerial_perspective = 0.7
+	env.fog_sky_affect = 0.0
+	env.fog_light_color = Color(0.68, 0.74, 0.82)
 	env.adjustment_enabled = true
-	env.adjustment_contrast = 1.08
-	env.adjustment_saturation = 1.05
+	env.adjustment_contrast = 1.14
+	env.adjustment_saturation = 1.04
 	we.environment = env
 	add_child(we)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-38.0, -125.0, 0.0)
 	sun.light_color = Color(1.0, 0.93, 0.82)
-	sun.light_energy = 2.2
+	sun.light_energy = 2.7
 	sun.shadow_enabled = true
 	if quality == 0:
 		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 		sun.directional_shadow_max_distance = 50.0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	sun.directional_shadow_max_distance = 120.0
+	else:
+		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+		sun.directional_shadow_max_distance = 120.0
 	sun.light_volumetric_fog_energy = 1.5
 	add_child(sun)
 

@@ -53,7 +53,7 @@ static func get_material(id: int) -> Material:
 static func _params(id: int) -> Dictionary:
 	match id:
 		BRICK:
-			return {"pattern": 1, "color_a": Color(0.42, 0.17, 0.11), "color_b": Color(0.62, 0.60, 0.56),
+			return {"pattern": 1, "color_a": Color(0.36, 0.14, 0.09), "color_b": Color(0.58, 0.56, 0.52),
 				"roughness_base": 0.9, "bump_strength": 1.6}
 		WOOD:
 			return {"pattern": 2, "color_a": Color(0.47, 0.32, 0.19), "color_b": Color(0.20, 0.13, 0.08),
@@ -68,8 +68,8 @@ static func _params(id: int) -> Dictionary:
 			return {"pattern": 6, "color_a": Color(0.30, 0.31, 0.32), "color_b": Color(0.42, 0.43, 0.44),
 				"roughness_base": 0.45, "metallic_base": 0.9, "bump_strength": 1.0}
 		DIRT:
-			return {"pattern": 7, "color_a": Color(0.50, 0.49, 0.46), "color_b": Color(0.20, 0.20, 0.19),
-				"roughness_base": 0.95, "bump_strength": 1.4}
+			return {"pattern": 7, "color_a": Color(0.40, 0.39, 0.37), "color_b": Color(0.11, 0.11, 0.11),
+				"roughness_base": 0.93, "bump_strength": 1.4}
 		_:
 			return {"pattern": 0, "color_a": Color(0.60, 0.59, 0.56), "color_b": Color(0.42, 0.41, 0.39),
 				"roughness_base": 0.85, "bump_strength": 0.8}

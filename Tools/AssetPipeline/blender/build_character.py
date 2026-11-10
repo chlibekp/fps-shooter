@@ -557,7 +557,7 @@ def material(asset):
     # Height: folds + weave on all fabric, webbing on the gear.
     h1 = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY_ADD')
     nt.links.new(rip.outputs[0], h1.inputs[0])
-    h1.inputs[1].default_value = 0.015
+    h1.inputs[1].default_value = 0.006
     nt.links.new(folds.outputs["Fac"], h1.inputs[2])
     masked = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY')
     nt.links.new(h1.outputs["Value"], masked.inputs[0])

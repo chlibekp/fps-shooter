@@ -33,8 +33,8 @@ static func available() -> bool:
 	return server_dir() != ""
 
 
-## Starts a deathmatch server and moving target bots on 127.0.0.1:port.
-static func start_practice(map_name: String, bots: int, port: int) -> bool:
+## Starts a deathmatch server and combat bots (skill 0..1) on 127.0.0.1:port.
+static func start_practice(map_name: String, bots: int, port: int, skill := 0.5) -> bool:
 	var dir := server_dir()
 	if dir == "":
 		return false
@@ -48,7 +48,7 @@ static func start_practice(map_name: String, bots: int, port: int) -> bool:
 	if bots > 0:
 		OS.delay_msec(400)
 		var bp := OS.create_process(dir.path_join(_exe("tfps-bot")), ["--server", "127.0.0.1:%d" % port, "--count", str(bots), "--seconds", "86400",
-			"--pattern", "random", "--map", defs.path_join("maps/%s.json" % map_name), "--weapons", defs.path_join("weapons.json"), "--report", "0"])
+			"--pattern", "combat", "--skill", str(skill), "--map", defs.path_join("maps/%s.json" % map_name), "--weapons", defs.path_join("weapons.json"), "--report", "0"])
 		if bp > 0:
 			_pids.append(bp)
 	return true

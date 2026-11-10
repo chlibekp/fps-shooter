@@ -3,7 +3,7 @@
 class_name TfpsMenu
 extends Control
 
-signal practice(map_name: String, bots: int)
+signal practice(map_name: String, bots: int, skill: float)
 signal host_lobby
 signal join_lobby(code: String)
 signal direct_connect(address: String, map_name: String)
@@ -232,9 +232,12 @@ func _show(screen: String) -> void:
 			bots.max_value = 9
 			bots.value = 4
 			_row("Bots", bots)
+			var levels := {"Easy": 0.2, "Normal": 0.5, "Hard": 0.85}
+			var level := ["Normal"]
+			_row("Difficulty", _choice(levels.keys(), "Normal", func(v: String) -> void: level[0] = v))
 			_button("Start", func() -> void:
 				settings.save()
-				practice.emit(settings.last_map, int(bots.value)))
+				practice.emit(settings.last_map, int(bots.value), float(levels[level[0]])))
 			_button("Back", back)
 		"join":
 			_title.text = "JOIN A LOBBY"

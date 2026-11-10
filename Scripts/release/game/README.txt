@@ -4,8 +4,7 @@ TacticalFPS @TAG@ (@PLATFORM@)
 Play
 ----
   Practice:  double-click Practice.sh (Practice.bat on Windows)
-             straight into a deathmatch against moving target bots.
-             The bots move but do not shoot back yet.
+             straight into a deathmatch against bots that fight back.
   Play:      double-click Play.sh (Play.bat on Windows)
              main menu. Host a lobby and give friends the invite code, or
              join one. A lobby service starts on this computer for hosting.

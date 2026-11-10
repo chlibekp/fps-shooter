@@ -11,7 +11,7 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "tfps-bot"
-path = "src/bin/bot.rs"
+path = "src/bin/bot/main.rs"
 
 [dependencies]
 tfps-sim.workspace = true

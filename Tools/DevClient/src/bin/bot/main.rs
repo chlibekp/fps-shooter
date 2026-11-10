@@ -3,6 +3,8 @@
 //! `tfps-bot --server 127.0.0.1:7777 --count 2 --seconds 30`
 //! Each bot connects, moves with a scripted pattern and prints what it sees.
 
+mod combat;
+
 use clap::{Parser, ValueEnum};
 use std::time::{Duration, Instant};
 use tfps_devclient::{Client, ClientConfig, ClientEvent};
@@ -18,6 +20,8 @@ enum Pattern {
     Random,
     /// Stand still.
     Idle,
+    /// Fight: aim at the nearest visible enemy, fire in bursts, roam otherwise.
+    Combat,
 }
 
 #[derive(Parser, Debug)]
@@ -43,11 +47,14 @@ struct Args {
     /// Print a status line every N seconds (0 = only summary).
     #[arg(long, default_value_t = 2)]
     report: u64,
+    /// Combat pattern: 0 (easy) .. 1 (hard).
+    #[arg(long, default_value_t = 0.5)]
+    skill: f32,
 }
 
 fn input_for(pattern: Pattern, t: f32, idx: usize, rng: &mut u64) -> MoveInput {
     match pattern {
-        Pattern::Idle => MoveInput::default(),
+        Pattern::Idle | Pattern::Combat => MoveInput::default(),
         Pattern::Circle => {
             let yaw = (t * 45.0 + idx as f32 * 90.0) % 360.0;
             MoveInput {
@@ -121,11 +128,20 @@ fn main() -> anyhow::Result<()> {
         .map(|i| 0x9E37_79B9 ^ ((i as u64 + 1) * 0x1000_0001))
         .collect();
     let mut held: Vec<(MoveInput, Instant)> = vec![(MoveInput::default(), start); args.count];
+    let mut brains: Vec<combat::Brain> = (0..args.count)
+        .map(|i| combat::Brain::new(0xC0FFEE ^ ((i as u64 + 7) * 0x9E37_79B9), args.skill))
+        .collect();
+    let mut last = start;
     while Instant::now() < end {
         let now = Instant::now();
         let t = now.duration_since(start).as_secs_f32();
+        let dt = now.duration_since(last).as_secs_f32().min(0.1);
+        last = now;
         for (i, bot) in bots.iter_mut().enumerate() {
-            if matches!(args.pattern, Pattern::Random) {
+            if matches!(args.pattern, Pattern::Combat) {
+                let input = brains[i].think(bot, &map, dt);
+                bot.set_input(input);
+            } else if matches!(args.pattern, Pattern::Random) {
                 if now >= held[i].1 {
                     held[i] = (
                         input_for(args.pattern, t, i, &mut rngs[i]),

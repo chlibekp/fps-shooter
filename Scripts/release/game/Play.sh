@@ -5,7 +5,7 @@
 #                                 computer so you can host matches and give
 #                                 friends the invite code
 #   ./Play.sh practice [map] [N]  straight into a deathmatch on this computer
-#                                 against N moving target bots (default 4).
+#                                 against N combat bots (default 4).
 #                                 Maps: test_arena, harbor, villa, consulate.
 #   ./Play.sh join HOST           use a friend's lobby (they run ./Play.sh;
 #                                 HOST is their IP address or host name)
@@ -90,7 +90,7 @@ case "$MODE" in
     PIDS+=($!)
     sleep 0.5
     if [[ "$BOTS" -gt 0 ]]; then
-      ./tfps-bot --server "127.0.0.1:$PORT" --count "$BOTS" --seconds 86400 --pattern random \
+      ./tfps-bot --server "127.0.0.1:$PORT" --count "$BOTS" --seconds 86400 --pattern combat \
         --map "Shared/Definitions/maps/$MAP.json" --weapons Shared/Definitions/weapons.json > "$LOGS/bots.log" 2>&1 &
       PIDS+=($!)
     fi

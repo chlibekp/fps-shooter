@@ -20,7 +20,7 @@ Unpack the archive and start a launcher:
 
 | Launcher | What it does |
 |----------|--------------|
-| `Practice.sh` / `Practice.bat` | Starts a local server and 4 moving target bots, then the game, connected. The bots do not shoot back yet. |
+| `Practice.sh` / `Practice.bat` | Starts a local server and 4 combat bots that find, aim at and shoot enemies, then the game, connected. |
 | `Play.sh` / `Play.bat` | Starts a lobby service on this computer and the main menu: host a lobby and share the invite code, or join one. |
 | `Play.sh join HOST` | Uses a friend's lobby (the computer running Play). |
 | `Play.sh practice harbor 6` | Map and bot count. |

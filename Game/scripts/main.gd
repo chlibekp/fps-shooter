@@ -123,9 +123,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		game.hud.show_net = not game.hud.show_net
 
 
-func _on_practice(map_name: String, bots: int) -> void:
+func _on_practice(map_name: String, bots: int, skill := 0.5) -> void:
 	var port := 27777 + randi() % 1000
-	if not TfpsLocalServices.start_practice(map_name, bots, port):
+	if not TfpsLocalServices.start_practice(map_name, bots, port, skill):
 		menu.show_error("Could not start the local server (the Server folder is missing).")
 		return
 	_start_match("127.0.0.1:%d" % port, map_name, "0")

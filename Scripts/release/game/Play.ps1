@@ -3,7 +3,7 @@
 #                                   PC so you can host matches and give friends
 #                                   the invite code
 #   .\Play.ps1 practice [map] [N]   straight into a deathmatch on this PC against
-#                                   N moving target bots (default 4).
+#                                   N combat bots (default 4).
 #                                   Maps: test_arena, harbor, villa, consulate.
 #   .\Play.ps1 join HOST            use a friend's lobby (they run Play.bat)
 # Environment: TFPS_NAME, TFPS_PUBLIC_HOST, TFPS_CLIENT_ARGS, TFPS_LOG_DIR.
@@ -71,7 +71,7 @@ try {
       Start-Sleep -Milliseconds 500
       if ($bots -gt 0) {
         $Procs += Start-Background "tfps-bot.exe" @("--server", "127.0.0.1:$port", "--count", $bots, "--seconds", "86400",
-          "--pattern", "random", "--map", "Shared/Definitions/maps/$map.json", "--weapons", "Shared/Definitions/weapons.json") (Join-Path $Logs "bots.log")
+          "--pattern", "combat", "--map", "Shared/Definitions/maps/$map.json", "--weapons", "Shared/Definitions/weapons.json") (Join-Path $Logs "bots.log")
       }
       Run-Game @("--connect", "127.0.0.1:$port", "--map", $map, "--name", $Name)
     }

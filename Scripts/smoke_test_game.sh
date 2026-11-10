@@ -5,7 +5,7 @@
 # "player connected" with its name) and the bots are in.
 #
 #   Scripts/smoke_test_game.sh ARCHIVE [TIMEOUT_SECONDS]
-#   TFPS_CLIENT_ARGS="-nullrhi -nosound -unattended" for a headless Unreal client
+#   TFPS_CLIENT_ARGS="--headless" to run the game without a display (CI)
 set -euo pipefail
 ARCHIVE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 TIMEOUT="${2:-120}"

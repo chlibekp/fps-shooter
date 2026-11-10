@@ -40,6 +40,8 @@ func _process(_delta: float) -> void:
 
 
 func _text(t: String, pos: Vector2, size: int, color: Color, align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0) -> void:
+	if t.is_empty():
+		return
 	draw_string_outline(_font, pos, t, align, width, size, 4, Color(0, 0, 0, 0.6))
 	draw_string(_font, pos, t, align, width, size, color)
 

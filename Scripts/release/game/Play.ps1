@@ -25,11 +25,15 @@ function Start-Background([string]$Exe, [string[]]$ArgList, [string]$Log) {
     -RedirectStandardOutput $Log -RedirectStandardError "$Log.err" -WindowStyle Hidden -PassThru
 }
 
+# Engine options (TFPS_CLIENT_ARGS) first, then "--" and the game's own options.
 function Run-Game([string[]]$ArgList) {
-  $exe = Get-ChildItem -Path (Join-Path $Here "Game") -Filter "*.exe" | Select-Object -First 1
+  $exe = Get-ChildItem -Path (Join-Path $Here "Game") -Filter "TacticalFPS.exe" | Select-Object -First 1
   if (-not $exe) { throw "game not found in $Here\Game" }
-  if ($env:TFPS_CLIENT_ARGS) { $ArgList += $env:TFPS_CLIENT_ARGS.Split(" ") }
-  Start-Process -FilePath $exe.FullName -ArgumentList $ArgList -Wait
+  $all = @()
+  if ($env:TFPS_CLIENT_ARGS) { $all += $env:TFPS_CLIENT_ARGS.Split(" ") }
+  $all += "--"
+  $all += $ArgList
+  Start-Process -FilePath $exe.FullName -ArgumentList $all -Wait
 }
 
 function Lan-Address {
@@ -52,11 +56,11 @@ try {
         Write-Host "Lobby service running: friends join with 'Play.ps1 join $hostAddr' (allow TCP 7700 and the game's UDP ports in the firewall)."
         Start-Sleep -Milliseconds 500
       }
-      Run-Game @("-lobby=http://127.0.0.1:7700", "-name=$Name")
+      Run-Game @("--lobby", "http://127.0.0.1:7700", "--name", $Name)
     }
     "join" {
       if (-not $Arg1) { throw "usage: Play.ps1 join HOST" }
-      Run-Game @("-lobby=http://${Arg1}:7700", "-name=$Name")
+      Run-Game @("--lobby", "http://${Arg1}:7700", "--name", $Name)
     }
     "practice" {
       $map = if ($Arg1) { $Arg1 } else { "test_arena" }
@@ -69,7 +73,7 @@ try {
         $Procs += Start-Background "tfps-bot.exe" @("--server", "127.0.0.1:$port", "--count", $bots, "--seconds", "86400",
           "--pattern", "random", "--map", "Shared/Definitions/maps/$map.json", "--weapons", "Shared/Definitions/weapons.json") (Join-Path $Logs "bots.log")
       }
-      Run-Game @("-connect=127.0.0.1:$port", "-map=$map", "-name=$Name")
+      Run-Game @("--connect", "127.0.0.1:$port", "--map", $map, "--name", $Name)
     }
     default { Get-Content $PSCommandPath -TotalCount 9; exit 2 }
   }

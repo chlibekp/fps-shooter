@@ -45,6 +45,7 @@ port_in_use() {
   (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && return 0 || return 1
 }
 
+# Starts the game: engine options (TFPS_CLIENT_ARGS) first, then "--" and the game's own options.
 run_game() {
   local args=("$@")
   # shellcheck disable=SC2206
@@ -53,12 +54,12 @@ run_game() {
     local app
     app="$(find "$HERE/Game" -maxdepth 1 -name "*.app" 2>/dev/null | head -n 1 || true)"
     [[ -n "$app" ]] || { echo "game not found in $HERE/Game" >&2; exit 1; }
-    open -W -n "$app" --args "${args[@]}" "${extra[@]}"
+    "$app/Contents/MacOS/TacticalFPS" "${extra[@]}" -- "${args[@]}"
   else
-    local launcher
-    launcher="$(find "$HERE/Game" -maxdepth 1 -name "*.sh" 2>/dev/null | head -n 1 || true)"
-    [[ -n "$launcher" ]] || { echo "game not found in $HERE/Game" >&2; exit 1; }
-    "$launcher" "${args[@]}" "${extra[@]}"
+    local exe
+    exe="$(find "$HERE/Game" -maxdepth 1 -name "*.x86_64" 2>/dev/null | head -n 1 || true)"
+    [[ -n "$exe" ]] || { echo "game not found in $HERE/Game" >&2; exit 1; }
+    "$exe" "${extra[@]}" -- "${args[@]}"
   fi
 }
 
@@ -74,11 +75,11 @@ case "$MODE" in
       echo "Lobby service running: friends join with ./Play.sh join $HOST (TCP 7700 and the game's UDP ports must be reachable)."
       sleep 0.5
     fi
-    run_game "-lobby=http://127.0.0.1:7700" "-name=$NAME"
+    run_game --lobby "http://127.0.0.1:7700" --name "$NAME"
     ;;
   join)
     HOST="${2:?usage: ./Play.sh join HOST}"
-    run_game "-lobby=http://$HOST:7700" "-name=$NAME"
+    run_game --lobby "http://$HOST:7700" --name "$NAME"
     ;;
   practice)
     MAP="${2:-test_arena}"
@@ -93,7 +94,7 @@ case "$MODE" in
         --map "Shared/Definitions/maps/$MAP.json" --weapons Shared/Definitions/weapons.json > "$LOGS/bots.log" 2>&1 &
       PIDS+=($!)
     fi
-    run_game "-connect=127.0.0.1:$PORT" "-map=$MAP" "-name=$NAME"
+    run_game --connect "127.0.0.1:$PORT" --map "$MAP" --name "$NAME"
     ;;
   *)
     sed -n '2,16p' "$0"

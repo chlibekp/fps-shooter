@@ -4,9 +4,9 @@
 #
 #   Scripts/package_game.sh TAG PLATFORM CLIENT_DIR [OUT_DIR]
 #     PLATFORM    Linux | Win64 | Mac
-#     CLIENT_DIR  BuildCookRun -archivedirectory output (Scripts/package_client.sh
-#                 writes Dist/client-<PLATFORM>); it holds one platform folder
-#                 (Linux/, Windows/ or Mac/)
+#     CLIENT_DIR  the Godot export (Scripts/godot/export_game.sh writes
+#                 build/export/<Linux|Windows|Mac>); a macOS export is a .zip
+#                 holding TacticalFPS.app
 #
 # Needs release builds of tfps-server, tfps-lobby and tfps-bot in target/release
 # (cargo build --release -p tfps-server -p tfps-lobby -p tfps-devclient).
@@ -27,13 +27,16 @@ STAGE="$OUT_DIR/$NAME"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/Game" "$STAGE/Server"
 
-# The game: BuildCookRun puts it in a single platform folder.
-SRC="$(find "$CLIENT_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1 || true)"
-if [[ -z "$SRC" ]]; then
-  echo "error: no packaged client in $CLIENT_DIR" >&2
+# The game: the Godot export (macOS: unzip the .app).
+if [[ -z "$(ls -A "$CLIENT_DIR" 2>/dev/null)" ]]; then
+  echo "error: no exported game in $CLIENT_DIR" >&2
   exit 1
 fi
-cp -R "$SRC"/. "$STAGE/Game/"
+if [[ "$PLATFORM" == Mac ]]; then
+  unzip -q "$CLIENT_DIR"/*.zip -d "$STAGE/Game/"
+else
+  cp -R "$CLIENT_DIR"/. "$STAGE/Game/"
+fi
 
 # What a local match needs.
 for b in tfps-server tfps-lobby tfps-bot; do
@@ -49,6 +52,7 @@ if [[ "$PLATFORM" == Win64 ]]; then
 else
   cp "$L/Play.sh" "$L/Practice.sh" "$STAGE/"
   chmod +x "$STAGE/Play.sh" "$STAGE/Practice.sh" "$STAGE/Server/"tfps-*
+  find "$STAGE/Game" -maxdepth 1 -name "*.x86_64" -exec chmod +x {} +
 fi
 sed -e "s/@TAG@/$TAG/g" -e "s/@PLATFORM@/$ARCH/g" "$L/README.txt" > "$STAGE/README.txt"
 git -C "$REPO_ROOT" rev-parse HEAD > "$STAGE/VERSION.txt" 2>/dev/null || echo "$TAG" > "$STAGE/VERSION.txt"

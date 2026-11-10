@@ -63,6 +63,8 @@ pub struct ServerCore {
     saved: HashMap<u64, SavedPlayer>,
     handshakes_this_tick: u32,
     send_buf: Vec<u8>,
+    /// Decrypted copy of the Data packet being processed.
+    recv_plain: Vec<u8>,
     entities: Vec<EntityState>,
     scratch: Vec<EntityState>,
     recent_shots: std::collections::VecDeque<(u32, ShotEvent)>,
@@ -104,6 +106,7 @@ impl ServerCore {
             saved: HashMap::new(),
             handshakes_this_tick: 0,
             send_buf: Vec::with_capacity(MAX_PACKET_SIZE),
+            recv_plain: Vec::with_capacity(MAX_PACKET_SIZE),
             entities: Vec::with_capacity(64),
             scratch: Vec::with_capacity(64),
             last_stats_log: now,
@@ -191,7 +194,31 @@ impl ServerCore {
                 if hdr.version != PROTOCOL_VERSION {
                     return Err(tfps_protocol::DecodeError::BadVersion(hdr.version));
                 }
-                self.handle_data(addr, &mut r, now)?;
+                // Decrypt with the session's keys (the header is clear and
+                // authenticated); forged or replayed packets are dropped.
+                let dh = DataHeader::decode(&mut r)?;
+                let Some(cipher) = self
+                    .conns
+                    .get_mut(&dh.session_key)
+                    .and_then(|c| c.cipher.as_mut())
+                else {
+                    return Err(tfps_protocol::DecodeError::Invalid("unknown session"));
+                };
+                let mut plain = std::mem::take(&mut self.recv_plain);
+                plain.clear();
+                plain.extend_from_slice(data);
+                let result = match cipher.open(&mut plain) {
+                    Some(n) => {
+                        plain.truncate(n);
+                        let (_, mut pr) = packet::read_header(&plain)?;
+                        self.handle_data(addr, &mut pr, now)
+                    }
+                    None => Err(tfps_protocol::DecodeError::Invalid(
+                        "packet failed authentication",
+                    )),
+                };
+                self.recv_plain = plain;
+                result?;
             }
             PacketType::Disconnect => {
                 let d = Disconnect::decode(&mut r)?;
@@ -347,6 +374,12 @@ impl ServerCore {
             player_id,
             now,
         );
+        // Key agreement: a fresh server key pair per session.
+        let keys = tfps_protocol::crypto::KeyPair::generate();
+        conn.cipher = Some(tfps_protocol::crypto::PacketCipher::new(
+            &keys.shared(&resp.client_public),
+            false,
+        ));
         ConnectAccepted {
             client_nonce: resp.client_nonce,
             session_key,
@@ -363,6 +396,7 @@ impl ServerCore {
                 .player(player_id)
                 .map(|p| p.loadout)
                 .unwrap_or(self.game.default_loadout()),
+            server_public: keys.public,
         }
         .encode(&mut conn.accepted_packet);
         self.send(addr, &conn.accepted_packet);
@@ -918,11 +952,14 @@ impl ServerCore {
                 baseline,
                 &self.shot_scratch,
                 &self.gadget_scratch,
-                MAX_PACKET_SIZE,
+                tfps_protocol::MAX_DATA_PLAINTEXT,
                 |e| e.position().distance(&me),
                 &mut self.sent_scratch,
             );
-            debug_assert!(buf.len() <= MAX_PACKET_SIZE);
+            debug_assert!(buf.len() <= tfps_protocol::MAX_DATA_PLAINTEXT);
+            if let Some(cipher) = c.cipher.as_mut() {
+                cipher.seal(&mut buf);
+            }
             if report != snapshot::BudgetReport::default() {
                 self.stats.snapshots_trimmed.fetch_add(1, Relaxed);
             }

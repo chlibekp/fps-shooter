@@ -110,6 +110,8 @@ namespace tfps
 	{
 		uint64_t PacketsSent = 0;
 		uint64_t PacketsReceived = 0;
+		/** Data packets that failed authentication (forged, corrupted or replayed). */
+		uint64_t PacketsRejectedAuth = 0;
 		uint64_t BytesSent = 0;
 		uint64_t BytesReceived = 0;
 		uint64_t SnapshotsReceived = 0;
@@ -296,6 +298,19 @@ namespace tfps
 		ClientNetStats NetStats;
 		std::vector<uint8_t> SendBuf;
 		std::vector<uint8_t> RecvBuf;
+		// Session encryption (see TfpsCrypto.h and crypto.rs).
+		uint8_t SecretKey[32] = {};
+		uint8_t PublicKey[32] = {};
+		uint8_t SendKey[32] = {};
+		uint8_t RecvKey[32] = {};
+		bool bCipher = false;
+		uint32_t SendCounter = 0;
+		bool bRecvAny = false;
+		uint32_t RecvTop = 0;
+		uint64_t RecvWindow = 0;
+		void Seal(std::vector<uint8_t>& Packet);
+		/** Decrypts a sealed Data packet in place; returns the plaintext length, 0 if rejected. */
+		size_t Open(uint8_t* Packet, size_t Len);
 		std::vector<uint16_t> AckedScratch;
 	};
 }

@@ -194,6 +194,8 @@ pub struct NetStats {
     pub packets_received: u64,
     /// Datagrams from other addresses, ignored.
     pub packets_foreign: u64,
+    /// Data packets that failed authentication (forged, corrupted or replayed).
+    pub packets_rejected_auth: u64,
     /// Receives that returned no usable source address (ignored; seen on macOS).
     pub packets_no_address: u64,
     /// Length of the last such datagram.
@@ -256,6 +258,9 @@ pub struct Client {
     pub loadout: [u8; 2],
     /// Loadout definitions with this client's attachments fitted (primary).
     fitted: Option<[WeaponDef; 2]>,
+    /// Handshake key pair, and the session cipher once accepted.
+    keys: tfps_protocol::crypto::KeyPair,
+    cipher: Option<tfps_protocol::crypto::PacketCipher>,
     shot_buf: ShotBuffer,
     /// Shots this client fired (predicted), and shot events of others.
     pub local_shots: u64,
@@ -350,6 +355,8 @@ impl Client {
             weapons: weapons.clone(),
             loadout: weapons.default_loadout,
             fitted: None,
+            keys: tfps_protocol::crypto::KeyPair::generate(),
+            cipher: None,
             shot_buf: ShotBuffer::default(),
             local_shots: 0,
             destroyed_cells: 0,
@@ -500,6 +507,7 @@ impl Client {
                         name: self.cfg.name.clone(),
                         armor: self.cfg.armor,
                         attachments: self.cfg.attachments,
+                        client_public: self.keys.public,
                     }
                     .encode(&mut self.send_buf);
                     self.send_current();
@@ -625,6 +633,9 @@ impl Client {
             .write(&mut w, seq, now, Duration::from_millis(100), 200);
         w.u8(BodyKind::Input as u8);
         bundle.encode(&mut w);
+        if let Some(c) = self.cipher.as_mut() {
+            c.seal(&mut self.send_buf);
+        }
         self.send_current();
     }
 
@@ -656,8 +667,20 @@ impl Client {
             }
             self.stats.packets_received += 1;
             self.stats.bytes_received += n as u64;
-            let data = std::mem::take(&mut self.recv_buf);
-            let _ = self.process(&data[..n], now);
+            let mut data = std::mem::take(&mut self.recv_buf);
+            let mut len = n;
+            if n > 4 && data[4] == PacketType::Data as u8 {
+                // Sealed: decrypt in place (drop forged / replayed packets).
+                match self.cipher.as_mut().and_then(|c| c.open(&mut data[..n])) {
+                    Some(plain) => len = plain,
+                    None => {
+                        self.stats.packets_rejected_auth += 1;
+                        self.recv_buf = data;
+                        continue;
+                    }
+                }
+            }
+            let _ = self.process(&data[..len], now);
             self.recv_buf = data;
         }
     }
@@ -704,6 +727,10 @@ impl Client {
                     return Ok(());
                 }
                 self.loadout = a.loadout;
+                self.cipher = Some(tfps_protocol::crypto::PacketCipher::new(
+                    &self.keys.shared(&a.server_public),
+                    true,
+                ));
                 self.fitted = match (
                     self.weapons.get(a.loadout[0]),
                     self.weapons.get(a.loadout[1]),

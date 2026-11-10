@@ -1,6 +1,7 @@
 // C++ protocol vs Rust golden byte vectors, plus local round-trip tests.
 #include "TestFramework.h"
 #include "NetCore/TfpsProtocol.h"
+#include "NetCore/TfpsCrypto.h"
 
 #include <fstream>
 #include <map>
@@ -64,7 +65,7 @@ namespace
 TFPS_TEST(GoldenHandshakeBytesMatchRust)
 {
 	auto V = LoadVectors();
-	TFPS_REQUIRE(V.size() == 24);   // 9 packets, 4 maps, weapons, 9 attachment fits, gadgets
+	TFPS_REQUIRE(V.size() == 30);   // 9 packets, 4 maps, weapons, 9 attachment fits, gadgets, 6 crypto
 	std::vector<uint8_t> B;
 	ConnectRequest CR; CR.ClientNonce = 0x0102030405060708ull; CR.Encode(B);
 	TFPS_EXPECT(B == V["connect_request"]);
@@ -73,7 +74,9 @@ TFPS_TEST(GoldenHandshakeBytesMatchRust)
 	TFPS_EXPECT(B == V["challenge"]);
 	B.clear();
 	ChallengeResponse Resp; Resp.ClientNonce = 0x0102030405060708ull; Resp.Cookie = 0xAABBCCDDEEFF0011ull;
-	Resp.ReconnectToken = 0x1111222233334444ull; Resp.JoinToken = 0x5555; Resp.Name = "Operator-7"; Resp.Armor = 2; Resp.Attachments = 6; Resp.Encode(B);
+	Resp.ReconnectToken = 0x1111222233334444ull; Resp.JoinToken = 0x5555; Resp.Name = "Operator-7"; Resp.Armor = 2; Resp.Attachments = 6;
+	for (uint8_t& Bt : Resp.ClientPublic) { Bt = 0x5a; }
+	Resp.Encode(B);
 	TFPS_EXPECT(B == V["challenge_response"]);
 	B.clear();
 	DisconnectPacket D; D.SessionKey = 0xDEADBEEFCAFEF00Dull; D.Reason = EDisconnectReason::ClientQuit; D.Encode(B);
@@ -90,6 +93,7 @@ TFPS_TEST(GoldenHandshakeBytesMatchRust)
 		TFPS_EXPECT(A.SessionKey == 0xDEADBEEFCAFEF00Dull && A.PlayerId == 3 && A.TickRate == 128 && A.SnapshotInterval == 2);
 		TFPS_EXPECT(A.ServerTick == 123456 && A.ReconnectToken == 0x777788889999AAAAull && A.MapHash == 0x5567bc867d6907e6ull && A.MapName == "test_arena");
 		TFPS_EXPECT(A.WeaponsHash == 0x0123456789ABCDEFull && A.Loadout[0] == 1 && A.Loadout[1] == 4);
+		TFPS_EXPECT(A.ServerPublic[0] == 0xa5 && A.ServerPublic[31] == 0xa5);
 		std::vector<uint8_t> Re;
 		A.Encode(Re);
 		TFPS_EXPECT(Re == P);
@@ -341,4 +345,36 @@ TFPS_TEST(MalformedInputIsRejectedWithoutCrash)
 	std::vector<EntityState> E;
 	std::vector<ShotEvent> Sv;
 	TFPS_EXPECT(!DecodeSnapshot(RB, nullptr, SH, E, Sv));
+}
+
+TFPS_TEST(EncryptionMatchesRust)
+{
+	auto V = LoadVectors();
+	uint8_t ClientSecret[32], ServerSecret[32], ClientPub[32], ServerPub[32], Shared[32], C2S[32], S2C[32];
+	for (int I = 0; I < 32; ++I) { ClientSecret[I] = 0x11; ServerSecret[I] = 0x22; }
+	crypto::X25519Base(ClientPub, ClientSecret);
+	crypto::X25519Base(ServerPub, ServerSecret);
+	crypto::X25519(Shared, ClientSecret, ServerPub);
+	crypto::DeriveSessionKeys(Shared, C2S, S2C);
+	TFPS_EXPECT(std::vector<uint8_t>(ClientPub, ClientPub + 32) == V["crypto_client_public"]);
+	TFPS_EXPECT(std::vector<uint8_t>(ServerPub, ServerPub + 32) == V["crypto_server_public"]);
+	TFPS_EXPECT(std::vector<uint8_t>(Shared, Shared + 32) == V["crypto_shared"]);
+	TFPS_EXPECT(std::vector<uint8_t>(C2S, C2S + 32) == V["crypto_c2s"]);
+	TFPS_EXPECT(std::vector<uint8_t>(S2C, S2C + 32) == V["crypto_s2c"]);
+	// The same packet sealed by the client (counter 0) as Rust's PacketCipher.
+	std::vector<uint8_t> P(64);
+	for (int I = 0; I < 64; ++I) { P[I] = static_cast<uint8_t>(I); }
+	uint8_t Nonce[12] = {};
+	uint8_t Tag[16];
+	crypto::AeadSeal(P.data() + kDataHeaderLen, P.size() - kDataHeaderLen, P.data(), kDataHeaderLen, C2S, Nonce, Tag);
+	P.insert(P.end(), Tag, Tag + 16);
+	P.insert(P.end(), {0, 0, 0, 0});
+	TFPS_EXPECT(P == V["crypto_sealed"]);
+	// And the server direction opens it; a flipped bit does not.
+	std::vector<uint8_t> Q = V["crypto_sealed"];
+	TFPS_EXPECT(crypto::AeadOpen(Q.data() + kDataHeaderLen, 64 - kDataHeaderLen, Q.data(), kDataHeaderLen, C2S, Nonce, Q.data() + 64));
+	TFPS_EXPECT(Q[30] == 30);
+	std::vector<uint8_t> F = V["crypto_sealed"];
+	F[2] ^= 1;
+	TFPS_EXPECT(!crypto::AeadOpen(F.data() + kDataHeaderLen, 64 - kDataHeaderLen, F.data(), kDataHeaderLen, C2S, Nonce, F.data() + 64));
 }

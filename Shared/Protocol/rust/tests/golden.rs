@@ -44,6 +44,7 @@ fn vectors() -> String {
         name: "Operator-7".into(),
         armor: 2,
         attachments: 6,
+        client_public: [0x5a; 32],
     }
     .encode(&mut b);
     add("challenge_response", &b);
@@ -60,6 +61,7 @@ fn vectors() -> String {
         map_name: "test_arena".into(),
         weapons_hash: 0x0123_4567_89AB_CDEF,
         loadout: [1, 4],
+        server_public: [0xa5; 32],
     }
     .encode(&mut b);
     add("connect_accepted", &b);
@@ -378,6 +380,24 @@ fn vectors() -> String {
         out.push_str(&format!("map_hash_{name} {:016x}\n", m.geometry_hash()));
     }
     out.push_str(&format!("weapons_hash {:016x}\n", weapons.hash()));
+    // Encryption: fixed key pairs, the shared secret, derived keys and a
+    // packet sealed by the client (counter 0), for the C++ mirror.
+    {
+        use tfps_protocol::crypto::{derive_session_keys, KeyPair, PacketCipher};
+        let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+        let client = KeyPair::from_secret([0x11; 32]);
+        let server = KeyPair::from_secret([0x22; 32]);
+        let shared = client.shared(&server.public);
+        let (c2s, s2c) = derive_session_keys(&shared);
+        out.push_str(&format!("crypto_client_public {}\n", hex(&client.public)));
+        out.push_str(&format!("crypto_server_public {}\n", hex(&server.public)));
+        out.push_str(&format!("crypto_shared {}\n", hex(&shared)));
+        out.push_str(&format!("crypto_c2s {}\n", hex(&c2s)));
+        out.push_str(&format!("crypto_s2c {}\n", hex(&s2c)));
+        let mut packet: Vec<u8> = (0..64u8).collect();
+        PacketCipher::new(&shared, true).seal(&mut packet);
+        out.push_str(&format!("crypto_sealed {}\n", hex(&packet)));
+    }
     // Every weapon with every attachment combination (C++ mirror check).
     for att in 0u8..16 {
         let (b, g) = (att & 3, att >> 2);

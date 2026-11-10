@@ -298,6 +298,7 @@ fn speed_hack_flooding_commands_gains_nothing() {
     let (_, mut r) = packet::read_header(&rb[..n]).unwrap();
     let ch = Challenge::decode(&mut r).unwrap();
     buf.clear();
+    let keys = tfps_protocol::crypto::KeyPair::generate();
     ChallengeResponse {
         client_nonce: 7,
         cookie: ch.cookie,
@@ -306,6 +307,7 @@ fn speed_hack_flooding_commands_gains_nothing() {
         name: "Cheater".into(),
         armor: 0,
         attachments: 0,
+        client_public: keys.public,
     }
     .encode(&mut buf);
     sock.send_to(&buf, srv.local_addr).unwrap();
@@ -313,6 +315,9 @@ fn speed_hack_flooding_commands_gains_nothing() {
     let (h, mut r) = packet::read_header(&rb[..n]).unwrap();
     assert_eq!(h.ty, PacketType::ConnectAccepted);
     let acc = ConnectAccepted::decode(&mut r).unwrap();
+    // A cheating client still has to speak the encrypted protocol.
+    let mut cipher =
+        tfps_protocol::crypto::PacketCipher::new(&keys.shared(&acc.server_public), true);
     sock.set_nonblocking(true).unwrap();
     assert!(pump_until(&mut honest, Duration::from_secs(2), |h| h
         .players
@@ -357,6 +362,7 @@ fn speed_hack_flooding_commands_gains_nothing() {
         w.u8(0);
         w.u8(1);
         bundle.encode(&mut w);
+        cipher.seal(&mut buf);
         let _ = sock.send_to(&buf, srv.local_addr);
         honest.update(Instant::now());
         while let Ok(n) = sock.recv(&mut rb) {

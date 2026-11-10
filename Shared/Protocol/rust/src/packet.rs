@@ -167,6 +167,8 @@ pub struct ChallengeResponse {
     pub armor: u8,
     /// Primary weapon attachments (tfps_sim::weapon::attachment).
     pub attachments: u8,
+    /// Client's X25519 public key for this session (see `crypto`).
+    pub client_public: [u8; 32],
 }
 
 impl ChallengeResponse {
@@ -180,6 +182,7 @@ impl ChallengeResponse {
         w.str8(&self.name, MAX_NAME_LEN);
         w.u8(self.armor);
         w.u8(self.attachments);
+        w.bytes(&self.client_public);
         w.pad_to(HANDSHAKE_PACKET_SIZE);
     }
     pub fn decode(r: &mut Reader, total_len: usize) -> Result<Self, DecodeError> {
@@ -194,6 +197,7 @@ impl ChallengeResponse {
             name: r.str8(MAX_NAME_LEN)?,
             armor: r.u8()?.min(2),
             attachments: r.u8()? & 0x0F,
+            client_public: r.take(32)?.try_into().expect("32 bytes"),
         })
     }
 }
@@ -217,6 +221,8 @@ pub struct ConnectAccepted {
     pub weapons_hash: u64,
     /// Weapon ids in the player's two slots.
     pub loadout: [u8; 2],
+    /// Server's X25519 public key for this session (see `crypto`).
+    pub server_public: [u8; 32],
 }
 
 impl ConnectAccepted {
@@ -235,6 +241,7 @@ impl ConnectAccepted {
         w.u64(self.weapons_hash);
         w.u8(self.loadout[0]);
         w.u8(self.loadout[1]);
+        w.bytes(&self.server_public);
     }
     pub fn decode(r: &mut Reader) -> Result<Self, DecodeError> {
         Ok(Self {
@@ -249,6 +256,7 @@ impl ConnectAccepted {
             map_name: r.str8(MAX_MAP_NAME_LEN)?,
             weapons_hash: r.u64()?,
             loadout: [r.u8()?, r.u8()?],
+            server_public: r.take(32)?.try_into().expect("32 bytes"),
         })
     }
 }
@@ -371,6 +379,7 @@ mod tests {
             name: "Operator".into(),
             armor: 0,
             attachments: 0,
+            client_public: [0; 32],
         };
         buf.clear();
         cr.encode(&mut buf);
@@ -390,6 +399,7 @@ mod tests {
             map_name: "test_arena".into(),
             weapons_hash: 0x9999,
             loadout: [1, 4],
+            server_public: [0xa5; 32],
         };
         buf.clear();
         acc.encode(&mut buf);
@@ -424,6 +434,7 @@ mod tests {
             name,
             armor: 0,
             attachments: 0,
+            client_public: [0; 32],
         }
         .encode(&mut buf);
         let (_, mut r) = read_header(&buf).unwrap();

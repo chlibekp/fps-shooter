@@ -64,7 +64,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Tick / packet / bandwidth statistics | ✅ | Logged periodically |
 | Lag compensation / server rewind | ✅ | Phase 2 |
 | Server-side hit validation & damage | ✅ | Phase 2 |
-| Encryption | ❌ | Planned (X25519 + ChaCha20-Poly1305), see PROTOCOL.md |
+| Encryption | ✅ | X25519 key agreement in the handshake, ChaCha20-Poly1305 on every Data packet with a replay window (protocol v12). Rust: x25519-dalek and chacha20poly1305; C++: own implementation tested against the RFC 7748 / 8439 vectors and against Rust (golden vectors); every e2e and live test runs encrypted. No certificates (no protection against an active man in the middle) |
 | Snapshot packet budget and prioritisation | ✅ | Every snapshot ≤ 1200 bytes; changes nearest-first, held changes catch up in later deltas. Unit tests plus a 64-player e2e test (`Server/tests/full_server.rs`). No visibility-based culling yet. |
 | Multiple independent server instances | ✅ | Each process is self-contained (port per instance); orchestration ❌ |
 

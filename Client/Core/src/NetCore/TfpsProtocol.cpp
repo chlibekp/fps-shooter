@@ -208,6 +208,7 @@ namespace tfps
 		W.Str8(Name, kMaxNameLen);
 		W.U8(Armor);
 		W.U8(Attachments);
+		W.Bytes(ClientPublic, 32);
 		W.PadTo(kHandshakePacketSize);
 	}
 
@@ -227,6 +228,7 @@ namespace tfps
 		W.U64(WeaponsHash);
 		W.U8(Loadout[0]);
 		W.U8(Loadout[1]);
+		W.Bytes(ServerPublic, 32);
 	}
 
 	bool ConnectAccepted::Decode(ByteReader& R)
@@ -243,6 +245,7 @@ namespace tfps
 		WeaponsHash = R.U64();
 		Loadout[0] = R.U8();
 		Loadout[1] = R.U8();
+		for (uint8_t& B : ServerPublic) { B = R.U8(); }
 		return R.Ok() && TickRate >= 1;
 	}
 

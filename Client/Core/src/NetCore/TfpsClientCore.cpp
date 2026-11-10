@@ -1,5 +1,8 @@
 // Copyright TacticalFPS project. Engine-independent NetCore.
 #include "NetCore/TfpsClientCore.h"
+#include "NetCore/TfpsCrypto.h"
+
+#include <cstring>
 
 #include <cmath>
 #include <random>
@@ -41,6 +44,15 @@ namespace tfps
 	{
 		MapCopy = Map;
 		SendBuf.reserve(kMaxPacketSize);
+		{
+			std::random_device Rd;
+			for (int I = 0; I < 32; I += 4)
+			{
+				const uint32_t V = Rd();
+				for (int B = 0; B < 4; ++B) { SecretKey[I + B] = static_cast<uint8_t>(V >> (8 * B)); }
+			}
+			crypto::X25519Base(PublicKey, SecretKey);
+		}
 		SessionReconnectToken = Config.ReconnectToken;
 	}
 
@@ -144,6 +156,7 @@ namespace tfps
 			P.Name = Config.Name;
 			P.Armor = Config.Armor;
 			P.Attachments = Config.Attachments;
+			std::memcpy(P.ClientPublic, PublicKey, 32);
 			P.Encode(SendBuf);
 		}
 		SendCurrent();
@@ -256,6 +269,7 @@ namespace tfps
 		WriteEmptyReliable(W);
 		W.U8(static_cast<uint8_t>(EBodyKind::Input));
 		Bundle.Encode(W);
+		Seal(SendBuf);
 		SendCurrent();
 	}
 
@@ -263,12 +277,70 @@ namespace tfps
 	{
 		while (true)
 		{
-			const size_t N = Transport.Receive(RecvBuf.data(), RecvBuf.size());
+			size_t N = Transport.Receive(RecvBuf.data(), RecvBuf.size());
 			if (N == 0) { break; }
 			++NetStats.PacketsReceived;
 			NetStats.BytesReceived += N;
+			if (N > 4 && RecvBuf[4] == static_cast<uint8_t>(EPacketType::Data))
+			{
+				// Sealed: decrypt in place; drop forged or replayed packets.
+				N = Open(RecvBuf.data(), N);
+				if (N == 0)
+				{
+					++NetStats.PacketsRejectedAuth;
+					continue;
+				}
+			}
 			Process(RecvBuf.data(), N, Now);
 		}
+	}
+
+	void ClientCore::Seal(std::vector<uint8_t>& Packet)
+	{
+		if (!bCipher || Packet.size() < kDataHeaderLen) { return; }
+		const uint32_t Counter = SendCounter++;
+		uint8_t Nonce12[12] = {};
+		for (int B = 0; B < 4; ++B) { Nonce12[B] = static_cast<uint8_t>(Counter >> (8 * B)); }
+		uint8_t Tag[16];
+		crypto::AeadSeal(Packet.data() + kDataHeaderLen, Packet.size() - kDataHeaderLen, Packet.data(), kDataHeaderLen, SendKey, Nonce12, Tag);
+		Packet.insert(Packet.end(), Tag, Tag + 16);
+		for (int B = 0; B < 4; ++B) { Packet.push_back(Nonce12[B]); }
+	}
+
+	size_t ClientCore::Open(uint8_t* Packet, size_t Len)
+	{
+		if (!bCipher || Len < kDataHeaderLen + kSealOverhead) { return 0; }
+		const uint32_t Counter = static_cast<uint32_t>(Packet[Len - 4]) | (static_cast<uint32_t>(Packet[Len - 3]) << 8)
+			| (static_cast<uint32_t>(Packet[Len - 2]) << 16) | (static_cast<uint32_t>(Packet[Len - 1]) << 24);
+		if (bRecvAny && Counter <= RecvTop)
+		{
+			const uint32_t Back = RecvTop - Counter;
+			if (Back >= 64 || (RecvWindow & (uint64_t(1) << Back)) != 0) { return 0; }
+		}
+		uint8_t Nonce12[12] = {};
+		for (int B = 0; B < 4; ++B) { Nonce12[B] = Packet[Len - 4 + B]; }
+		const size_t BodyLen = Len - kSealOverhead - kDataHeaderLen;
+		if (!crypto::AeadOpen(Packet + kDataHeaderLen, BodyLen, Packet, kDataHeaderLen, RecvKey, Nonce12, Packet + Len - kSealOverhead))
+		{
+			return 0;
+		}
+		if (!bRecvAny)
+		{
+			bRecvAny = true;
+			RecvTop = Counter;
+			RecvWindow = 1;
+		}
+		else if (Counter > RecvTop)
+		{
+			const uint32_t Shift = Counter - RecvTop;
+			RecvWindow = (Shift >= 64 ? 0 : (RecvWindow << Shift)) | 1;
+			RecvTop = Counter;
+		}
+		else
+		{
+			RecvWindow |= uint64_t(1) << (RecvTop - Counter);
+		}
+		return Len - kSealOverhead;
 	}
 
 	void ClientCore::Process(const uint8_t* Data, size_t Len, double Now)
@@ -305,6 +377,13 @@ namespace tfps
 				SetDisconnected(EDisconnectCause::WeaponsMismatch);
 				return;
 			}
+			uint8_t Shared[32];
+			crypto::X25519(Shared, SecretKey, A.ServerPublic);
+			crypto::DeriveSessionKeys(Shared, SendKey, RecvKey);
+			bCipher = true;
+			SendCounter = 0;
+			bRecvAny = false;
+			RecvWindow = 0;
 			Fitted[0] = WithAttachments(*L0, Config.Attachments);
 			Fitted[1] = *L1;
 			Loadout[0] = &Fitted[0];

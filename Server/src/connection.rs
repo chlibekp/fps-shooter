@@ -33,6 +33,9 @@ pub struct Connection {
     pub accepted_packet: Vec<u8>,
     /// Set when the connection must be dropped at the end of the tick.
     pub doomed: Option<tfps_protocol::packet::DisconnectReason>,
+    /// Session encryption (keys agreed in the handshake); every Data packet
+    /// in both directions is sealed with it.
+    pub cipher: Option<tfps_protocol::crypto::PacketCipher>,
 }
 
 impl Connection {
@@ -64,6 +67,7 @@ impl Connection {
             history_cursor: 0,
             accepted_packet: Vec::new(),
             doomed: None,
+            cipher: None,
         }
     }
 

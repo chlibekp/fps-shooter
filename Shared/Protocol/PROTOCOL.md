@@ -1,4 +1,4 @@
-# TacticalFPS wire protocol — version 11
+# TacticalFPS wire protocol — version 12
 
 Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
 stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions),
@@ -9,7 +9,8 @@ v7 (runtime solids for barricades, wall reinforcement),
 v8 (game modes: MatchState, MapReset, hold-action kind),
 v9 (doors: DoorState),
 v10 (armour classes: ChallengeResponse `armor`, movement flags bits 3-4; vaulting bit 5),
-v11 (attachments: ChallengeResponse `attachments`, suppressed-shot flag).
+v11 (attachments: ChallengeResponse `attachments`, suppressed-shot flag),
+v12 (encryption: X25519 in the handshake, ChaCha20-Poly1305 on every Data packet).
 
 Implementations:
 
@@ -18,6 +19,34 @@ Implementations:
 
 Any change to this document's byte layouts must bump `PROTOCOL_VERSION` on
 both sides.
+
+## Encryption
+
+Every `Data` packet is encrypted and authenticated after the handshake:
+
+* **Key agreement:** the client sends a fresh X25519 public key in
+  `ChallengeResponse` (`client_public`); the server answers with its own in
+  `ConnectAccepted` (`server_public`, 32 bytes after the loadout). Both
+  compute the X25519 shared secret.
+* **Keys:** client-to-server and server-to-client keys are the first 32
+  bytes of the ChaCha20 keystream keyed by the shared secret (counter 0),
+  under the nonces `"tfps-c2s-key"` and `"tfps-s2c-key"` (12 ASCII bytes).
+* **Sealing (RFC 8439 AEAD_CHACHA20_POLY1305):** the 21-byte cleartext
+  header (magic, version, type, session key, seq, ack, ack bits) is the
+  additional authenticated data; the rest of the packet is encrypted; the
+  16-byte tag and a `u32` packet counter (little endian) are appended. The
+  nonce is the counter in the first 4 bytes of 12 (the rest zero); each
+  direction counts from 0 with its own key.
+* **Receiving:** a packet that fails authentication, or whose counter was
+  already accepted (a 64-packet sliding window) or is older than the
+  window, is dropped.
+* **Budget:** sealing adds 20 bytes, so a Data packet's plaintext is at most
+  1180 bytes (the snapshot byte budget).
+
+There are no certificates: this stops eavesdropping, and forging or
+replaying packets by anyone who did not take part in the handshake, but not
+an active man in the middle. Handshake packets stay clear (the cookie and
+padding rules above still protect against spoofing and amplification).
 
 ## Transport
 
@@ -57,7 +86,8 @@ Client resends each step every 250 ms, gives up after 10 s.
 * **ConnectRequest** (C→S): `u64 client_nonce`, zero padding to 256 bytes.
 * **Challenge** (S→C): `u64 client_nonce, u64 cookie`.
 * **ChallengeResponse** (C→S): `u64 client_nonce, u64 cookie, u64 reconnect_token,
-  u64 join_token, str8 name (≤24 bytes), u8 armor, u8 attachments`, zero padding to 256 bytes.
+  u64 join_token, str8 name (≤24 bytes), u8 armor, u8 attachments, u8 client_public[32]`,
+  zero padding to 256 bytes.
   `attachments` = primary weapon attachments: barrel in bits 0-1 (1 compensator,
   2 suppressor), grip in bits 2-3 (1 vertical, 2 angled).
   `armor` = requested armour class (0 medium, 1 light, 2 heavy; larger values

@@ -1,11 +1,12 @@
 //! TacticalFPS wire protocol.
 //!
 //! The byte-level specification is `Shared/Protocol/PROTOCOL.md`. The C++
-//! client mirror lives in `Client/Source/TacticalFPS/*/NetCore/TfpsProtocol.*`.
+//! client mirror lives in `Client/Core/{include,src}/NetCore/TfpsProtocol.*`.
 //! Any change to the wire format must bump [`PROTOCOL_VERSION`].
 
 pub mod ack;
 pub mod bytes;
+pub mod crypto;
 pub mod input;
 pub mod messages;
 pub mod packet;
@@ -16,9 +17,11 @@ pub use bytes::{Reader, Writer};
 
 /// 'T','F' little-endian.
 pub const MAGIC: u16 = 0x4654;
-pub const PROTOCOL_VERSION: u16 = 11;
+pub const PROTOCOL_VERSION: u16 = 12;
 /// Conservative MTU-safe payload size (IPv6 minimum MTU 1280 minus headers).
 pub const MAX_PACKET_SIZE: usize = 1200;
+/// Largest plaintext `Data` packet: sealing adds `crypto::SEAL_OVERHEAD`.
+pub const MAX_DATA_PLAINTEXT: usize = MAX_PACKET_SIZE - crypto::SEAL_OVERHEAD;
 /// Handshake requests are padded to this size so the server never answers
 /// with more bytes than it received (no amplification).
 pub const HANDSHAKE_PACKET_SIZE: usize = 256;

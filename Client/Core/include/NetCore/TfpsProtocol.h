@@ -18,7 +18,10 @@
 namespace tfps
 {
 	constexpr uint16_t kMagic = 0x4654;
-	constexpr uint16_t kProtocolVersion = 11;
+	constexpr uint16_t kProtocolVersion = 12;
+	/** Cleartext header of a Data packet (authenticated, not encrypted) and the bytes sealing adds (tag, counter). */
+	constexpr size_t kDataHeaderLen = 2 + 2 + 1 + 8 + 2 + 2 + 4;
+	constexpr size_t kSealOverhead = 16 + 4;
 	constexpr size_t kMaxPacketSize = 1200;
 	constexpr size_t kHandshakePacketSize = 256;
 	constexpr size_t kMaxNameLen = 24;
@@ -141,6 +144,8 @@ namespace tfps
 		uint8_t Armor = 0;
 		/** Primary weapon attachments (see Attachment in TfpsWeapon.h). */
 		uint8_t Attachments = 0;
+		/** Client X25519 public key for this session. */
+		uint8_t ClientPublic[32] = {};
 		void Encode(std::vector<uint8_t>& Out) const;
 	};
 
@@ -157,6 +162,8 @@ namespace tfps
 		std::string MapName;
 		uint64_t WeaponsHash = 0;
 		uint8_t Loadout[2] = {0, 0};
+		/** Server X25519 public key for this session. */
+		uint8_t ServerPublic[32] = {};
 		void Encode(std::vector<uint8_t>& Out) const;
 		bool Decode(ByteReader& R);
 	};

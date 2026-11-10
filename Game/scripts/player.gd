@@ -34,6 +34,8 @@ var _bob := 0.0
 var _last_shot := -1
 var _mouse_delta := Vector2.ZERO
 var _aim := 0.0
+var _inspect_t := 0.0   # seconds left of a weapon inspection (client-only animation)
+const INSPECT_TIME := 3.0
 var wall_distance := 1.2   # metres to a wall straight ahead (set by the game each frame)
 var _tuck := 0.0
 
@@ -57,6 +59,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		yaw = fposmod(yaw + event.relative.x * s, 360.0)
 		pitch = clampf(pitch - event.relative.y * s * (-1.0 if invert_y else 1.0), -89.0, 89.0)
 		_mouse_delta += event.relative
+	if event.is_action_pressed("inspect") and _aim < 0.1:
+		inspect()
 	if event.is_action_pressed("crouch"):
 		_crouch_on = not _crouch_on
 		_prone_on = false
@@ -171,6 +175,18 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	var tk := smoothstep(0.0, 1.0, _tuck)
 	pos += Vector3(-0.03, -0.06, 0.14) * tk
 	rot += Vector3(-38.0, 30.0, 12.0) * tk
+	# Inspection: swing the weapon across to show its right side, then tip
+	# it to show the top and left; anything else the player does cancels it.
+	if _inspect_t > 0.0:
+		if Input.is_action_pressed("fire") or _aim > 0.05 or rp > 0.0 or float(w.get("equip_timer", 0.0)) > 0.0:
+			_inspect_t = 0.0
+		else:
+			_inspect_t = maxf(_inspect_t - delta, 0.0)
+			var k := 1.0 - _inspect_t / INSPECT_TIME
+			var side := smoothstep(0.05, 0.25, k) - smoothstep(0.45, 0.6, k)
+			var top := smoothstep(0.45, 0.6, k) - smoothstep(0.8, 0.97, k)
+			pos += Vector3(-0.13, 0.08, 0.02) * side + Vector3(-0.1, 0.09, 0.03) * top
+			rot += Vector3(4.0, 58.0, 12.0) * side + Vector3(38.0, 30.0, -40.0) * top
 	var equip := clampf(float(w.get("equip_timer", 0.0)) * 2.0, 0.0, 1.0)
 	pos.y -= equip * 0.25
 	_weapon.position = pos
@@ -270,6 +286,12 @@ func _pose_arms() -> void:
 	else:
 		r.hold(_weapon, to_skel, _hand_target.origin if _hand_target is Transform3D else null)
 	r.commit()
+
+
+## Starts a weapon inspection (the view model turns the weapon over).
+func inspect() -> void:
+	if _weapon != null:
+		_inspect_t = INSPECT_TIME
 
 
 ## Where spent casings leave the weapon: the right side of the receiver.

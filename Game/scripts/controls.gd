@@ -9,7 +9,7 @@ const DEFAULTS := {
 	"fire": [MOUSE_BUTTON_LEFT], "aim": [MOUSE_BUTTON_RIGHT], "reload": [KEY_R], "use": [KEY_F],
 	"primary": [KEY_1], "secondary": [KEY_2], "gadget1": [KEY_3], "gadget2": [KEY_4],
 	"gadget3": [KEY_5], "gadget4": [KEY_6], "next_weapon": [MOUSE_BUTTON_WHEEL_DOWN],
-	"prev_weapon": [MOUSE_BUTTON_WHEEL_UP], "net_stats": [KEY_F3], "scoreboard": [KEY_TAB],
+	"prev_weapon": [MOUSE_BUTTON_WHEEL_UP], "net_stats": [KEY_F3], "inspect": [KEY_I], "scoreboard": [KEY_TAB],
 	"menu": [KEY_ESCAPE],
 }
 

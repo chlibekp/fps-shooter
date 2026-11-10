@@ -4,7 +4,7 @@
 ##   --connect host:port --map NAME [--name NAME]   join a server directly
 ##   --lobby http://host:7700 [--invite CODE]       lobby service (Play launcher)
 ##   --quality 0..3
-## Test options: --shot PATH --after SECONDS [--ready (on joining a lobby) --yaw D --pitch D --fire --walk --aim --reload --slot N --menu SCREEN]
+## Test options: --shot PATH --after SECONDS [--ready (on joining a lobby) --inspect LEAD --yaw D --pitch D --fire --walk --aim --reload --slot N --menu SCREEN]
 extends Node
 
 var args := {}
@@ -261,6 +261,9 @@ func _test_input() -> void:
 			else:
 				Input.action_release("fire")
 				Input.action_press("reload")
+		if args.has("inspect") and game.player._inspect_t <= 0.0 and Time.get_ticks_msec() / 1000.0 > _shot_at - float(args["inspect"]):
+			game.player.inspect()
+			args.erase("inspect")
 		if args.has("slot"):
 			game.player.slot = int(args["slot"])
 	if Time.get_ticks_msec() / 1000.0 >= _shot_at:

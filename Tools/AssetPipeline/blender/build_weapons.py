@@ -505,6 +505,8 @@ tc.render_preview = lambda o, path, distance_scale=1.45: _render_preview(o, path
 def build_one(asset, fn):
     tc.reset_scene()
     parts, muzzle, sight = fn()
+    # AR-pattern charging handle: its own mesh (pulled on empty reloads).
+    tag(parts, {"charging_handle", "charging_latch"}, "charge")
     gun = tc.join(parts, asset)
     # Bake the transform in, then turn the barrel from +X to +Y.
     gun.data.transform(gun.matrix_world)
@@ -537,12 +539,12 @@ def build_one(asset, fn):
 
 def split_magazine(asset, gun, manifest):
     """Moves the faces of vertex groups 'mag' (the magazine) and 'slide'
-    (a pistol's slide and sights) into their own objects (same baked
+    (a pistol's slide and sights, an AR charging handle) into their own objects (same baked
     material and UVs) and re-exports the FBX with all of them, so the game
     can animate them (reloads, the slide cycling on each shot)."""
     import json
     parts = [gun]
-    for group, suffix, key in (("mag", "Mag", "mag_m"), ("slide", "Slide", "slide_m")):
+    for group, suffix, key in (("mag", "Mag", "mag_m"), ("slide", "Slide", "slide_m"), ("charge", "Charge", "charge_m")):
         g = gun.vertex_groups.get(group)
         if g is None:
             continue

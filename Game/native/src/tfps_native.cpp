@@ -415,7 +415,7 @@ std::string TfpsNative::Frame(const tfps::JsonValue& R)
 
 	// Weapon.
 	const tfps::WeaponState& W = Core->Weapon();
-	O.Key("weapon").Obj().Key("active").Int(W.Active).Key("reloading").Bool(W.IsReloading());
+	O.Key("weapon").Obj().Key("active").Int(W.Active).Key("reloading").Bool(W.IsReloading()).Key("reload_empty").Bool(W.bReloadEmpty);
 	O.Key("recoil_pitch").Num(W.RecoilPitch).Key("recoil_yaw").Num(W.RecoilYaw).Key("shot_counter").Int(W.ShotCounter);
 	O.Key("equip_timer").Num(W.EquipTimer);
 	if (W.Active < tfps::kWeaponSlots)

@@ -192,6 +192,7 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	_weapon.position = pos
 	_weapon.rotation_degrees = rot
 	_animate_magazine(rp)
+	_animate_charging_handle(rp, bool(w.get("reload_empty", false)))
 	_animate_slide(w, delta)
 	_pose_arms()
 
@@ -208,6 +209,31 @@ func _animate_slide(w: Dictionary, delta: float) -> void:
 	var empty: bool = int(w.get("ammo", 1)) == 0 and not bool(w.get("reloading", false))
 	var back := 1.0 if empty else sin(_slide_t * PI * 0.5)
 	slide.position = (slide.get_meta("rest") as Vector3) + Vector3(0, 0, 0.035 * back)
+
+
+## Empty reload of an AR-pattern rifle: after the new magazine is seated,
+## the support hand reaches over the receiver and pulls the charging handle
+## back to chamber a round.
+func _animate_charging_handle(rp: float, empty: bool) -> void:
+	var ch := _weapon.find_child("*_Charge", true, false) as Node3D
+	if ch == null:
+		return
+	if not ch.has_meta("rest"):
+		ch.set_meta("rest", ch.position)
+	var pull := 0.0
+	if empty and rp > 0.8 and rp < 0.98:
+		var k := (rp - 0.8) / 0.18
+		pull = smoothstep(0.25, 0.5, k) * (1.0 - smoothstep(0.65, 0.85, k))
+		# The support hand hooks the T-handle: the hold frame's axis along the
+		# bar, palm behind it (toward the shooter), fingers over the top,
+		# forearm in low from the left. (The split mesh keeps the model's
+		# origin: use its bounds.)
+		var centre := (ch as MeshInstance3D).get_aabb().get_center() if ch is MeshInstance3D else Vector3.ZERO
+		var at := ch.global_transform * centre
+		var hook := _weapon.global_basis.orthonormalized() * Basis(Vector3(0, 1, 0), Vector3(0, 0, -1), Vector3(-1, 0, 0))
+		if k < 0.92:
+			_hand_target = Transform3D(hook, at)
+	ch.position = (ch.get_meta("rest") as Vector3) + Vector3(0, 0, 0.07 * pull)
 
 
 ## Reload: the magazine drops out, the support hand brings a fresh one up

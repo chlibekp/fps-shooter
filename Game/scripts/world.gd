@@ -116,30 +116,59 @@ func _build_backdrop(ground_y: float) -> void:
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mmi)
 	if not harbour:
+		# Tree belt: each tree three overlapping leafy crowns on a trunk.
 		var trees := MultiMesh.new()
 		trees.transform_format = MultiMesh.TRANSFORM_3D
 		trees.use_colors = true
 		var sphere := SphereMesh.new()
-		sphere.radial_segments = 10
-		sphere.rings = 6
+		sphere.radial_segments = 24
+		sphere.rings = 12
 		trees.mesh = sphere
-		trees.instance_count = 420
-		for i in 420:
+		var trunks := MultiMesh.new()
+		trunks.transform_format = MultiMesh.TRANSFORM_3D
+		var trunk := CylinderMesh.new()
+		trunk.top_radius = 0.6
+		trunk.bottom_radius = 1.0
+		trunk.radial_segments = 8
+		trunks.mesh = trunk
+		const TREES := 420
+		trees.instance_count = TREES * 3
+		trunks.instance_count = TREES
+		for i in TREES:
 			var a := rng.randf() * TAU
 			var r := rng.randf_range(extent + 35.0, extent + 160.0)
 			var s := rng.randf_range(4.0, 9.0)
-			var p := Vector3(cos(a) * r, ground_y + s * 0.7, sin(a) * r)
-			trees.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(s, s * 1.15, s)), p))
-			var g := rng.randf_range(0.07, 0.13)
-			trees.set_instance_color(i, Color(g * 0.85, g * 1.15, g * 0.6))
+			var base := Vector3(cos(a) * r, ground_y, sin(a) * r)
+			var g := rng.randf_range(0.75, 1.25)
+			var col := Color(g, g * rng.randf_range(0.95, 1.1), g * rng.randf_range(0.8, 1.0))
+			for k in 3:
+				var cs := s * (1.0 if k == 0 else rng.randf_range(0.55, 0.75))
+				var off := Vector3.ZERO if k == 0 else Vector3(rng.randf_range(-0.45, 0.45) * s, rng.randf_range(-0.1, 0.35) * s, rng.randf_range(-0.45, 0.45) * s)
+				trees.set_instance_transform(i * 3 + k, Transform3D(Basis().scaled(Vector3(cs, cs * 1.1, cs)), base + Vector3(0, s * 0.95, 0) + off))
+				trees.set_instance_color(i * 3 + k, col)
+			trunks.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(s * 0.05, s * 0.6, s * 0.05)), base + Vector3(0, s * 0.3, 0)))
 		var tm := MultiMeshInstance3D.new()
 		tm.multimesh = trees
 		var leaves := ShaderMaterial.new()
-		leaves.shader = load("res://shaders/backdrop.gdshader")
-		leaves.set_shader_parameter("foliage", true)
+		leaves.shader = load("res://shaders/leaves.gdshader")
+		leaves.set_shader_parameter("leaf_size", 0.45)
+		leaves.set_shader_parameter("bulge", 0.6)
+		leaves.set_shader_parameter("leaf_color", Color(0.09, 0.14, 0.055))
 		tm.material_override = leaves
 		tm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(tm)
+		var trm := MultiMeshInstance3D.new()
+		trm.multimesh = trunks
+		trm.material_override = _bark()
+		trm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(trm)
+
+
+static func _bark() -> Material:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.07, 0.055, 0.04)
+	m.roughness = 0.95
+	return m
 
 
 static func _aabb(s: Dictionary) -> AABB:

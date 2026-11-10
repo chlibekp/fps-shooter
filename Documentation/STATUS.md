@@ -135,7 +135,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Movement through new holes, client prediction collides with holes | ✅ | Conformance vectors include 1,876 destroyed cells |
 | Replication of destruction events, full state for joiners | ✅ | CellsDestroyed messages; e2e-tested |
 | Local debris, dust, destruction sounds | ✅ | Godot GPU particles per broken cell (chunks and dust by material), explosions (fire, smoke, dust, debris), one breaking sound per material per frame |
-| Fracture meshes for broken walls | ❌ | Broken walls are drawn as their remaining cells; gameplay stays cell-based |
+| Broken-wall visuals | ✅ | Cells around a fresh hole are chipped (shrunk and turned in the wall plane, nudged), so breaches have ragged edges, and irregular chunks of the wall's material stay on the floor below (up to 500 per map). Visual only; gameplay stays cell-based. `preview.tscn --break` renders a breach for review |
 | Shot-time rewind of destruction for lag compensation | ✅ | The server keeps one second of destroyed-cell history; a lag-compensated shot treats cells broken after the shooter's view time as intact, so walls stop it as they stood when the shooter fired (unit test) |
 | Doors that open/close (USE) | ✅ | USE on a door within 2 m toggles it (never closes on a player; a damaged door no longer moves). Replicated with DoorState (protocol v9) to everyone and joiners; an open door does not collide for movement, prediction, shots or explosions. Unit and e2e tests (prediction walks through with no corrections). The client swings the door about its hinge, plays a creak or slam, and shows a USE prompt |
 | Reinforced surfaces | ✅ | Defenders reinforce wood, drywall and brick walls (Phase 4) |

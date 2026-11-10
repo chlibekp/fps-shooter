@@ -27,6 +27,8 @@ func build(world: Dictionary, p_net: TfpsNet) -> void:
 		c.queue_free()
 	solid_nodes.clear()
 	props.clear()
+	_chipped.clear()
+	_rubble.clear()
 	doors.clear()
 	broken.clear()
 	cell_slot.clear()
@@ -219,10 +221,101 @@ func destroy_cells(ids: Array) -> Array:
 			continue
 		var mm: MultiMesh = broken[slot[0]].multimesh
 		var t := mm.get_instance_transform(slot[1])
-		info.append({"center": t.origin, "size": t.basis.get_scale(), "material": int(_solids[slot[0]]["material"])})
+		var mat := int(_solids[slot[0]]["material"])
+		info.append({"center": t.origin, "size": t.basis.get_scale(), "material": mat})
 		mm.set_instance_transform(slot[1], Transform3D(Basis.from_scale(Vector3.ZERO), t.origin))
 		cell_slot.erase(int(id))
+		if mat != TfpsMaterials.GLASS:
+			_chip_neighbours(mm, t, int(id))
+			_drop_rubble(int(slot[0]), t, mat, int(id))
 	return info
+
+
+## Cells around a fresh hole are chipped: shrunk a little across the wall
+## face, tilted and nudged, so breaches have ragged edges instead of a
+## clean grid (visual only; collision is the server's cells).
+func _chip_neighbours(mm: MultiMesh, hole: Transform3D, seed_id: int) -> void:
+	var size := hole.basis.get_scale()
+	var reach := maxf(size.x, maxf(size.y, size.z)) * 1.1
+	var rng := RandomNumberGenerator.new()
+	for i in mm.instance_count:
+		var t := mm.get_instance_transform(i)
+		var sc := t.basis.get_scale()
+		if sc.x == 0.0 or _chipped.has(mm.get_instance_id() * 100000 + i):
+			continue
+		if t.origin.distance_to(hole.origin) > reach:
+			continue
+		_chipped[mm.get_instance_id() * 100000 + i] = true
+		rng.seed = seed_id * 7919 + i
+		# Chips stay in the wall's plane: shrink across the face, turn about
+		# the wall normal (the cell's thinnest axis) only.
+		var thin := 0 if sc.x <= sc.y and sc.x <= sc.z else (2 if sc.z <= sc.y else 1)
+		var k := Vector3(rng.randf_range(0.72, 0.94), rng.randf_range(0.72, 0.94), rng.randf_range(0.72, 0.94))
+		k[thin] = 1.0
+		var axis := Vector3.ZERO
+		axis[thin] = 1.0
+		var tilt := Basis(axis, rng.randf_range(-0.22, 0.22))
+		var nudge := (hole.origin - t.origin) * rng.randf_range(-0.06, 0.04)
+		nudge[thin] = 0.0
+		mm.set_instance_transform(i, Transform3D(tilt * Basis.from_scale(sc * k), t.origin + nudge))
+
+
+## Irregular chunks of the wall's material settle on the floor below a
+## broken cell and stay there (at most MAX_RUBBLE in the map).
+const MAX_RUBBLE := 500
+var _chipped := {}
+var _rubble: Array[Node3D] = []
+static var _chunk_meshes: Array[Mesh] = []
+
+
+static func _chunk_mesh(variant: int) -> Mesh:
+	if _chunk_meshes.is_empty():
+		for v in 6:
+			var rng := RandomNumberGenerator.new()
+			rng.seed = 1000 + v
+			var st := SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			# A box with every corner pulled in or out: a broken lump.
+			var c: Array[Vector3] = []
+			for corner in 8:
+				var p := Vector3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1) - Vector3(0.5, 0.5, 0.5)
+				c.append(p * Vector3(rng.randf_range(0.6, 1.3), rng.randf_range(0.5, 1.1), rng.randf_range(0.6, 1.3)))
+			for f in [[0, 1, 3, 2], [4, 6, 7, 5], [0, 4, 5, 1], [2, 3, 7, 6], [0, 2, 6, 4], [1, 5, 7, 3]]:
+				var a: Vector3 = c[f[0]]
+				var b: Vector3 = c[f[1]]
+				var d: Vector3 = c[f[2]]
+				var e: Vector3 = c[f[3]]
+				var n := (b - a).cross(e - a).normalized()
+				for tri in [[a, b, d], [a, d, e]]:
+					var tn: Vector3 = (tri[1] - tri[0]).cross(tri[2] - tri[0])
+					var pts: Array = tri if tn.dot(n) >= 0.0 else [tri[0], tri[2], tri[1]]
+					for q in pts:
+						st.set_normal(n)
+						st.add_vertex(q)
+			st.generate_normals()
+			_chunk_meshes.append(st.commit())
+	return _chunk_meshes[variant % _chunk_meshes.size()]
+
+
+func _drop_rubble(solid_index: int, cell: Transform3D, mat: int, seed_id: int) -> void:
+	var box := _aabb(_solids[solid_index])
+	var size := cell.basis.get_scale()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_id * 31 + 7
+	var floor_y := box.position.y
+	for k in rng.randi_range(1, 3):
+		var mi := MeshInstance3D.new()
+		mi.mesh = _chunk_mesh(rng.randi())
+		var s := maxf(size.x, maxf(size.y, size.z)) * rng.randf_range(0.25, 0.55)
+		mi.scale = Vector3.ONE * s
+		mi.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, rng.randf() * TAU)
+		mi.position = Vector3(cell.origin.x + rng.randf_range(-0.6, 0.6), floor_y + s * 0.3, cell.origin.z + rng.randf_range(-0.6, 0.6))
+		mi.material_override = TfpsMaterials.get_material(mat)
+		mi.set_instance_shader_parameter("tint", TfpsMaterials.tint_for(mat, "", box.position).darkened(0.1))
+		add_child(mi)
+		_rubble.append(mi)
+		if _rubble.size() > MAX_RUBBLE:
+			_rubble.pop_front().queue_free()
 
 
 ## A door opened or closed (server state): it swings 95 degrees about its

@@ -187,7 +187,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 |-------------|-------|-------------|
 | Procedural skeleton posing (no authored animation clips) | `Game/scripts/operator.gd` | Authored or motion-captured animations |
 | Procedural weapon fallback when the assets are not synced | `Game/scripts/models.gd` | (fallback only) First-person hands and animated weapon parts |
-| Map walls and floors as boxes with procedural materials (with dressing: plinths, sills, lintels, coping, downpipes, wall units; corrugated containers) | `Game/scripts/world.gd`, `dressing.gd` | Modelled kit pieces, roofs |
+| Map walls and floors as boxes with procedural materials (with dressing: plinths, sills, lintels, coping, downpipes, wall units; corrugated containers; indoors framed prints, sockets, radiators under windows; leafy hedges, shrubs and tree belts) | `Game/scripts/world.gd`, `dressing.gd` | Modelled kit pieces, roofs |
 
 ## Known issues
 

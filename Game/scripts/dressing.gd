@@ -137,8 +137,16 @@ static func container_tint(box: AABB) -> Color:
 
 ## Adds the dressing for `solids` under `world`; returns solid index ->
 ## Array of nodes (hidden when that solid breaks).
+static var _ceilings: Array = []   # thin horizontal solids (floors, roofs): what counts as indoors
+
+
 static func build(world: Node3D, solids: Array) -> Dictionary:
 	var attached := {}
+	_ceilings.clear()
+	for sd in solids:
+		var b := _aabb(sd)
+		if b.size.y < 0.8 and b.position.y > 1.8 and b.size.x * b.size.z > 4.0:
+			_ceilings.append(b)
 	var root := Node3D.new()
 	root.name = "Dressing"
 	world.add_child(root)
@@ -331,6 +339,118 @@ static func _lining(root: Node3D, attached: Dictionary, idx: int, box: AABB, inw
 	var size := Vector3(length, box.size.y - 0.01, 0.012) if along_x else Vector3(0.012, box.size.y - 0.01, length)
 	_add_box(root, attached, idx, size, c, TfpsMaterials.DRYWALL, room_paint(c), false)
 	_skirting(root, attached, idx, box, inward, 0.012)
+	_wall_decor(root, attached, idx, box, inward, 0.012)
+
+
+## Pictures and sockets on an interior wall face (normal `n`), from the
+## wall's own seed so every client dresses it alike. Visual only.
+static func _wall_decor(root: Node3D, attached: Dictionary, idx: int, box: AABB, n: Vector3, offset := 0.0) -> void:
+	var along_x := box.size.x >= box.size.z
+	var length := box.size.x if along_x else box.size.z
+	var thick := box.size.z if along_x else box.size.x
+	if length < 1.6 or box.size.y < 2.2:
+		return
+	# Only inside: a slab or roof right above the face.
+	var probe := box.get_center() + n * (thick * 0.5 + 0.3)
+	var covered := false
+	for c in _ceilings:
+		var cb := c as AABB
+		if cb.position.y >= box.end.y - 0.3 and cb.position.y < box.end.y + 1.5 \
+				and probe.x > cb.position.x and probe.x < cb.end.x and probe.z > cb.position.z and probe.z < cb.end.z:
+			covered = true
+			break
+	if not covered:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = idx * 7349 + (1 if n.x + n.z > 0.0 else 2)
+	var face := box.get_center() + n * (thick * 0.5 + offset)
+	var at := func(t: float, y: float, out: float) -> Vector3:
+		var p: Vector3 = face + n * out
+		p.y = box.position.y + y
+		if along_x:
+			p.x += t
+		else:
+			p.z += t
+		return p
+	var dims := func(w: float, h: float, d: float) -> Vector3:
+		return Vector3(w, h, d) if along_x else Vector3(d, h, w)
+	# Framed pictures: about one per 2.5 m of wall.
+	var pictures := int(length / 2.5 + rng.randf())
+	for k in pictures:
+		var w := rng.randf_range(0.45, 0.95)
+		var h := w * rng.randf_range(0.65, 0.85)
+		var t := (float(k) + 0.5) / float(pictures) * length - length * 0.5 + rng.randf_range(-0.3, 0.3)
+		t = clampf(t, -length * 0.5 + w, length * 0.5 - w)
+		var frame_col: Color = [Color(0.08, 0.06, 0.05), Color(0.75, 0.72, 0.66), Color(0.3, 0.2, 0.12)][rng.randi() % 3]
+		_add_box(root, attached, idx, dims.call(w, h, 0.03), at.call(t, 1.6, 0.015), TfpsMaterials.WOOD, frame_col, false)
+		var print_mi := MeshInstance3D.new()
+		var q := BoxMesh.new()
+		q.size = dims.call(w - 0.08, h - 0.08, 0.004)
+		print_mi.mesh = q
+		print_mi.material_override = _print_material(rng.randi() % 4)
+		print_mi.position = at.call(t, 1.6, 0.032)
+		print_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(print_mi)
+		if not attached.has(idx):
+			attached[idx] = []
+		attached[idx].append(print_mi)
+	# Sockets near the floor.
+	for k in rng.randi_range(1, 2):
+		var t := rng.randf_range(-0.4, 0.4) * length
+		_add_box(root, attached, idx, dims.call(0.085, 0.085, 0.012), at.call(t, 0.32, 0.006), TfpsMaterials.METAL, Color(2.4, 2.4, 2.35), false)
+
+
+## A panel radiator with vertical fins under a window, on the room side.
+static func _radiator(root: Node3D, attached: Dictionary, idx: int, sill: AABB, inward: Vector3) -> void:
+	var along_x := sill.size.x >= sill.size.z
+	var length := (sill.size.x if along_x else sill.size.z) * 0.75
+	var thick := sill.size.z if along_x else sill.size.x
+	var c := sill.get_center() + inward * (thick * 0.5 + 0.07)
+	c.y = sill.position.y + 0.4
+	var white := Color(2.3, 2.3, 2.25)
+	_add_box(root, attached, idx, Vector3(length, 0.5, 0.05) if along_x else Vector3(0.05, 0.5, length), c, TfpsMaterials.METAL, white, false)
+	var fins := int(length / 0.05)
+	for k in fins:
+		var t := -length * 0.5 + (k + 0.5) * length / fins
+		var p := c + inward * 0.03 + (Vector3(t, 0, 0) if along_x else Vector3(0, 0, t))
+		_add_box(root, attached, idx, Vector3(0.012, 0.48, 0.02) if along_x else Vector3(0.02, 0.48, 0.012), p, TfpsMaterials.METAL, white, false)
+
+
+static var _prints := {}
+
+
+## A framed print: one of a few generated landscapes (sky, hills, sea or
+## field, sun) on a matte card.
+static func _print_material(kind: int) -> Material:
+	if _prints.has(kind):
+		return _prints[kind]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 991 + kind * 31
+	var img := Image.create(96, 72, false, Image.FORMAT_RGB8)
+	var sky_top := Color.from_hsv(rng.randf_range(0.52, 0.62), rng.randf_range(0.3, 0.6), rng.randf_range(0.6, 0.9))
+	var sky_low := sky_top.lerp(Color(1.0, 0.85, 0.65), rng.randf_range(0.3, 0.8))
+	var land := Color.from_hsv(rng.randf_range(0.18, 0.35), rng.randf_range(0.3, 0.6), rng.randf_range(0.25, 0.5))
+	var far := land.lerp(sky_low, 0.5)
+	var hill_a := rng.randf_range(0.04, 0.1)
+	var hill_f := rng.randf_range(0.05, 0.12)
+	var sun := Vector2(rng.randf_range(15, 80), rng.randf_range(10, 28))
+	for y in 72:
+		for x in 96:
+			var col := sky_top.lerp(sky_low, float(y) / 40.0)
+			if Vector2(x, y).distance_to(sun) < 5.0:
+				col = Color(1.0, 0.95, 0.8)
+			var far_line := 40.0 + sin(x * hill_f + kind) * 7.0
+			var near_line := 50.0 + sin(x * hill_a * 0.7 + 2.0 + kind) * 6.0
+			if y > far_line:
+				col = far
+			if y > near_line:
+				col = land.lerp(land.darkened(0.4), float(y - near_line) / 30.0)
+			img.set_pixel(x, y, col)
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = ImageTexture.create_from_image(img)
+	m.roughness = 0.8
+	_prints[kind] = m
+	return m
 
 
 static func _skirting(root: Node3D, attached: Dictionary, idx: int, box: AABB, normal: Vector3, offset := 0.0) -> void:
@@ -436,6 +556,19 @@ static func _buildings(root: Node3D, solids: Array, walls: Array, attached: Dict
 		var box := _aabb(w)
 		var idx := int(w["index"])
 		_lining(root, attached, idx, box, -_outward_of(tag, box, walls))
+	# Other interior partitions (any material): pictures and sockets.
+	for s in solids:
+		var tag: String = s.get("tag", "")
+		if int(s.get("material", -1)) == TfpsMaterials.DRYWALL or is_outer_wall(tag.trim_suffix("_sill").trim_suffix("_lintel")):
+			continue
+		if tag.ends_with("_sill") or tag.ends_with("_lintel") or tag in ["door", "railing", "balustrade", "perimeter", "container", "ground"]:
+			continue
+		var box := _aabb(s)
+		if box.size.y < 2.2 or box.size.y > 4.5 or minf(box.size.x, box.size.z) > 0.4:
+			continue
+		var along_x := box.size.x >= box.size.z
+		for side in [-1.0, 1.0]:
+			_wall_decor(root, attached, int(s["index"]), box, Vector3(0, 0, side) if along_x else Vector3(side, 0, 0))
 	for s in solids:
 		if int(s.get("material", -1)) != TfpsMaterials.DRYWALL:
 			continue
@@ -447,6 +580,7 @@ static func _buildings(root: Node3D, solids: Array, walls: Array, attached: Dict
 		for side in [-1.0, 1.0]:
 			var n := Vector3(0, 0, side) if along_x else Vector3(side, 0, 0)
 			_skirting(root, attached, idx, box, n)
+			_wall_decor(root, attached, idx, box, n)
 	# Window sills and lintels of outer walls.
 	for s in solids:
 		var tag: String = s.get("tag", "")
@@ -468,6 +602,8 @@ static func _buildings(root: Node3D, solids: Array, walls: Array, attached: Dict
 			_lining(root, attached, idx, box, -_outward_of(tag, box, walls))
 		if is_sill:
 			_add_box(root, attached, idx, size, Vector3(c.x, box.end.y + 0.02, c.z), TfpsMaterials.CONCRETE, concrete_light)
+			if base.substr(base.length() - 1).is_valid_int() and length > 0.8:
+				_radiator(root, attached, idx, box, -_outward_of(tag, box, walls))
 		else:
 			size.y = 0.14
 			_add_box(root, attached, idx, size, Vector3(c.x, box.position.y + 0.07, c.z), TfpsMaterials.CONCRETE, concrete_light)

@@ -40,6 +40,46 @@ namespace tfps
 			}
 		}
 
+		Aabb VaultProbe(const MoveState& State, float S, float C, float Ahead, float Z0, float Z1)
+		{
+			const float X = State.Pos.X + C * Ahead;
+			const float Y = State.Pos.Y + S * Ahead;
+			const float H = MoveTuning::HalfWidth * 0.6f;
+			Aabb B;
+			B.Min = Vec3(X - H, Y - H, State.Pos.Z + Z0);
+			B.Max = Vec3(X + H, Y + H, State.Pos.Z + Z1);
+			return B;
+		}
+
+		/** Mirror of try_vault in movement.rs (same queries, same order). */
+		bool MoveTryVault(MoveState& State, float S, float C, const CollisionWorld& World)
+		{
+			if (!World.OverlapsAny(VaultProbe(State, S, C, MoveTuning::VaultReach, 0.3f, 0.4f))) { return false; }
+			float Top = -1.0f;
+			const int Steps = static_cast<int>((MoveTuning::VaultMax - MoveTuning::VaultMin) / MoveTuning::VaultStep);
+			for (int I = 0; I <= Steps; ++I)
+			{
+				const float H = MoveTuning::VaultMin + static_cast<float>(I) * MoveTuning::VaultStep;
+				if (!World.OverlapsAny(VaultProbe(State, S, C, MoveTuning::VaultReach, H, H + MoveTuning::VaultStep)))
+				{
+					Top = H;
+					break;
+				}
+			}
+			if (Top < 0.0f) { return false; }
+			const Vec3 Ahead(State.Pos.X + C * (MoveTuning::VaultReach + 0.3f), State.Pos.Y + S * (MoveTuning::VaultReach + 0.3f),
+				State.Pos.Z + Top + MoveTuning::VaultStep);
+			if (World.OverlapsAny(PlayerBox(Ahead, MoveTuning::VaultHeight))) { return false; }
+			State.Vel.Z = std::sqrt(2.0f * MoveTuning::Gravity * (Top + MoveTuning::VaultClear));
+			State.Vel.X = C * MoveTuning::VaultPush;
+			State.Vel.Y = S * MoveTuning::VaultPush;
+			State.bCrouched = true;
+			State.bVaulting = true;
+			State.bOnGround = false;
+			State.JumpTimer = MoveTuning::JumpCooldown;
+			return true;
+		}
+
 		void MoveUpdateStance(MoveState& State, uint16_t B, float Dt, const CollisionWorld& World)
 		{
 			if (State.StanceTimer > 0.0f)
@@ -73,7 +113,7 @@ namespace tfps
 			{
 				State.bCrouched = true;
 			}
-			else if (State.bCrouched && !World.OverlapsAny(PlayerBox(State.Pos, MoveTuning::StandHeight)))
+			else if (State.bCrouched && State.bOnGround && !State.bVaulting && !World.OverlapsAny(PlayerBox(State.Pos, MoveTuning::StandHeight)))
 			{
 				State.bCrouched = false;
 			}
@@ -297,12 +337,23 @@ namespace tfps
 		{
 			const float Accel = bHasInput ? MoveTuning::GroundAccel : MoveTuning::GroundDecel;
 			MoveApproach(State.Vel.X, State.Vel.Y, TX, TY, Accel * Dt);
-			if ((B & Buttons::Jump) != 0 && State.JumpTimer <= 0.0f && !State.bCrouched && !State.bProne && State.StanceTimer <= 0.0f)
+			if ((B & Buttons::Jump) != 0 && (B & Buttons::Forward) != 0 && State.JumpTimer <= 0.0f && !State.bProne
+				&& State.StanceTimer <= 0.0f && MoveTryVault(State, S, C, World))
+			{
+				// Vaulting (see MoveTryVault).
+			}
+			else if ((B & Buttons::Jump) != 0 && State.JumpTimer <= 0.0f && !State.bCrouched && !State.bProne && State.StanceTimer <= 0.0f)
 			{
 				State.Vel.Z = MoveTuning::JumpSpeed;
 				State.bOnGround = false;
 				State.JumpTimer = MoveTuning::JumpCooldown;
 			}
+		}
+		else if (State.bVaulting)
+		{
+			// Carried over the obstacle (mirror of movement.rs).
+			State.Vel.X = C * MoveTuning::VaultPush;
+			State.Vel.Y = S * MoveTuning::VaultPush;
 		}
 		else if (bHasInput)
 		{
@@ -329,6 +380,11 @@ namespace tfps
 				State.bOnGround = true;
 			}
 			State.Vel.Z = 0.0f;
+		}
+		// A vault ends on landing, once a crouched body fits.
+		if (State.bVaulting && State.bOnGround && !World.OverlapsAny(PlayerBox(State.Pos, MoveTuning::CrouchHeight)))
+		{
+			State.bVaulting = false;
 		}
 
 		// 6. Ground snap.

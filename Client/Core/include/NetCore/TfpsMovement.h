@@ -59,6 +59,15 @@ namespace tfps
 		constexpr float Gravity = 9.81f;
 		constexpr float MaxFallSpeed = 40.0f;
 		constexpr float JumpSpeed = 3.1f;
+		// Vaulting (mirror of VAULT_* in movement.rs).
+		constexpr float VaultMin = 0.45f;
+		constexpr float VaultMax = 1.3f;
+		constexpr float VaultReach = 0.45f;
+		constexpr float VaultStep = 0.05f;
+		constexpr float VaultPush = 2.8f;
+		constexpr float VaultClear = 0.2f;
+		constexpr float VaultHeight = 0.9f;
+		constexpr float VaultEye = 0.75f;
 		constexpr float JumpCooldown = 0.9f;
 		constexpr float StepHeight = 0.35f;
 	}
@@ -91,15 +100,21 @@ namespace tfps
 		float Aim = 0.0f;
 		/** Armour class: 0 medium (default), 1 light, 2 heavy (speed factor, see ArmorSpeed). */
 		uint8_t Armor = 0;
+		/** Vaulting: tucked (VaultHeight) until landing where a crouched body fits. */
+		bool bVaulting = false;
 
-		float Height() const { return StanceHeight(bCrouched, bProne); }
-		float EyeHeight() const { return bProne ? MoveTuning::ProneEye : (bCrouched ? MoveTuning::CrouchEye : MoveTuning::StandEye); }
+		float Height() const { return bVaulting ? MoveTuning::VaultHeight : StanceHeight(bCrouched, bProne); }
+		float EyeHeight() const
+		{
+			return bVaulting ? MoveTuning::VaultEye : (bProne ? MoveTuning::ProneEye : (bCrouched ? MoveTuning::CrouchEye : MoveTuning::StandEye));
+		}
 		/** Eye position including lean, for a view yaw. */
 		Vec3 EyePosition(uint16_t YawQ) const;
 		bool operator==(const MoveState& O) const
 		{
 			return Pos == O.Pos && Vel == O.Vel && bOnGround == O.bOnGround && bCrouched == O.bCrouched && bProne == O.bProne
-				&& JumpTimer == O.JumpTimer && StanceTimer == O.StanceTimer && Lean == O.Lean && Aim == O.Aim && Armor == O.Armor;
+				&& JumpTimer == O.JumpTimer && StanceTimer == O.StanceTimer && Lean == O.Lean && Aim == O.Aim && Armor == O.Armor
+				&& bVaulting == O.bVaulting;
 		}
 	};
 

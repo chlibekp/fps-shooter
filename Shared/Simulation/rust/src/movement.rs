@@ -71,6 +71,19 @@ pub const GRAVITY: f32 = 9.81;
 pub const MAX_FALL_SPEED: f32 = 40.0;
 /// ~0.49 m jump apex: enough to hop a low obstacle, not to bunny-hop.
 pub const JUMP_SPEED: f32 = 3.1;
+/// Vaulting: JUMP while moving forward at an obstacle whose top is between
+/// VAULT_MIN and VAULT_MAX above the feet, with crouch-height room above it
+/// (low walls, crates, window sills), lifts the player just over it with a
+/// forward push, crouched to fit through openings.
+pub const VAULT_MIN: f32 = 0.45;
+pub const VAULT_MAX: f32 = 1.3;
+pub const VAULT_REACH: f32 = 0.45;
+pub const VAULT_STEP: f32 = 0.05;
+pub const VAULT_PUSH: f32 = 2.8;
+pub const VAULT_CLEAR: f32 = 0.2;
+/// Body height and eye height while vaulting (fits 1.1 m window openings).
+pub const VAULT_HEIGHT: f32 = 0.9;
+pub const VAULT_EYE: f32 = 0.75;
 pub const JUMP_COOLDOWN: f32 = 0.9;
 pub const STEP_HEIGHT: f32 = 0.35;
 
@@ -122,6 +135,9 @@ pub struct MoveState {
     /// Armour class: 0 medium (default), 1 light, 2 heavy. Set by the server
     /// at spawn; scales movement speed (see `armor_speed`).
     pub armor: u8,
+    /// Vaulting: tucked (VAULT_HEIGHT) from the vault until landing where a
+    /// crouched body fits.
+    pub vaulting: bool,
 }
 
 pub const ARMOR_MEDIUM: u8 = 0;
@@ -168,11 +184,17 @@ impl MoveState {
     }
 
     pub fn height(&self) -> f32 {
-        stance_height(self.crouched, self.prone)
+        if self.vaulting {
+            VAULT_HEIGHT
+        } else {
+            stance_height(self.crouched, self.prone)
+        }
     }
 
     pub fn eye_height(&self) -> f32 {
-        if self.prone {
+        if self.vaulting {
+            VAULT_EYE
+        } else if self.prone {
             PRONE_EYE
         } else if self.crouched {
             CROUCH_EYE
@@ -294,7 +316,13 @@ fn update_stance(state: &mut MoveState, b: u16, dt: f32, world: &CollisionWorld)
         }
     } else if want_crouch {
         state.crouched = true;
-    } else if state.crouched && !world.overlaps_any(&player_box(state.pos, STAND_HEIGHT)) {
+    } else if state.crouched
+        && state.on_ground
+        && !state.vaulting
+        && !world.overlaps_any(&player_box(state.pos, STAND_HEIGHT))
+    {
+        // Stand up only on the ground: a vault (or a crouched jump) stays
+        // tucked until landing, so it fits through window openings.
         state.crouched = false;
     }
 }
@@ -389,6 +417,14 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
         };
         approach(&mut state.vel.x, &mut state.vel.y, tx, ty, accel * dt);
         if b & buttons::JUMP != 0
+            && b & buttons::FORWARD != 0
+            && state.jump_timer <= 0.0
+            && !state.prone
+            && state.stance_timer <= 0.0
+            && try_vault(state, s, c, world)
+        {
+            // Vaulting (see try_vault).
+        } else if b & buttons::JUMP != 0
             && state.jump_timer <= 0.0
             && !state.crouched
             && !state.prone
@@ -398,6 +434,11 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
             state.on_ground = false;
             state.jump_timer = JUMP_COOLDOWN;
         }
+    } else if state.vaulting {
+        // Carried over the obstacle: push on in the facing direction (blocked
+        // against its side while still rising, over the top once clear).
+        state.vel.x = c * VAULT_PUSH;
+        state.vel.y = s * VAULT_PUSH;
     } else if has_input {
         approach(&mut state.vel.x, &mut state.vel.y, tx, ty, AIR_ACCEL * dt);
     }
@@ -424,6 +465,13 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
         }
         state.vel.z = 0.0;
     }
+    // A vault ends on landing, once a crouched body fits.
+    if state.vaulting
+        && state.on_ground
+        && !world.overlaps_any(&player_box(state.pos, CROUCH_HEIGHT))
+    {
+        state.vaulting = false;
+    }
 
     // 6. Stick to the ground when walking down steps.
     if was_on_ground && !state.on_ground && state.vel.z <= 0.0 {
@@ -441,6 +489,56 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
         }
     }
     sprinting
+}
+
+/// Narrow probe box ahead of the player along (c, s), between heights z0
+/// and z1 above the feet.
+fn vault_probe(state: &MoveState, s: f32, c: f32, ahead: f32, z0: f32, z1: f32) -> Aabb {
+    let x = state.pos.x + c * ahead;
+    let y = state.pos.y + s * ahead;
+    let h = HALF_WIDTH * 0.6;
+    Aabb {
+        min: Vec3::new(x - h, y - h, state.pos.z + z0),
+        max: Vec3::new(x + h, y + h, state.pos.z + z1),
+    }
+}
+
+/// Starts a vault if there is a vaultable obstacle ahead (see VAULT_MIN).
+/// Only box queries against the collision world: deterministic, mirrored
+/// exactly by the C++ prediction.
+fn try_vault(state: &mut MoveState, s: f32, c: f32, world: &CollisionWorld) -> bool {
+    if !world.overlaps_any(&vault_probe(state, s, c, VAULT_REACH, 0.3, 0.4)) {
+        return false;
+    }
+    let mut top = -1.0f32;
+    let steps = ((VAULT_MAX - VAULT_MIN) / VAULT_STEP) as i32;
+    for i in 0..=steps {
+        let h = VAULT_MIN + i as f32 * VAULT_STEP;
+        if !world.overlaps_any(&vault_probe(state, s, c, VAULT_REACH, h, h + VAULT_STEP)) {
+            top = h;
+            break;
+        }
+    }
+    if top < 0.0 {
+        return false;
+    }
+    // Room to pass over it, tucked (a window opening, or the top of a crate).
+    let ahead = Vec3::new(
+        state.pos.x + c * (VAULT_REACH + 0.3),
+        state.pos.y + s * (VAULT_REACH + 0.3),
+        state.pos.z + top + VAULT_STEP,
+    );
+    if world.overlaps_any(&player_box(ahead, VAULT_HEIGHT)) {
+        return false;
+    }
+    state.vel.z = (2.0 * GRAVITY * (top + VAULT_CLEAR)).sqrt();
+    state.vel.x = c * VAULT_PUSH;
+    state.vel.y = s * VAULT_PUSH;
+    state.crouched = true;
+    state.vaulting = true;
+    state.on_ground = false;
+    state.jump_timer = JUMP_COOLDOWN;
+    true
 }
 
 /// Moves along one axis in sub-steps. Returns true if blocked.

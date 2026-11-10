@@ -28,7 +28,10 @@ namespace
 	{
 		S.Pos.X = NextHex(In); S.Pos.Y = NextHex(In); S.Pos.Z = NextHex(In);
 		S.Vel.X = NextHex(In); S.Vel.Y = NextHex(In); S.Vel.Z = NextHex(In);
-		S.bOnGround = NextU(In) != 0; S.bCrouched = NextU(In) != 0; S.bProne = NextU(In) != 0;
+		S.bOnGround = NextU(In) != 0;
+		const unsigned long Crouch = NextU(In);
+		S.bCrouched = (Crouch & 1) != 0; S.bVaulting = (Crouch & 2) != 0;
+		S.bProne = NextU(In) != 0;
 		S.JumpTimer = NextHex(In); S.StanceTimer = NextHex(In); S.Lean = NextHex(In); S.Aim = NextHex(In);
 	}
 
@@ -155,7 +158,7 @@ TFPS_TEST(PlayerSimConformanceWithRust)
 	const tfps::CollisionWorld FromMap = tfps::CollisionWorld::FromMap(Arena);
 	TFPS_EXPECT(FromMap.CellCount == World.CellCount);
 	TFPS_EXPECT(DestroyedCells > 100);
-	TFPS_EXPECT(Sequences == 18);
+	TFPS_EXPECT(Sequences == 27);   // 18 random, 9 scripted vault runs
 	TFPS_EXPECT(Steps > 10000);
 	TFPS_EXPECT(ShotsChecked > 100);
 	TFPS_EXPECT(Mismatches == 0);

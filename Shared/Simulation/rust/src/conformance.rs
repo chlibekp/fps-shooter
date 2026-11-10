@@ -52,7 +52,9 @@ fn fmt_move(out: &mut String, s: &MoveState) {
     let _ = write!(
         out,
         " {} {} {}",
-        s.on_ground as u8, s.crouched as u8, s.prone as u8
+        s.on_ground as u8,
+        s.crouched as u8 | ((s.vaulting as u8) << 1),
+        s.prone as u8
     );
     for v in [s.jump_timer, s.stance_timer, s.lean, s.aim] {
         f(out, v);
@@ -103,8 +105,17 @@ pub fn punch_test_holes(world: &mut CollisionWorld) {
     }
 }
 
+/// Scripted vault runs in the test arena: (start, yaw in degrees), running
+/// at a barrier or crate and pressing JUMP in front of it.
+pub const VAULT_RUNS: [([f32; 3], f32); 3] = [
+    ([-10.6, -3.0, 0.0], 0.0), // barrier 0.9 m (x = -9.3)
+    ([0.0, 12.4, 0.0], 90.0),  // barrier 0.9 m (y = 13.7)
+    ([-13.9, 8.0, 0.0], 0.0),  // crate 1.2 m: onto its top
+];
+
 /// Builds the vector file for `world`, starting sequences at `starts`, cycling
-/// through every weapon of `weapons` as the primary.
+/// through every weapon of `weapons` as the primary, then the scripted vault
+/// runs (VAULT_RUNS).
 pub fn generate(
     world: &CollisionWorld,
     starts: &[Vec3],
@@ -239,6 +250,53 @@ pub fn generate(
                     }
                     let _ = write!(out, " {} {} {}", sh.weapon_id, sh.pellet, sh.shot_counter);
                 }
+                out.push('\n');
+            }
+            out.push_str("end\n");
+        }
+    }
+    let loadout_ids = (weapons.default_loadout[0], weapons.default_loadout[1]);
+    let loadout: [&WeaponDef; 2] = [
+        weapons.get(loadout_ids.0).expect("primary"),
+        weapons.get(loadout_ids.1).expect("secondary"),
+    ];
+    for (vi, (start, yaw)) in VAULT_RUNS.iter().enumerate() {
+        for &rate in &rates {
+            let dt = crate::tick_dt(rate);
+            let mut ms = MoveState::at(Vec3::new(start[0], start[1], start[2]));
+            let mut ws = WeaponState::new(&loadout);
+            let _ = write!(
+                out,
+                "seq v{vi}_r{rate} {:08x} {} {}\nstart",
+                dt.to_bits(),
+                loadout_ids.0,
+                loadout_ids.1
+            );
+            fmt_move(&mut out, &ms);
+            fmt_weapon(&mut out, &ws);
+            out.push('\n');
+            let yaw_q = crate::math::quantize_yaw_deg(*yaw);
+            let ticks = (2.5 / dt) as usize;
+            for step in 0..ticks {
+                // Run in; press JUMP for a few ticks every 0.8 s from 0.3 s on.
+                let t = step as f32 * dt;
+                let jump = t > 0.3 && (t - 0.3) % 0.8 < 0.06;
+                let input = MoveInput {
+                    buttons: buttons::FORWARD | if jump { buttons::JUMP } else { 0 },
+                    yaw_q,
+                    pitch_q: 0,
+                    slot: 0,
+                };
+                shots.clear();
+                simulate_player(&mut ms, &mut ws, &input, dt, world, &loadout, &mut shots);
+                let _ = write!(
+                    out,
+                    "step {} {} {} {} {}",
+                    input.buttons, input.yaw_q, input.pitch_q, input.slot, 0
+                );
+                fmt_move(&mut out, &ms);
+                fmt_weapon(&mut out, &ws);
+                let _ = write!(out, " {}", shots.len);
                 out.push('\n');
             }
             out.push_str("end\n");

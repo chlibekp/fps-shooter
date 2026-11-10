@@ -8,7 +8,7 @@ v6 (four gadget slots; cameras, motion sensors, jammers),
 v7 (runtime solids for barricades, wall reinforcement),
 v8 (game modes: MatchState, MapReset, hold-action kind),
 v9 (doors: DoorState),
-v10 (armour classes: ChallengeResponse `armor`, movement flags bits 3-4).
+v10 (armour classes: ChallengeResponse `armor`, movement flags bits 3-4; vaulting bit 5).
 
 Implementations:
 
@@ -210,7 +210,7 @@ u32 last_cmd_seq         last command simulated for this client
 i8  input_buffer_depth   commands still queued for this client (-1 = starved this tick)
 -- local player, exact (prediction reconciliation) --
 f32×6 pos, vel
-u8  move flags           bit0 on_ground, bit1 crouched, bit2 prone, bits3-4 armour class (0 medium, 1 light, 2 heavy; 3 invalid)
+u8  move flags           bit0 on_ground, bit1 crouched, bit2 prone, bits3-4 armour class (0 medium, 1 light, 2 heavy; 3 invalid), bit5 vaulting
 f32 jump_timer, stance_timer, lean, aim
 u8  active weapon slot
 2 × { u16 ammo, u8 chambered, u16 reserve }

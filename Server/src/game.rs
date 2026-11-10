@@ -1830,7 +1830,11 @@ mod tests {
         let default = w.default_loadout();
         assert_eq!(w.loadout_for_primary(0), default);
         assert_eq!(w.loadout_for_primary(200), default, "unknown id");
-        assert_eq!(w.loadout_for_primary(4), default, "a pistol is not a primary");
+        assert_eq!(
+            w.loadout_for_primary(4),
+            default,
+            "a pistol is not a primary"
+        );
         let smg = w.loadout_for_primary(2);
         assert_eq!(smg, [2, default[1]]);
         w.set_player_loadout(1, smg, true);
@@ -1838,7 +1842,11 @@ mod tests {
         assert_eq!(p.loadout, smg);
         assert_eq!(p.defs[0].id, 2);
         let mag = w.weapons.get(2).unwrap().mag_size;
-        assert_eq!(p.weapon.slots[0].ammo, mag - 1, "fresh SMG magazine (+1 chambered)");
+        assert_eq!(
+            p.weapon.slots[0].ammo,
+            mag - 1,
+            "fresh SMG magazine (+1 chambered)"
+        );
         // Invalid ids never reach a player.
         w.set_player_loadout(1, [99, 4], true);
         assert_eq!(w.player(1).unwrap().loadout, smg);

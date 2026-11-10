@@ -170,7 +170,8 @@ func _start_match(address: String, map_name: String, join_token: String) -> void
 	add_child(game)
 	game.left_match.connect(_on_left_match)
 	var armor := int(args.get("armor", str(settings.armor)))
-	if not game.start(net, address, settings.player_name, join_token, armor):
+	var att := int(args.get("attachments", str(settings.attachments())))
+	if not game.start(net, address, settings.player_name, join_token, armor, att):
 		menu.show_error(net.error)
 		return
 	_apply_settings()

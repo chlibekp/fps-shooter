@@ -138,6 +138,64 @@ pub struct WeaponDef {
     pub spread_crouch_mult: f32,
     pub spread_prone_mult: f32,
     pub recoil: RecoilDef,
+    /// Set by a suppressor attachment: quiet report, no muzzle flash.
+    #[serde(default)]
+    pub suppressed: bool,
+}
+
+/// Weapon attachments (primary weapon): a byte with the barrel in bits 0-1
+/// and the grip in bits 2-3. Applied by `with_attachments`, identically on
+/// the server and in the client's prediction (C++ mirror).
+pub mod attachment {
+    pub const BARREL_NONE: u8 = 0;
+    pub const COMPENSATOR: u8 = 1;
+    pub const SUPPRESSOR: u8 = 2;
+    pub const GRIP_NONE: u8 = 0;
+    pub const VERTICAL_GRIP: u8 = 1;
+    pub const ANGLED_GRIP: u8 = 2;
+
+    pub fn barrel(att: u8) -> u8 {
+        (att & 3).min(2)
+    }
+    pub fn grip(att: u8) -> u8 {
+        ((att >> 2) & 3).min(2)
+    }
+}
+
+/// The weapon with attachments `att` fitted:
+/// * compensator: vertical recoil x0.8, horizontal x0.85;
+/// * suppressor: recoil x0.95, damage x0.9, no flash, quiet;
+/// * vertical grip: vertical recoil x0.85;
+/// * angled grip: aim-down-sights time x0.8.
+pub fn with_attachments(def: &WeaponDef, att: u8) -> WeaponDef {
+    let mut d = def.clone();
+    let (mut vert, mut horiz) = (1.0f32, 1.0f32);
+    match attachment::barrel(att) {
+        attachment::COMPENSATOR => {
+            vert *= 0.8;
+            horiz *= 0.85;
+        }
+        attachment::SUPPRESSOR => {
+            vert *= 0.95;
+            horiz *= 0.95;
+            d.damage *= 0.9;
+            d.damage_min *= 0.9;
+            d.suppressed = true;
+        }
+        _ => {}
+    }
+    match attachment::grip(att) {
+        attachment::VERTICAL_GRIP => vert *= 0.85,
+        attachment::ANGLED_GRIP => d.ads_time *= 0.8,
+        _ => {}
+    }
+    for p in d.recoil.pattern.iter_mut() {
+        p[0] *= vert;
+        p[1] *= horiz;
+    }
+    d.recoil.random_pitch *= vert;
+    d.recoil.random_yaw *= horiz;
+    d
 }
 
 impl WeaponDef {
@@ -693,6 +751,27 @@ fn simulate_holstered(
 mod tests {
     use super::*;
     use crate::map::Aabb;
+
+    #[test]
+    fn attachments_change_recoil_damage_and_aim_time() {
+        let w = set();
+        let base = w.get(1).unwrap();
+        let comp = with_attachments(base, attachment::COMPENSATOR);
+        assert!((comp.recoil.pattern[0][0] - base.recoil.pattern[0][0] * 0.8).abs() < 1e-6);
+        assert!((comp.recoil.random_yaw - base.recoil.random_yaw * 0.85).abs() < 1e-6);
+        assert_eq!(comp.damage, base.damage);
+        let sup = with_attachments(base, attachment::SUPPRESSOR);
+        assert!(sup.suppressed && !base.suppressed);
+        assert!((sup.damage - base.damage * 0.9).abs() < 1e-4);
+        let grips = with_attachments(base, attachment::ANGLED_GRIP << 2);
+        assert!((grips.ads_time - base.ads_time * 0.8).abs() < 1e-6);
+        let both = with_attachments(
+            base,
+            attachment::COMPENSATOR | (attachment::VERTICAL_GRIP << 2),
+        );
+        assert!((both.recoil.pattern[0][0] - base.recoil.pattern[0][0] * 0.8 * 0.85).abs() < 1e-5);
+        assert_eq!(with_attachments(base, 0), *base);
+    }
 
     fn set() -> WeaponSet {
         WeaponSet::load(concat!(

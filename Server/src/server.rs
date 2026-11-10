@@ -330,6 +330,10 @@ impl ServerCore {
             if fresh {
                 self.game.set_player_armor(player_id, resp.armor);
             }
+            // Attachments come with every connect (a resumed session's
+            // client sends the same ones its prediction uses).
+            self.game
+                .set_player_attachments(player_id, resp.attachments);
         } else if let Some(p) = self.game.player_mut(player_id) {
             // New client process: its command sequence restarts.
             p.cmds = Default::default();

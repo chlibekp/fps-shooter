@@ -235,6 +235,9 @@ pub struct Player {
     pub state: MoveState,
     pub weapon: WeaponState,
     pub loadout: [u8; SLOTS],
+    /// Loadout definitions with the player's attachments fitted (primary).
+    pub defs: [WeaponDef; SLOTS],
+    pub attachments: u8,
     pub cmds: CommandQueue,
     pub health: u8,
     /// Armour class chosen at connect (tfps_sim::movement::ARMOR_*).
@@ -439,6 +442,9 @@ pub fn armor_health(max_health: u8, armor: u8) -> u8 {
     }
 }
 
+/// Flag in a replicated shot's weapon id: fired through a suppressor.
+pub const SUPPRESSED_SHOT: u8 = 0x80;
+
 /// How far a player can reach a door with USE (metres from the eye).
 pub const DOOR_REACH: f32 = 2.0;
 
@@ -512,6 +518,27 @@ impl GameWorld {
             Ok(i) => Some(&mut self.players[i]),
             Err(_) => None,
         }
+    }
+
+    /// The definitions a player uses: the loadout with attachments fitted.
+    fn fitted_defs(&self, loadout: &[u8; SLOTS], attachments: u8) -> [WeaponDef; SLOTS] {
+        let [p, s] = self.loadout_defs(loadout);
+        [
+            tfps_sim::weapon::with_attachments(p, attachments),
+            s.clone(),
+        ]
+    }
+
+    /// Sets a newly joined player's primary weapon attachments.
+    pub fn set_player_attachments(&mut self, id: u16, attachments: u8) {
+        let Some(i) = self.players.iter().position(|p| p.id == id) else {
+            return;
+        };
+        let loadout = self.players[i].loadout;
+        let defs = self.fitted_defs(&loadout, attachments & 0x0F);
+        let p = &mut self.players[i];
+        p.attachments = attachments & 0x0F;
+        p.defs = defs;
     }
 
     fn loadout_defs(&self, loadout: &[u8; SLOTS]) -> [&WeaponDef; SLOTS] {
@@ -602,6 +629,7 @@ impl GameWorld {
             }
         };
         let yaw_q = self.spawn_yaw_q(&state);
+        let defs = self.fitted_defs(&loadout, 0);
         let mut cmds = CommandQueue::default();
         cmds.last_cmd.yaw_q = yaw_q;
         let p = Player {
@@ -611,6 +639,8 @@ impl GameWorld {
             state,
             weapon,
             loadout,
+            defs,
+            attachments: 0,
             cmds,
             health,
             armor: state.armor,
@@ -712,13 +742,9 @@ impl GameWorld {
                 }
                 continue;
             }
-            let loadout = self.players[i].loadout;
-            let defs = [
-                self.weapons.get(loadout[0]).expect("loadout validated"),
-                self.weapons.get(loadout[1]).expect("loadout validated"),
-            ];
             self.shot_buf.clear();
             let p = &mut self.players[i];
+            let defs = [&p.defs[0], &p.defs[1]];
             p.gadget_cooldown = (p.gadget_cooldown - dt).max(0.0);
             simulate_player(
                 &mut p.state,
@@ -833,7 +859,11 @@ impl GameWorld {
         }
         let shooter_team = shooter.team;
         let shooter_pos = shooter.state.pos;
-        let Some(def) = self.weapons.get(shot.weapon_id).cloned() else {
+        // The shooter's own (fitted) definition: attachments change damage.
+        let fitted = self
+            .player(shooter_id)
+            .and_then(|p| p.defs.iter().find(|d| d.id == shot.weapon_id).cloned());
+        let Some(def) = fitted.or_else(|| self.weapons.get(shot.weapon_id).cloned()) else {
             return;
         };
         let dir = combat::direction(shot.yaw_deg, shot.pitch_deg);
@@ -915,7 +945,7 @@ impl GameWorld {
             self.tick,
             ShotEvent {
                 shooter: shooter_id,
-                weapon: def.id,
+                weapon: def.id | if def.suppressed { SUPPRESSED_SHOT } else { 0 },
                 end_mm: [quantize_mm(end.x), quantize_mm(end.y), quantize_mm(end.z)],
                 surface: surface_kind,
             },

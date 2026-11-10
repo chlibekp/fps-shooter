@@ -64,7 +64,7 @@ namespace
 TFPS_TEST(GoldenHandshakeBytesMatchRust)
 {
 	auto V = LoadVectors();
-	TFPS_REQUIRE(V.size() == 15);
+	TFPS_REQUIRE(V.size() == 24);   // 9 packets, 4 maps, weapons, 9 attachment fits, gadgets
 	std::vector<uint8_t> B;
 	ConnectRequest CR; CR.ClientNonce = 0x0102030405060708ull; CR.Encode(B);
 	TFPS_EXPECT(B == V["connect_request"]);
@@ -73,7 +73,7 @@ TFPS_TEST(GoldenHandshakeBytesMatchRust)
 	TFPS_EXPECT(B == V["challenge"]);
 	B.clear();
 	ChallengeResponse Resp; Resp.ClientNonce = 0x0102030405060708ull; Resp.Cookie = 0xAABBCCDDEEFF0011ull;
-	Resp.ReconnectToken = 0x1111222233334444ull; Resp.JoinToken = 0x5555; Resp.Name = "Operator-7"; Resp.Armor = 2; Resp.Encode(B);
+	Resp.ReconnectToken = 0x1111222233334444ull; Resp.JoinToken = 0x5555; Resp.Name = "Operator-7"; Resp.Armor = 2; Resp.Attachments = 6; Resp.Encode(B);
 	TFPS_EXPECT(B == V["challenge_response"]);
 	B.clear();
 	DisconnectPacket D; D.SessionKey = 0xDEADBEEFCAFEF00Dull; D.Reason = EDisconnectReason::ClientQuit; D.Encode(B);
@@ -279,6 +279,14 @@ TFPS_TEST(DefinitionHashesMatchRust)
 		TFPS_EXPECT(M.Objectives.size() == 2 && !M.Objectives[0].Name.empty());
 	}
 	TFPS_EXPECT(Weapons.Hash() == HexU64(V["weapons_hash"]));
+	// Every attachment combination fits the weapons exactly as Rust does.
+	for (uint8_t Att = 0; Att < 16; ++Att)
+	{
+		if ((Att & 3) > 2 || (Att >> 2) > 2) { continue; }
+		WeaponSet Fit = Weapons;
+		for (WeaponDef& W : Fit.Weapons) { W = WithAttachments(W, Att); }
+		TFPS_EXPECT(Fit.Hash() == HexU64(V["attachments_hash_" + std::to_string(Att)]));
+	}
 }
 
 TFPS_TEST(AckStateHandlesLossAndNoFalseAck)

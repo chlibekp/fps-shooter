@@ -387,6 +387,10 @@ func _show_settings() -> void:
 	# Armour class: index 0 medium, 1 light, 2 heavy (as the server expects).
 	var armours := ["Medium (100 HP)", "Light (90 HP, +10% speed)", "Heavy (120 HP, -10% speed)"]
 	_row("Armour", _choice(armours, armours[settings.armor], func(v: String) -> void: settings.armor = armours.find(v)))
+	var barrels := ["No muzzle device", "Compensator (less recoil)", "Suppressor (quiet, no flash, -10% damage)"]
+	_row("Primary barrel", _choice(barrels, barrels[settings.barrel], func(v: String) -> void: settings.barrel = barrels.find(v)))
+	var grips := ["No grip", "Vertical grip (less vertical recoil)", "Angled grip (faster aiming)"]
+	_row("Primary grip", _choice(grips, grips[settings.grip], func(v: String) -> void: settings.grip = grips.find(v)))
 	var lob := LineEdit.new()
 	lob.text = settings.lobby_url
 	lob.text_changed.connect(func(t: String) -> void: settings.lobby_url = t)

@@ -69,7 +69,21 @@ namespace tfps
 		float ReloadTime = 2, ReloadEmptyTime = 2.5f, AdsTime = 0.25f, EquipTime = 0.5f;
 		float SpreadHip = 2, SpreadAds = 0.1f, SpreadMove = 0.5f, SpreadJump = 4, SpreadCrouchMult = 1, SpreadProneMult = 1;
 		RecoilDef Recoil;
+		/** Set by a suppressor attachment: quiet report, no muzzle flash. */
+		bool bSuppressed = false;
 	};
+
+	/** Weapon attachments: barrel in bits 0-1 (1 compensator, 2 suppressor), grip in bits 2-3 (1 vertical, 2 angled). */
+	namespace Attachment
+	{
+		constexpr uint8_t Compensator = 1;
+		constexpr uint8_t Suppressor = 2;
+		constexpr uint8_t VerticalGrip = 1;
+		constexpr uint8_t AngledGrip = 2;
+	}
+
+	/** Mirror of with_attachments in weapon.rs (same multiplications, same order). */
+	WeaponDef WithAttachments(const WeaponDef& Def, uint8_t Att);
 
 	struct WeaponSet
 	{

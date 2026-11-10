@@ -346,6 +346,7 @@ std::string TfpsNative::Connect(const tfps::JsonValue& R)
 	Config.JoinToken = std::strtoull(Text(R, "join_token").c_str(), nullptr, 16);
 	const int ArmorReq = static_cast<int>(tfps::JsonNumber(R, "armor", 0));
 	Config.Armor = static_cast<uint8_t>(ArmorReq < 0 ? 0 : (ArmorReq > 2 ? 2 : ArmorReq));
+	Config.Attachments = static_cast<uint8_t>(static_cast<int>(tfps::JsonNumber(R, "attachments", 0)) & 0x0F);
 	Core = std::make_unique<tfps::ClientCore>(Config, Map, Weapons, *Transport, NowSeconds());
 	return Ok();
 }
@@ -509,7 +510,7 @@ std::string TfpsNative::Frame(const tfps::JsonValue& R)
 	tfps::FxShot S;
 	while (Core->PollShot(S))
 	{
-		O.Obj().Key("shooter").Int(S.Shooter).Key("weapon_id").Int(S.WeaponId).Key("local").Bool(S.bLocal);
+		O.Obj().Key("shooter").Int(S.Shooter).Key("weapon_id").Int(S.WeaponId).Key("local").Bool(S.bLocal).Key("suppressed").Bool(S.bSuppressed);
 		O.Key("origin").Vec(S.Origin);
 		if (S.bLocal)
 		{

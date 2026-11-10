@@ -18,7 +18,7 @@
 namespace tfps
 {
 	constexpr uint16_t kMagic = 0x4654;
-	constexpr uint16_t kProtocolVersion = 10;
+	constexpr uint16_t kProtocolVersion = 11;
 	constexpr size_t kMaxPacketSize = 1200;
 	constexpr size_t kHandshakePacketSize = 256;
 	constexpr size_t kMaxNameLen = 24;
@@ -139,6 +139,8 @@ namespace tfps
 		std::string Name;
 		/** Requested armour class (0 medium, 1 light, 2 heavy). */
 		uint8_t Armor = 0;
+		/** Primary weapon attachments (see Attachment in TfpsWeapon.h). */
+		uint8_t Attachments = 0;
 		void Encode(std::vector<uint8_t>& Out) const;
 	};
 

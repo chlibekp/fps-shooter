@@ -192,9 +192,48 @@ static func procedural_weapon(weapon_class: String) -> Node3D:
 	return root
 
 
+## Fits attachments to a weapon made by weapon(): a suppressor or
+## compensator at the muzzle (the muzzle point moves to its end), a vertical
+## or angled grip under the handguard (the support hand holds it).
+static func add_attachments(weapon_root: Node3D, att: int) -> void:
+	var muzzle := weapon_root.get_node_or_null("muzzle") as Node3D
+	if muzzle == null:
+		return
+	var m := muzzle.position
+	var black := mat("att_black", Color(0.03, 0.03, 0.032), 0.55, 0.5)
+	var steel := mat("att_steel", Color(0.05, 0.05, 0.052), 0.4, 0.8)
+	var barrel := att & 3
+	if barrel == 1:   # compensator: ported, short
+		cyl(weapon_root, 0.014, 0.06, m + Vector3(0, 0, -0.02), steel, Vector3(90, 0, 0))
+		for k in 3:
+			cyl(weapon_root, 0.0145, 0.006, m + Vector3(0, 0, -0.002 - k * 0.016), black, Vector3(90, 0, 0))
+		muzzle.position = m + Vector3(0, 0, -0.05)
+	elif barrel == 2:   # suppressor: long can with end caps
+		cyl(weapon_root, 0.019, 0.17, m + Vector3(0, 0, -0.075), black, Vector3(90, 0, 0))
+		cyl(weapon_root, 0.0195, 0.012, m + Vector3(0, 0, -0.005), steel, Vector3(90, 0, 0))
+		cyl(weapon_root, 0.0195, 0.01, m + Vector3(0, 0, -0.157), steel, Vector3(90, 0, 0))
+		muzzle.position = m + Vector3(0, 0, -0.165)
+	var grip := (att >> 2) & 3
+	if grip > 0 and m.length() > 0.25:
+		var at := Vector3(0, m.y - 0.035, m.z * 0.5)
+		var fg := Node3D.new()
+		fg.name = "foregrip"
+		weapon_root.add_child(fg)
+		if grip == 1:   # vertical grip with a ribbed body
+			cyl(weapon_root, 0.015, 0.1, at + Vector3(0, -0.055, 0), black, Vector3(0, 0, 0))
+			box(weapon_root, Vector3(0.03, 0.012, 0.045), at + Vector3(0, -0.004, 0), black)
+			fg.position = at + Vector3(0, -0.07, 0.02)
+		else:   # angled grip: a ramp under the handguard
+			box(weapon_root, Vector3(0.028, 0.03, 0.09), at + Vector3(0, -0.02, 0.0), black, Vector3(-28, 0, 0))
+			fg.position = at + Vector3(0, -0.04, 0.03)
+
+
 ## Where the support (left) hand holds a weapon made by weapon(), in its
 ## local space: the handguard, or wrapped around the right hand on a pistol.
 static func support_hand(weapon_root: Node3D) -> Vector3:
+	var fg := weapon_root.get_node_or_null("foregrip") as Node3D
+	if fg != null:
+		return fg.position
 	var muzzle := weapon_root.get_node_or_null("muzzle") as Node3D
 	var m := muzzle.position if muzzle else Vector3(0, 0.04, -0.5)
 	if m.length() < 0.25:

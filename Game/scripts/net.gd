@@ -66,8 +66,9 @@ func load_map(name: String) -> bool:
 	return true
 
 
-func connect_to(address: String, player_name: String, join_token := "0", armor := 0) -> bool:
-	var r := request({"op": "connect", "address": address, "name": player_name, "join_token": join_token, "armor": armor})
+func connect_to(address: String, player_name: String, join_token := "0", armor := 0, attachments := 0) -> bool:
+	var r := request({"op": "connect", "address": address, "name": player_name, "join_token": join_token,
+		"armor": armor, "attachments": attachments})
 	if not r.get("ok", false):
 		error = r.get("error", "connect failed")
 		return false

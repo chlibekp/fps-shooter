@@ -43,6 +43,8 @@ pub struct ClientConfig {
     pub join_token: u64,
     /// Armour class requested at connect (0 medium, 1 light, 2 heavy).
     pub armor: u8,
+    /// Primary weapon attachments (tfps_sim::weapon::attachment).
+    pub attachments: u8,
     /// Commands repeated in every input packet.
     pub input_redundancy: u8,
     /// Interpolation delay for remote entities, in seconds (min 2 snapshots).
@@ -60,6 +62,7 @@ impl ClientConfig {
             reconnect_token: 0,
             join_token: 0,
             armor: 0,
+            attachments: 0,
             input_redundancy: 8,
             interp_delay: 0.05,
             simulated_loss: 0.0,
@@ -251,6 +254,8 @@ pub struct Client {
     pub respawn_in: f32,
     weapons: WeaponSet,
     pub loadout: [u8; 2],
+    /// Loadout definitions with this client's attachments fitted (primary).
+    fitted: Option<[WeaponDef; 2]>,
     shot_buf: ShotBuffer,
     /// Shots this client fired (predicted), and shot events of others.
     pub local_shots: u64,
@@ -344,6 +349,7 @@ impl Client {
             respawn_in: 0.0,
             weapons: weapons.clone(),
             loadout: weapons.default_loadout,
+            fitted: None,
             shot_buf: ShotBuffer::default(),
             local_shots: 0,
             destroyed_cells: 0,
@@ -493,6 +499,7 @@ impl Client {
                         join_token: self.cfg.join_token,
                         name: self.cfg.name.clone(),
                         armor: self.cfg.armor,
+                        attachments: self.cfg.attachments,
                     }
                     .encode(&mut self.send_buf);
                     self.send_current();
@@ -539,10 +546,8 @@ impl Client {
     /// One client simulation tick: sample input, predict, send.
     /// Loadout weapon definitions (valid once connected).
     fn loadout_defs(&self) -> Option<[&WeaponDef; 2]> {
-        Some([
-            self.weapons.get(self.loadout[0])?,
-            self.weapons.get(self.loadout[1])?,
-        ])
+        let f = self.fitted.as_ref()?;
+        Some([&f[0], &f[1]])
     }
 
     /// One predicted step (no-op while dead). Returns the number of bullets fired.
@@ -551,10 +556,7 @@ impl Client {
             return 0;
         }
         // Field-level borrows: weapon definitions (shared) and shot buffer (mutable).
-        let (Some(p), Some(s)) = (
-            self.weapons.get(self.loadout[0]),
-            self.weapons.get(self.loadout[1]),
-        ) else {
+        let Some([p, s]) = self.fitted.as_ref().map(|f| [&f[0], &f[1]]) else {
             return 0;
         };
         // Match-phase restrictions, exactly as the server applies them.
@@ -702,6 +704,16 @@ impl Client {
                     return Ok(());
                 }
                 self.loadout = a.loadout;
+                self.fitted = match (
+                    self.weapons.get(a.loadout[0]),
+                    self.weapons.get(a.loadout[1]),
+                ) {
+                    (Some(p), Some(s)) => Some([
+                        tfps_sim::weapon::with_attachments(p, self.cfg.attachments),
+                        s.clone(),
+                    ]),
+                    _ => None,
+                };
                 if let Some(defs) = self.loadout_defs() {
                     self.predicted_weapon = WeaponState::new(&defs);
                 }

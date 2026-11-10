@@ -39,6 +39,8 @@ namespace tfps
 		uint64_t JoinToken = 0;
 		/** Armour class requested at connect (0 medium, 1 light, 2 heavy). */
 		uint8_t Armor = 0;
+		/** Primary weapon attachments requested at connect (applied to the predicted weapon too). */
+		uint8_t Attachments = 0;
 		uint8_t InputRedundancy = 8;
 		/** Remote entity interpolation delay in seconds (minimum: 2 snapshots). */
 		float InterpDelay = 0.05f;
@@ -78,6 +80,8 @@ namespace tfps
 		uint16_t Shooter = 0;
 		uint8_t WeaponId = 0;
 		bool bLocal = false;
+		/** Fired through a suppressor (quiet, no flash). */
+		bool bSuppressed = false;
 		/** Local shots: origin and aim angles (the impact is decided by the server). */
 		Vec3 Origin;
 		float YawDeg = 0.0f;
@@ -223,6 +227,8 @@ namespace tfps
 		uint64_t LocalMapHash = 0;
 		WeaponSet WeaponDefs;
 		const WeaponDef* Loadout[kWeaponSlots] = {nullptr, nullptr};
+		/** The loadout with this client's attachments fitted (Loadout points here). */
+		WeaponDef Fitted[kWeaponSlots];
 		bool bAlive = true;
 		float RespawnSeconds = 0.0f;
 		WeaponState PredictedWeapon;

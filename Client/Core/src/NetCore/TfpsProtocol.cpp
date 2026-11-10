@@ -207,6 +207,7 @@ namespace tfps
 		W.U64(JoinToken);
 		W.Str8(Name, kMaxNameLen);
 		W.U8(Armor);
+		W.U8(Attachments);
 		W.PadTo(kHandshakePacketSize);
 	}
 

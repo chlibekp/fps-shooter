@@ -24,7 +24,7 @@ var _was_reloading := false
 var _last_phase := -1
 
 
-func start(p_net: TfpsNet, address: String, player_name: String, join_token := "0", armor := 0) -> bool:
+func start(p_net: TfpsNet, address: String, player_name: String, join_token := "0", armor := 0, attachments := 0) -> bool:
 	net = p_net
 	world = TfpsWorld.new()
 	add_child(world)
@@ -35,6 +35,7 @@ func start(p_net: TfpsNet, address: String, player_name: String, join_token := "
 	add_child(audio)
 	audio.setup(net)
 	player = TfpsPlayer.new()
+	player.attachments = attachments
 	add_child(player)
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -46,7 +47,7 @@ func start(p_net: TfpsNet, address: String, player_name: String, join_token := "
 	if not spawns.is_empty():
 		player.yaw = float(spawns[0]["yaw"])
 	hud.status_text = "Connecting to %s..." % address
-	return net.connect_to(address, player_name, join_token, armor)
+	return net.connect_to(address, player_name, join_token, armor, attachments)
 
 
 func _process(delta: float) -> void:
@@ -251,20 +252,22 @@ func _handle_shots(shots: Array) -> void:
 		var origin := player.muzzle_position() if local else TfpsNet.vec(sh["origin"]) + Vector3(0, -0.1, 0)
 		var end := TfpsNet.vec(sh["end"])
 		var surface := int(sh.get("surface", 255))
-		effects.muzzle(origin, end - origin, local)
+		if not sh.get("suppressed", false):
+			effects.muzzle(origin, end - origin, local)
 		effects.tracer(origin, end)
 		if surface != 255:
 			effects.impact(end, (origin - end).normalized(), surface)
 			audio.play_at(audio.impact_cue(surface), end, 0.8)
 		var cue := audio.shot_cue(int(sh.get("weapon_id", 1)))
+		var quiet: bool = sh.get("suppressed", false)
 		if local:
-			audio.play_2d(cue, 0.9)
+			audio.play_2d(cue, 0.35 if quiet else 0.9)
 			var wid := int(sh.get("weapon_id", 1))
 			var b := player.camera.global_basis
 			var throw := b * Vector3(randf_range(1.4, 2.2), randf_range(1.2, 1.9), randf_range(-0.2, 0.4))
 			effects.shell(player.ejection_position(), throw + TfpsNet.vec(hud.state.get("velocity", [0, 0, 0])), wid == 5)
 		else:
-			audio.play_at(cue, origin)
+			audio.play_at(cue, origin, 0.3 if quiet else 1.0)
 			_suppress(sh, origin, end)
 
 

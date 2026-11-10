@@ -19,6 +19,7 @@ var _view: Node3D              # view-model root (child of the camera)
 var _weapon: Node3D
 var _weapon_id := -1
 var _team := 0
+var attachments := 0   # primary weapon: barrel bits 0-1, grip bits 2-3
 var _arms_root: Node3D
 var _arms_rig: TfpsRig
 var _arms_asset := ""
@@ -118,6 +119,8 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 			_weapon = null
 		if id > 0:
 			_weapon = TfpsModels.weapon(TfpsModels.weapon_class(id))
+			if int(w.get("active", 0)) == 0:
+				TfpsModels.add_attachments(_weapon, attachments)
 			if not _build_arms():
 				TfpsModels.add_arms(_weapon, TfpsModels.weapon_class(id), _team)
 			for g in _weapon.find_children("*", "GeometryInstance3D", true, false):

@@ -1,4 +1,4 @@
-# TacticalFPS wire protocol — version 10
+# TacticalFPS wire protocol — version 11
 
 Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
 stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions),
@@ -8,7 +8,8 @@ v6 (four gadget slots; cameras, motion sensors, jammers),
 v7 (runtime solids for barricades, wall reinforcement),
 v8 (game modes: MatchState, MapReset, hold-action kind),
 v9 (doors: DoorState),
-v10 (armour classes: ChallengeResponse `armor`, movement flags bits 3-4; vaulting bit 5).
+v10 (armour classes: ChallengeResponse `armor`, movement flags bits 3-4; vaulting bit 5),
+v11 (attachments: ChallengeResponse `attachments`, suppressed-shot flag).
 
 Implementations:
 
@@ -56,7 +57,9 @@ Client resends each step every 250 ms, gives up after 10 s.
 * **ConnectRequest** (C→S): `u64 client_nonce`, zero padding to 256 bytes.
 * **Challenge** (S→C): `u64 client_nonce, u64 cookie`.
 * **ChallengeResponse** (C→S): `u64 client_nonce, u64 cookie, u64 reconnect_token,
-  u64 join_token, str8 name (≤24 bytes), u8 armor`, zero padding to 256 bytes.
+  u64 join_token, str8 name (≤24 bytes), u8 armor, u8 attachments`, zero padding to 256 bytes.
+  `attachments` = primary weapon attachments: barrel in bits 0-1 (1 compensator,
+  2 suppressor), grip in bits 2-3 (1 vertical, 2 angled).
   `armor` = requested armour class (0 medium, 1 light, 2 heavy; larger values
   are clamped to heavy): light has 10 HP less and moves 10 % faster, heavy has
   20 HP more and moves 10 % slower.
@@ -229,7 +232,7 @@ u8  entity_count
     bit15 FULL (not in baseline: all fields present)
 -- shot events (≤ 32): shots by other players since the previous snapshot --
 u8  shot_count
-  u16 shooter, u8 weapon_id, i32 end_mm[3], u8 surface   (0..7 map material, 0xFE player, 0xFF nothing)
+  u16 shooter, u8 weapon_id (bit7: suppressed), i32 end_mm[3], u8 surface   (0..7 map material, 0xFE player, 0xFF nothing)
 -- gadget entities (≤ 24), always complete (not delta-encoded) --
 u8  gadget_count
   u16 id, u8 gadget_id, u8 phase, u16 owner, i16 pos_cm[3]

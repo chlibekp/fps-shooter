@@ -43,6 +43,7 @@ fn vectors() -> String {
         join_token: 0x5555,
         name: "Operator-7".into(),
         armor: 2,
+        attachments: 6,
     }
     .encode(&mut b);
     add("challenge_response", &b);
@@ -377,6 +378,22 @@ fn vectors() -> String {
         out.push_str(&format!("map_hash_{name} {:016x}\n", m.geometry_hash()));
     }
     out.push_str(&format!("weapons_hash {:016x}\n", weapons.hash()));
+    // Every weapon with every attachment combination (C++ mirror check).
+    for att in 0u8..16 {
+        let (b, g) = (att & 3, att >> 2);
+        if b > 2 || g > 2 {
+            continue;
+        }
+        let fitted = tfps_sim::WeaponSet {
+            weapons: weapons
+                .weapons
+                .iter()
+                .map(|w| tfps_sim::weapon::with_attachments(w, att))
+                .collect(),
+            default_loadout: weapons.default_loadout,
+        };
+        out.push_str(&format!("attachments_hash_{att} {:016x}\n", fitted.hash()));
+    }
     let gadgets = tfps_sim::GadgetSet::load(format!("{root}/gadgets.json")).unwrap();
     out.push_str(&format!("gadgets_hash {:016x}\n", gadgets.hash()));
     out

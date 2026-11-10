@@ -143,6 +143,7 @@ namespace tfps
 			P.JoinToken = Config.JoinToken;
 			P.Name = Config.Name;
 			P.Armor = Config.Armor;
+			P.Attachments = Config.Attachments;
 			P.Encode(SendBuf);
 		}
 		SendCurrent();
@@ -215,6 +216,7 @@ namespace tfps
 			F.Shooter = LocalPlayerId;
 			F.WeaponId = S.WeaponId;
 			F.bLocal = true;
+			F.bSuppressed = Loadout[0] != nullptr && Loadout[0]->Id == S.WeaponId && Loadout[0]->bSuppressed;
 			F.Origin = S.Origin;
 			F.YawDeg = S.YawDeg;
 			F.PitchDeg = S.PitchDeg;
@@ -303,8 +305,10 @@ namespace tfps
 				SetDisconnected(EDisconnectCause::WeaponsMismatch);
 				return;
 			}
-			Loadout[0] = L0;
-			Loadout[1] = L1;
+			Fitted[0] = WithAttachments(*L0, Config.Attachments);
+			Fitted[1] = *L1;
+			Loadout[0] = &Fitted[0];
+			Loadout[1] = &Fitted[1];
 			PredictedWeapon = WeaponState::New(Loadout);
 			if (A.MapHash != LocalMapHash)
 			{
@@ -546,7 +550,8 @@ namespace tfps
 			if (SE.Shooter == LocalPlayerId) { continue; }
 			FxShot F;
 			F.Shooter = SE.Shooter;
-			F.WeaponId = SE.Weapon;
+			F.WeaponId = static_cast<uint8_t>(SE.Weapon & 0x7F);
+			F.bSuppressed = (SE.Weapon & 0x80) != 0;
 			F.End = Vec3(DequantizeMm(SE.EndMm[0]), DequantizeMm(SE.EndMm[1]), DequantizeMm(SE.EndMm[2]));
 			F.SurfaceKind = SE.SurfaceKind;
 			auto It = RemotePlayers.find(SE.Shooter);

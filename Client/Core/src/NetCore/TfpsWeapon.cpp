@@ -68,6 +68,38 @@ namespace tfps
 		return nullptr;
 	}
 
+	WeaponDef WithAttachments(const WeaponDef& Def, uint8_t Att)
+	{
+		WeaponDef D = Def;
+		float Vert = 1.0f;
+		float Horiz = 1.0f;
+		const uint8_t Barrel = (Att & 3) > 2 ? 2 : (Att & 3);
+		const uint8_t Grip = ((Att >> 2) & 3) > 2 ? 2 : ((Att >> 2) & 3);
+		if (Barrel == Attachment::Compensator)
+		{
+			Vert *= 0.8f;
+			Horiz *= 0.85f;
+		}
+		else if (Barrel == Attachment::Suppressor)
+		{
+			Vert *= 0.95f;
+			Horiz *= 0.95f;
+			D.Damage *= 0.9f;
+			D.DamageMin *= 0.9f;
+			D.bSuppressed = true;
+		}
+		if (Grip == Attachment::VerticalGrip) { Vert *= 0.85f; }
+		else if (Grip == Attachment::AngledGrip) { D.AdsTime *= 0.8f; }
+		for (auto& P : D.Recoil.Pattern)
+		{
+			P.first *= Vert;
+			P.second *= Horiz;
+		}
+		D.Recoil.RandomPitch *= Vert;
+		D.Recoil.RandomYaw *= Horiz;
+		return D;
+	}
+
 	uint64_t WeaponSet::Hash() const
 	{
 		Fnv1a64 H;

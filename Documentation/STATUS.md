@@ -4,21 +4,26 @@ Legend: ✅ implemented and tested · 🟡 partially implemented / implemented b
 not verified end-to-end · ❌ not started · 🔒 placeholder (explicitly marked
 temporary).
 
-Last updated: Phase 7 (snapshot byte budget, menus and settings, procedural audio, particle effects, playable release downloads). Server-side and NetCore are complete; the Unreal presentation is only mock-checked.
+Last updated: the client moved from Unreal Engine (only ever mock-compiled)
+to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 
-## Verification environment caveat
+## How the client is verified
 
-The development environment for Milestone 1 had Rust, Blender 4.0, GCC and
-Clang, but no **Unreal Engine**, which cannot be installed there. As a
-result:
-
-* Everything in Rust and in the engine-independent C++ NetCore was compiled
-  and tested, including live tests against the real server.
-* The Unreal-specific C++ (`Client/Source/TacticalFPS/{Public,Private}/*.cpp|h`
-  outside `NetCore/`) was only **compile-checked against a mock of the UE
-  API** (`Tools/UeMockCheck`). It has never been built with UnrealBuildTool
-  or run in the engine. All of its features are marked 🟡 until that
-  happens.
+* The Rust server, lobby and simulation, and the engine-independent C++
+  client core (`Client/Core`), are compiled and tested here and in CI. That
+  includes live tests against the real server.
+* The Godot client (`Game/`) runs here headless and with software rendering
+  (Vulkan on llvmpipe). Two tests use the real client:
+  * `Game/tests/native_test.gd` checks its native extension against a live
+    server;
+  * the packaged, exported Linux game joins a practice match with bots
+    (`Scripts/smoke_test_game.sh`, also in CI).
+* Visuals were reviewed from rendered screenshots: maps, menus, lobby, and
+  gameplay with bots.
+* Windows and macOS game builds are produced by CI on standard GitHub
+  runners, but nobody has played them on those systems yet.
+* A GPU-rendered session (performance, frame pacing) has not been measured
+  here. The software renderer manages only a few frames per second.
 
 ## Phase 1 — Foundation
 
@@ -27,15 +32,15 @@ result:
 | Repository structure | ✅ | See README |
 | Rust dedicated server project | ✅ | `Server/`, 9 integration + 5 unit tests |
 | Networking protocol defined & versioned | ✅ | `Shared/Protocol/PROTOCOL.md` v1, golden byte vectors shared by Rust and C++ |
-| Client–server communication | ✅ (NetCore) / 🟡 (Unreal) | C++ NetCore talks to the Rust server (live tests); UE socket transport is mock-checked only |
+| Client–server communication | ✅ | C++ core talks to the Rust server (live tests); the Godot client uses it through its native extension (headless test against a live server) |
 | Player movement (walk, sprint, slow walk, crouch, jump, step-up, collision) | ✅ | Deterministic sim in Rust + C++, bit-exact over 16,200 conformance steps |
 | Client-side prediction + server reconciliation | ✅ | 0 mispredictions in clean and 20%-loss tests (Rust and C++ clients) |
 | Snapshot interpolation of remote players | ✅ | Remote position converges within 1 cm (tests) |
-| Unreal client project | 🟡 | `.uproject`, targets, module, pawn, controller, HUD, graybox, remote players; not built yet |
-| Minimal test arena | ✅ data / 🟡 visuals | `test_arena.json` (87 solids, 2 floors, stairs, doors, windows, cover); Unreal graybox uses 🔒 engine cubes |
-| Two players connect and see each other move | ✅ headless / 🟡 Unreal | Proven with Rust and C++ clients against the real server; Unreal client not yet run |
-| Build/run/package scripts | ✅ server & NetCore / 🟡 Unreal | UE scripts written; they fail with a clear message when `UE_ROOT` is not set |
-| Release workflow (`release.yml`): archives for Linux x86_64, Windows x86_64, macOS arm64 on every published release | ✅ Linux locally / 🟡 Windows, macOS, CI run / 🔒 Unreal client job | Server, lobby, bot, C++ CLI client, definitions and run scripts. Each archive is smoke-tested after it is unpacked (lobby `/health`, clients connect). The Linux package and smoke test pass locally, but the workflow has not run on GitHub yet. The self-hosted Unreal job has never run. See [RELEASES.md](RELEASES.md) |
+| Game client project | ✅ | Godot 4.7 project `Game/` with a native extension (`Game/native`), exported for Linux / Windows / macOS by CI |
+| Minimal test arena | ✅ | `test_arena.json` (87 solids, 2 floors, stairs, doors, windows, cover), drawn with the procedural materials |
+| Two players connect and see each other move | ✅ | Rust and C++ clients against the real server; the Godot client sees and draws bots (screenshots) |
+| Build/run/package scripts | ✅ | Server, core, `Scripts/godot/*` (fetch Godot, build the extension, export), `package_game.sh` |
+| Release workflow: server archives and playable game downloads for Linux x86_64, Windows x86_64, macOS (universal) | ✅ Linux / 🟡 Windows, macOS | `game.yml` builds all three on standard runners on every push to main (no login). The exported Linux game joins a practice match in CI. Windows and macOS builds are produced but not played yet. See [RELEASES.md](RELEASES.md) |
 
 ## Networking & server (spec §2, §10, §13)
 
@@ -75,7 +80,7 @@ result:
 | Jump (limited height ~0.49 m, 0.9 s cooldown, not while crouched/prone) | ✅ |
 | Steps (≤ 0.35 m) and ground snapping | ✅ |
 | Vaulting, window climbing | ❌ (Phase 3, together with destructible openings) |
-| Camera: eye height smoothing, lean offset + roll, ADS FOV, correction smoothing | 🟡 (Unreal pawn, not run) |
+| Camera: eye position interpolated between ticks, lean roll, ADS FOV, recoil, explosion shake | ✅ (Godot, seen in screenshots; feel not yet judged on a GPU) |
 | First/third-person animation | ❌ No character assets. Remote players use 🔒 pose approximations (lean tilt, lying when prone or dead). |
 
 ## Gunplay (spec §4) — Phase 2
@@ -113,9 +118,9 @@ result:
 | Gadgets / drones | 🟡 Phase 4 in progress. See the Phase 4 table. |
 | Three production maps | ✅ gameplay geometry: Harbor Warehouse, Hillside Villa, Consulate (generated by `Tools/MapTools`, validated for spawns and reachability, 5v5 e2e-tested). Visuals are still the 🔒 per-material graybox. |
 | Blender asset pipeline | ✅ Procedural and headless. 10 assets with LOD1, UCX collision and baked PBR maps: 3 props (crate, jersey barrier, container); a map kit (wooden door, window frame, brick wall panel); 4 gadgets (recon drone, breaching charge, frag grenade, wall camera). Multi-surface paint system with per-texel metallic. |
-| Props placed in the Unreal level | 🟡 `unreal_import.py` imports all exports (not yet run in an editor). The arena builder then dresses crates, barriers, doors and window frames, and the gadget FX use the gadget models (mock-checked). |
+| Blender props in the Godot client | ❌ | The FBX exports (crates, barriers, containers, doors, window frames, gadget models) are not used yet; map geometry and gadgets are procedural |
 | Weapon models | ❌ The viewmodel is a 🔒 placeholder box |
-| Audio | 🟡 Procedural synthesis (`tfps::audio`, 38 cues, 98 variations; unit tested, rendered to WAV by `tfps_render_sounds`). Unreal playback through `UTfpsAudioSubsystem` with distance attenuation: gunshots, impacts by surface, footsteps by floor material (sprint loud, crouch quiet), landing, reloads, destruction, explosions, flashbang and tinnitus, smoke, grenade bounces, drone motor loop, reinforcement, barricades, hit and kill confirmation, round and menu sounds. Playback is mock-checked only (not heard in the engine yet); no occlusion or reverb zones. |
+| Audio | 🟡 Procedural synthesis (`tfps::audio`, 38 cues, 98 variations; unit tested, rendered to WAV). Godot plays it in 3D (AudioStreamPlayer3D, reverb bus): gunshots, impacts by surface, footsteps by floor material, landing, reloads, destruction, explosions, flashbang and tinnitus, drone motor, feedback and round sounds. Not listened to yet (no audio device here); no occlusion. |
 
 ## Destruction (spec §5) — Phase 3
 
@@ -147,10 +152,10 @@ result:
 | Breaching charge: place within reach, arm (1 s), remote detonation, breaches brick | ✅ | Falls off without exploding if the surface under it is destroyed |
 | Gadget limits (count, cooldown, entity cap), restock on respawn, kept across reconnect | ✅ | |
 | Gadget entities replicated in snapshots; Flash message | ✅ | Protocol v4, Rust and C++ golden vectors |
-| Unreal: gadget keys (3/4), HUD gadget panel, flash white-out, gadget visuals | 🟡 🔒 | `ATfpsGadgetFx` uses engine shapes; mock-checked, not run |
-| Drones: deploy, remote control (body frozen by the shared simulation), hop, spot for the team, destroyed by one bullet or any explosion | ✅ server and NetCore / 🟡 🔒 Unreal | Unit and e2e tests. Drone motion is not predicted (camera follows snapshots). The Unreal drone camera, overlay and spot markers are only mock-checked. |
-| Wall cameras (place, view, spot), motion sensors (spot running enemies through walls), jammers (stop enemy drones, block charge detonation); all destroyed by one bullet or any explosion | ✅ server / 🟡 🔒 Unreal | Unit-tested; the camera view reuses the drone remote-control path |
-| Deployable barricades (fill the doorway or window in front, destructible wood, prediction collides with them) and wall reinforcement (hold USE, defenders, 2 per life) | ✅ server and NetCore / 🟡 🔒 Unreal | Unit tests, plus an e2e test that includes a late joiner. Barricade cells and reinforced tint are drawn by `ATfpsArenaBuilder` (mock-checked). |
+| Client: gadget keys (3–6), HUD gadget panel, flash white-out, gadget models, smoke as volumetric fog | 🟡 | Godot; procedural gadget models. Drawn but not exercised in a played match yet |
+| Drones: deploy, remote control (body frozen by the shared simulation), hop, spot for the team, destroyed by one bullet or any explosion | ✅ server and core / ❌ Godot view | Unit and e2e tests. The Godot client draws drones and plays their motor, but has no drone / camera view or spot markers yet |
+| Wall cameras (place, view, spot), motion sensors (spot running enemies through walls), jammers (stop enemy drones, block charge detonation); all destroyed by one bullet or any explosion | ✅ server / ❌ Godot view | Unit-tested; the Godot client has no camera view yet |
+| Deployable barricades (fill the doorway or window in front, destructible wood, prediction collides with them) and wall reinforcement (hold USE, defenders, 2 per life) | ✅ server and core / 🟡 Godot (drawn, not exercised in a played match) | Unit tests, plus an e2e test that includes a late joiner. Barricades and reinforced steel plate are drawn by the Godot world builder. |
 
 ## Match flow (spec §10) — Phase 6
 
@@ -161,40 +166,38 @@ result:
 | Defuse: plant in an objective site, fuse, defuse, detonation | ✅ | Unit tests and an e2e test over UDP |
 | Warmup countdown, preparation phase (attackers hold, weapons cold), round end, match over | ✅ | Restrictions shared with client prediction |
 | Half-time side swap, map reset every round | ✅ | `MapReset`; joiners get the current state |
-| HUD: scores, timer, round, side, phase, result banner, plant/defuse progress, objective markers | 🟡 | Canvas HUD, mock-checked |
+| HUD: scores, timer, round, side, phase, plant/defuse progress | 🟡 | Godot HUD; objective markers and a round result banner are not there yet |
 | Server CLI: `--mode --rounds-to-win --round-time --prep-time --score-limit --time-limit --friendly-fire` | ✅ | |
 | Lobby service: invite codes, squads, ready, host settings (map, mode, 1v1–5v5, rounds, timers, friendly fire, tick rate), start launches a join-token-protected server, lobby reopens after the match | ✅ | `Lobby/` with unit tests and an HTTP → game server → UDP e2e test. See LOBBY.md |
-| Unreal lobby client (menu, lobby screen, auto-connect with the join token) | 🟡 | `UTfpsLobbySubsystem` + `tfps::ui::Menu`; the menu model is unit tested, the Unreal glue is mock-checked only |
+| Lobby in the client (host, join by code, lobby screen, auto-connect with the join token) | ✅ host / 🟡 join | Hosting through a real `tfps-lobby` was rendered here (invite code, lobby screen); joining a started match from the menu not yet exercised end to end in the Godot client |
 
 ## Frontend / UI (spec §11)
 
 | Feature | Status |
 |---------|--------|
-| Debug HUD: crosshair, connection status, player list with connection state, net stats (F3), event feed | 🟡 (Canvas HUD, not run) |
-| Main menu, lobby UI, settings screens | 🟡 Main menu (host / join by code / direct connect), lobby screen with squad, ready and host match settings, pause menu, settings. Logic in `tfps::ui::Menu` (8 native unit tests); drawn on Canvas 🔒 and not yet run in the engine. |
-| Key bindings | 🟡 Controls screen: rebind any action (conflicts swap), reset to defaults; saved to `Saved/TfpsUser.cfg` |
-| Mouse sensitivity, FOV | 🟡 Settings screen: sensitivity, aiming sensitivity, invert Y, crouch toggle/hold, FOV, volumes, net stats, lobby service |
+| HUD: crosshair, hit marker, damage direction, health, ammo, gadgets, match bar, kill feed, hold-action bar, death screen, net stats (F3) | ✅ (Godot, seen in screenshots) |
+| Menus: main, practice, join by code, direct connect, lobby, settings, controls, pause; live map backdrop | ✅ (Godot UI, rendered here) |
+| Key bindings | ✅ Controls screen: rebind any action (conflicts swap), reset to defaults |
+| Settings: name, sensitivity, aiming sensitivity, invert Y, crouch mode, FOV, volumes, graphics quality, lobby service | ✅ saved to the user folder |
 
 ## Placeholders currently in use 🔒
 
 | Placeholder | Where | Replaced by |
 |-------------|-------|-------------|
-| Engine `/Engine/BasicShapes/Cube` tinted per material for all map geometry | `ATfpsArenaBuilder` | Modular Blender kit + authored `.umap` (Phase 5) |
-| Engine cylinder/sphere/cube "mannequin" for remote players, with pose approximations | `ATfpsRemotePlayer` | Rigged character + animation (not started) |
-| Box viewmodel weapon | `ATfpsPlayerPawn::ViewWeapon` | Blender weapon models + first-person animations |
-| Tracers, impacts and muzzle flash from engine shapes and a point light | `ATfpsShotFx` | Niagara effects, decals |
-| Particles drawn as tinted engine spheres / cubes (opaque; fading shown by shrinking), plus the sphere-and-light explosion | `ATfpsParticleFx`, `ATfpsShotFx` | Niagara systems with authored textures; Chaos fracture |
-| Engine `Entry` map as the boot map, with the level built at runtime | `DefaultEngine.ini` | Authored maps (Phase 5) |
-| Canvas HUD and Canvas-drawn menus | `ATfpsHUD` | UMG widgets with authored art |
-| Gadgets drawn as engine spheres/cubes (until the Blender meshes are imported), flash as a point light | `ATfpsGadgetFx` | Blender gadget meshes (imported) |
+| Operators built from primitives (no rig, procedural walk cycle) | `Game/scripts/operator.gd` | Rigged character with animation |
+| Weapons built from primitives (view model and third person) | `Game/scripts/models.gd` | Modelled weapons with first-person animations |
+| Gadget models from primitives | `Game/scripts/game.gd` | The Blender gadget models (exports exist, not imported yet) |
+| Map geometry as boxes with procedural materials; props not dressed | `Game/scripts/world.gd` | Blender props and kit pieces over matching solids |
 
 ## Known issues
 
-* The Unreal client has never been compiled with UnrealBuildTool or run. Expect
-  small API fixes on the first real build. `Tools/UeMockCheck/README.md` lists
-  what the mock check does and does not cover.
+* The game has only been rendered in software here. Real frame rates on GPUs
+  are unmeasured; Medium/High/Ultra presets add SSAO, SSIL, volumetric fog
+  and SDFGI.
+* Windows and macOS game builds come from CI but have not been played.
+  The macOS build is unsigned (right-click > Open).
 * Clang's `-ffp-contract=fast` defeats the determinism pragmas (by design in
-  clang). Unreal does not use that flag as far as we know. If it does on some
+  clang). The client core is built with `-ffp-contract=off` (MSVC: `/fp:precise`). If it does on some
   platform, the startup self-test reports it and prediction still works, with
   more corrections.
 * Downstream bandwidth grows with the number of moving players. With 31
@@ -207,5 +210,3 @@ result:
   tracer origin, so the tracer can start a few centimetres off the muzzle.
   This is cosmetic only.
 * `ShippingContainer` corner castings bake dark (tiny UV islands).
-* The Unreal client has no main menu, so all settings come from the command
-  line or `.ini` files.

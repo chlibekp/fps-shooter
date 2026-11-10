@@ -63,13 +63,12 @@ jobs:
           "$BIN" --server 127.0.0.1:17777 Live
           kill %1 || true
 
-  ue-mock-check:
-    name: Unreal glue code compile check (mock API)
+  maps:
+    name: Map definitions are generated from the map scripts
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - run: Tools/UeMockCheck/check.sh
       - name: Map JSON is generated from the map scripts
         run: |
           python3 Tools/MapTools/build_all.py

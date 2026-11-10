@@ -1,4 +1,5 @@
-# Standalone build of the engine-independent NetCore used by the Unreal client.
+# Standalone build of the engine-independent client core (Client/Core) used by
+# the Godot client's native extension.
 # Lets the C++ netcode and movement be compiled, unit tested, conformance
 # tested against the Rust implementation, and run against the real Rust server
 # without Unreal Engine.
@@ -15,11 +16,11 @@ endif()
 # per-file determinism pragmas work (TFPS_HOSTILE_FLOAT=ON).
 option(TFPS_HOSTILE_FLOAT "Compile NetCore with aggressive float options (GCC: -ffp-contract=fast -march=native, MSVC: /fp:fast /arch:AVX2) to stress the determinism pragmas. Note: clang's -ffp-contract=fast ignores pragmas by design, so clang uses -march=native with its default contraction mode." OFF)
 
-set(NETCORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../Source/TacticalFPS)
-file(GLOB NETCORE_SOURCES ${NETCORE_DIR}/Private/NetCore/*.cpp ${NETCORE_DIR}/Private/Ui/*.cpp ${NETCORE_DIR}/Private/Audio/*.cpp ${NETCORE_DIR}/Private/Fx/*.cpp)
+set(NETCORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../Core)
+file(GLOB NETCORE_SOURCES ${NETCORE_DIR}/src/NetCore/*.cpp ${NETCORE_DIR}/src/Audio/*.cpp)
 
 add_library(tfps_netcore STATIC ${NETCORE_SOURCES})
-target_include_directories(tfps_netcore PUBLIC ${NETCORE_DIR}/Public)
+target_include_directories(tfps_netcore PUBLIC ${NETCORE_DIR}/include)
 if(MSVC)
   if(TFPS_HOSTILE_FLOAT)
     # Unreal builds with /fp:fast on MSVC; the NetCore pragmas must still give bit-exact results.
@@ -38,7 +39,7 @@ else()
   endif()
 endif()
 
-add_executable(tfps_netcore_tests src/TestMain.cpp src/SimConformanceTest.cpp src/ProtocolTests.cpp src/LiveServerTest.cpp src/MenuTests.cpp src/AudioTests.cpp src/FxTests.cpp)
+add_executable(tfps_netcore_tests src/TestMain.cpp src/SimConformanceTest.cpp src/ProtocolTests.cpp src/LiveServerTest.cpp src/AudioTests.cpp)
 target_link_libraries(tfps_netcore_tests PRIVATE tfps_netcore)
 target_compile_definitions(tfps_netcore_tests PRIVATE TFPS_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../..")
 

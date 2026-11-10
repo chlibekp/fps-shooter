@@ -46,41 +46,40 @@ Each cue carries:
   right cues.
 
 `tfps_render_sounds <dir>` writes all 98 variations as WAV files, so they
-can be listened to or imported into Unreal as assets. `Scripts/test_all.sh`
+can be listened to. `Scripts/test_all.sh`
 renders them to `build/sounds`. The recipes were also tuned by checking
 waveforms and spectrograms. For example, the first explosion recipe was a
 sustained low sine and is now noise-driven, and metal footsteps were damped.
 
-## Playback in Unreal (`UTfpsAudioSubsystem`)
+## Playback in the Godot client (`Game/scripts/audio.gd`)
 
-* The PCM is rendered the first time a cue is used, then cached. It is
-  played through `USoundWaveProcedural`, so no asset import is needed.
-* Positional cues use per-cue spherical attenuation (natural-sound falloff,
-  full volume within 1.5 m, silent at the cue's range). Interface and
-  own-player sounds play in 2D.
-* Each cue plays at most 4 times per 50 ms, so a breach charge destroying
-  dozens of cells does not stack dozens of sounds. The arena builder also
-  plays only one breaking sound per material per frame, at the centre of
-  what broke.
-* Volumes come from Settings (master × effects; menu sounds use master
-  only).
+* **Source:** the synthesiser runs inside the client's native extension. Each
+  cue and variation is rendered on first use, sent to GDScript as 16-bit PCM
+  (`sound` request) and cached as an `AudioStreamWAV`.
+* **Playback:**
+  * world sounds play on a pool of 40 `AudioStreamPlayer3D` voices, with
+    inverse-distance falloff to the cue's range and a slight random pitch;
+  * own-player and interface sounds play in 2D.
+* **Reverb:** a reverb bus adds room tone.
 
-Where the sounds are triggered:
+Where the sounds are triggered (`Game/scripts/game.gd`):
 
 | Sound | Trigger |
 |-------|---------|
-| Gunshots, impacts, explosions | `ATfpsShotFx` |
-| Hit and kill confirmation, damage taken, flashbang and tinnitus, round start / end | `UTfpsNetSubsystem` events |
-| Breaking, reinforcement, barricades | `ATfpsArenaBuilder` |
-| Smoke, arming beeps, grenade bounces, drone motor | `ATfpsGadgetFx` |
-| Remote footsteps (stride-based, by the material under the feet; sprint loud, crouch / prone quiet), landings, reloads | `ATfpsGameMode` |
-| Own footsteps, landing, reload, dry fire | `ATfpsPlayerController` |
-| Menu sounds | `ATfpsPlayerController` |
+| Gunshots and impacts | shots from the server |
+| Explosions, flashbang and tinnitus | events |
+| Breaking | destroyed cells (one per material per frame) |
+| Barricades and reinforcement | new and reinforced solids |
+| Footsteps | stride-based, by the floor material under the feet: sprint loud, crouch / prone / walk quiet |
+| Landing and reloads | the local predicted state |
+| Drone motor | a looping 3D player on each drone |
+| Hit and kill confirmation, round start / win / loss | events and match state |
 
 ## Limitations
 
-* The Unreal playback code is only mock-compiled. Nobody has heard it in the
-  engine yet.
+* The development machine has no audio device, so the client's playback
+  has not been listened to yet; the synthesised sounds themselves were
+  reviewed from waveforms and spectrograms.
 * There is no occlusion, and no reverb zones by room. Sounds through walls
   are only quieter with distance.
 * Footstep surfaces use the static map (a destroyed floor still sounds like

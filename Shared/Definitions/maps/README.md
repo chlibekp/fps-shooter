@@ -1,8 +1,8 @@
 # Map gameplay definitions
 
 Each `<map>.json` describes the **gameplay geometry** of a map. It is loaded by
-the Rust server (collision, spawns) and by the Unreal client (prediction
-collision and the graybox/blockout). Visual art is layered on top in Unreal.
+the Rust server (collision, spawns) and by the game client (prediction
+collision, and the visible map, drawn with procedural materials).
 
 Coordinates: meters, Z-up, X forward, Y right (see ARCHITECTURE.md, decision 7).
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Milestone 1 demo without Unreal Engine: starts the Rust server, connects the
-# C++ NetCore client (the code the Unreal client uses) and a Rust bot, and
+# Milestone 1 demo without a game window: starts the Rust server, connects the
+# C++ NetCore client (the code inside the Godot client) and a Rust bot, and
 # prints what each one sees while they move.
 source "$(dirname "$0")/common.sh"
 cd "$REPO_ROOT"

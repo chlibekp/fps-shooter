@@ -13,15 +13,15 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(REPO "${CMAKE_CURRENT_SOURCE_DIR}/../..")
-set(CORE_DIR "${REPO}/Client/Source/TacticalFPS")
-file(GLOB CORE_SOURCES "${CORE_DIR}/Private/NetCore/*.cpp" "${CORE_DIR}/Private/Audio/*.cpp")
+set(CORE_DIR "${REPO}/Client/Core")
+file(GLOB CORE_SOURCES "${CORE_DIR}/src/NetCore/*.cpp" "${CORE_DIR}/src/Audio/*.cpp")
 
 add_library(tfps SHARED
   src/gd_bridge.cpp
   src/tfps_native.cpp
   "${REPO}/Client/NetCoreTests/src/UdpTransport.cpp"
   ${CORE_SOURCES})
-target_include_directories(tfps PRIVATE gdapi src "${CORE_DIR}/Public" "${REPO}/Client/NetCoreTests/src")
+target_include_directories(tfps PRIVATE gdapi src "${CORE_DIR}/include" "${REPO}/Client/NetCoreTests/src")
 if(WIN32)
   target_link_libraries(tfps PRIVATE ws2_32)
 endif()

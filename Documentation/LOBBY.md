@@ -23,29 +23,18 @@ flow:
 Scripts/run_lobby.sh --bind 0.0.0.0:7700 --public-host <address players can reach>
 ```
 
-The client's main menu has **Host a lobby** and **Join with invite code**.
-The lobby screen shows the invite code and both squads. Everyone can switch
-squad and ready up there; the host also edits the match settings and starts
-the match. The service address is set under Settings > Lobby service, or
-with `-lobby=http://<host>:7700` on the command line (`-invite=CODE` joins
-at start-up). Every lobby response also lists the maps the service can host,
-so the map picker follows the server.
-
-The same operations are available as console commands, for scripting:
-
-| Command | |
-|---------|-|
-| `TfpsHost` | create a lobby; the invite code is shown on screen |
-| `TfpsJoin ABC234` | join by code (or start the game with `-invite=ABC234`) |
-| `TfpsSet map villa` | host: `map`, `mode` (defuse / elimination / deathmatch), `team_size` 1–5, `rounds_to_win`, `round_time`, `prep_time`, `score_limit`, `friendly_fire`, `tick_rate` (64 / 128) |
-| `TfpsSquad 0` / `TfpsSquad 1` | switch squad |
-| `TfpsReady` / `TfpsUnready` | |
-| `TfpsStart` | host: start the match |
-| `TfpsLeave` | leave the lobby |
-
-The menu logic (`tfps::ui::Menu`) is engine-independent and unit tested in
-the NetCore test binary. It is drawn with Canvas primitives 🔒, not UMG
-widgets.
+The game's main menu has **Host a lobby** and **Join with invite code**:
+* The lobby screen shows the invite code and both squads. Everyone can
+  switch squad and ready up there; the host also edits the match settings
+  and starts the match.
+* The service address is set under Settings > Lobby service, or with
+  `--lobby http://<host>:7700` (`--invite CODE` joins at start-up).
+* Hosting against `127.0.0.1` starts the lobby service bundled with the
+  download, so one player can host without running anything else.
+* Every lobby response also lists the maps the service can host, so the map
+  picker follows the server.
+* The client side is `Game/scripts/lobby_client.gd` (HTTP) and the lobby
+  screen in `Game/scripts/menu.gd`.
 
 ## HTTP API
 

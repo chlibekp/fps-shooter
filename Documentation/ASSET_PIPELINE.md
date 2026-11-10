@@ -1,4 +1,4 @@
-# Asset pipeline (Blender → Unreal)
+# Asset pipeline (Blender)
 
 Assets are built **procedurally** by Python scripts that run in headless
 Blender. The scripts are the source of truth. Re-running them reproduces the
@@ -19,14 +19,14 @@ distro build also needs `python3-numpy` for the FBX exporter).
 
 | Rule | Value |
 |------|-------|
-| Units | 1 Blender unit = 1 m (Unreal imports FBX meters as 100 uu) |
-| Axes | Z up; FBX export forward −Z, up Y (Unreal default import) |
+| Units | 1 Blender unit = 1 m |
+| Axes | Z up; FBX export forward −Z, up Y |
 | Pivot | Bottom centre of the asset (the build fails otherwise) |
 | Naming | `SM_<Asset>` mesh, `SM_<Asset>_LOD1`, `UCX_SM_<Asset>_NN` collision, `T_<Asset>_BC/N/ORM` textures |
 | Normal maps | Tangent space, **DirectX** convention (green flipped at bake time) |
 | ORM | R = ambient occlusion, G = roughness, B = metallic (import as linear / "Masks") |
 | Base colour | sRGB |
-| Collision | Simple convex `UCX_` primitives exported with LOD0 (auto-detected by Unreal) |
+| Collision | Simple convex `UCX_` primitives exported with LOD0 |
 | LODs | LOD1 exported as a separate FBX, imported into the LOD1 slot |
 
 ## Outputs
@@ -70,27 +70,13 @@ one texture set:
 * base colour is baked with metallic forced to 0, so metals keep their
   tint instead of baking black.
 
-## Importing into Unreal
+## Using the assets in the game
 
-`Tools/AssetPipeline/unreal_import.py`, run in the editor (*Execute Python
-Script*) or with `UnrealEditor-Cmd ... -run=pythonscript -script=...`,
-imports every `Assets/Exports/*/manifest.json`:
-
-* `SM_<Asset>` into `/Game/Environment/Props/<Asset>`, with UCX collision
-  and LOD1;
-* the textures with the right compression (N = normal map, ORM = masks,
-  sRGB off);
-* `MI_<Asset>` as a child of `/Game/Materials/M_TfpsMaster` if that parent
-  exists, otherwise a small standalone material wiring the maps.
-
-**Status: written against the UE 5 Python API, not yet run in an editor.**
-
-Manual equivalent:
-1. Drag `SM_<Asset>.fbx` into `Content/Environment/Props/<Asset>/` with
-   *Combine Meshes* off.
-2. Import `SM_<Asset>_LOD1.fbx` into LOD 1.
-3. Import the textures (N: Normalmap; ORM: Masks).
-4. Create the material.
+The game client is Godot 4.7, which imports FBX directly. The exports are
+not wired into the client yet. Map geometry and gadgets are currently drawn
+procedurally (see GODOT.md). Planned: place props over matching map solids
+(crates, barriers, containers, doors, window frames) and use the gadget
+models in place of the procedural ones.
 
 ## Where the game uses imported assets
 

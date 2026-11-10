@@ -15,30 +15,24 @@ tests with:
 | Platform | Compiler | Float modes tested |
 |----------|----------|--------------------|
 | Linux | GCC | default, `-ffp-contract=fast -march=native` |
-| Windows | MSVC | `/fp:precise`, `/fp:fast /arch:AVX2` (Unreal uses `/fp:fast`) |
+| Windows | MSVC | `/fp:precise`, `/fp:fast /arch:AVX2` |
 | macOS (ARM64) | Apple Clang | default (FMA contraction on), `-march=native` |
 
 Bit-exact results with the Rust server are required in every mode. The
 per-file pragmas in `TfpsFloatDeterminism.h` keep them exact even when the
 project is compiled with fast-math options.
 
-## Unreal Engine features
+## Game client (Godot 4.7)
 
-The engine version is 5.4 (`EngineAssociation`). The scripts also accept any
-5.4+ install via `UE_ROOT`.
+| | Windows | Linux | macOS |
+|-|---------|-------|-------|
+| Renderer | Forward+ (Vulkan / Direct3D 12) | Forward+ (Vulkan) | Forward+ (Metal via MoltenVK) |
+| Build | `windows-latest`, MSVC extension | `ubuntu-latest`, GCC extension | `macos-latest`, universal (arm64 + x86_64) extension |
+| Verified | built and packaged in CI | built, exported game joins a practice match in CI; rendered here in software | built and packaged in CI |
 
-| Feature | Windows (DX12 SM6) | Linux (Vulkan SM6) | macOS (Metal) | Fallback |
-|---------|-------------------|--------------------|---------------|----------|
-| Lumen GI & reflections | Yes | Yes | Yes on Apple Silicon (UE 5.x) | Screen-space GI / SSR via scalability "Low" |
-| Nanite | Yes | Yes | Apple Silicon M2+ only (UE 5.4+); otherwise no | LOD1 meshes from the asset pipeline |
-| Virtual shadow maps | Yes | Yes | Yes (Apple Silicon) | Shadow maps |
-| Chaos physics / destruction (Phase 3) | Yes | Yes | Yes | n/a (gameplay destruction is server-driven) |
-| Hardware ray tracing | Off by default | Off | Not supported | Lumen software tracing |
-
-Ray tracing is disabled project-wide so behaviour is the same on all three
-platforms. The availability notes above come from Epic's documentation as we
-understand it. They must be confirmed on real hardware in Phase 7
-cross-platform testing, which is not done yet.
+Graphics presets (Low / Medium / High / Ultra) scale SSAO, SSIL,
+volumetric fog and SDFGI for weaker GPUs. None of this has been measured
+on real GPUs yet.
 
 ## Packaging
 

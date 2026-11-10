@@ -307,3 +307,41 @@ lobby then stops it and reopens.
 one binary and makes the whole flow testable end to end in `cargo test`.
 Moving servers to separate processes or hosts only changes
 `Service::start_match`.
+
+## Decision 16 — The client is Godot 4 with a native extension around the C++ core
+
+The client was first written for Unreal Engine 5. That engine was never
+available where the game is developed, and it cannot be built on free CI
+runners without an Epic account, a container registry token and far more
+disk than they have. The Unreal code was therefore only ever compile-checked
+against a mock. The project goal includes a game anyone can download and play
+from each release, built for free on GitHub runners with no login.
+
+**Godot 4 (MIT) meets that goal.** Its editor and export templates are plain
+downloads, and one runner per OS builds and exports the game. Its Forward+
+renderer has what the visual target needs:
+* SDFGI global illumination, SSAO / SSIL and volumetric fog (also used for
+  smoke grenades);
+* GPU particles, decals and filmic tone mapping;
+* glTF / FBX import for the Blender pipeline.
+
+**Reuse.** The client core (`Client/Core`) keeps its role:
+* netcode and prediction, bit-exact with the Rust simulation;
+* map, weapons and gadgets;
+* procedural sound.
+
+Godot loads it as a native extension (`Game/native`).
+
+**No godot-cpp.** The extension is written directly against the
+GDExtension C interface, using the header Godot itself dumps
+(`--dump-gdextension-interface`). It exposes one class with one method,
+`request(json) -> json`. Each rendered frame makes one call that sends the
+input and returns the client state. This costs a few KB of JSON per frame.
+In exchange it avoids godot-cpp's code generator and per-method binding
+code, and building the extension needs only CMake and a C++17 compiler on
+each OS.
+
+**GDScript for presentation.** Rendering, characters, effects, UI and audio
+playback are GDScript and shaders. No gameplay decision is made there: the
+server stays authoritative, and the client core predicts exactly what the
+server simulates.

@@ -18,7 +18,7 @@ CLIENT_DIR="${3:?client dir}"
 OUT_DIR="${4:-$REPO_ROOT/Dist/game}"
 case "$PLATFORM" in
   Linux) ARCH=linux-x86_64; EXE="" ;;
-  Mac) ARCH=macos-arm64; EXE="" ;;
+  Mac) ARCH=macos-universal; EXE="" ;;
   Win64) ARCH=windows-x86_64; EXE=".exe" ;;
   *) echo "unknown platform $PLATFORM" >&2; exit 2 ;;
 esac

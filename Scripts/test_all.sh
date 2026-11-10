@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Runs every automated test that does not need Unreal Engine:
-#  1. Rust unit + integration tests (server, protocol, simulation, golden/conformance files)
+# Runs every automated test:
+#  1. Rust format and lint checks (as CI), unit + integration tests (server,
+#     protocol, simulation, golden/conformance files)
 #  2. C++ client core unit, golden-vector and movement-conformance tests,
 #     sound synthesis tests, and a render of every sound to build/sounds
 #  3. C++ NetCore live tests against a freshly started Rust server
@@ -8,6 +9,9 @@
 #     was fetched with Scripts/godot/fetch_godot.sh)
 source "$(dirname "$0")/common.sh"
 cd "$REPO_ROOT"
+echo "== Rust format and lints"
+cargo fmt --all -- --check
+cargo clippy -q --workspace --all-targets -- -D warnings
 echo "== Rust tests"
 cargo test --workspace --release
 echo "== C++ NetCore build"

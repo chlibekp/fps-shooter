@@ -180,11 +180,7 @@ static func _table(root: Node3D, sz: Vector3, tag: String, rng: RandomNumberGene
 				b(root, Vector3(0.38, 0.005, 0.01), Vector3(px, y, sz.z * 0.46 + 0.005), mat("desk_line", Color(0.3, 0.3, 0.31), 0.6))
 				b(root, Vector3(0.12, 0.015, 0.02), Vector3(px, y + 0.09, sz.z * 0.46 + 0.012), mat("handle", Color(0.7, 0.7, 0.7), 0.3, 1.0))
 		b(root, Vector3(sz.x - 0.9, (sz.y - top_t) * 0.6, 0.02), Vector3(0, sz.y - top_t - (sz.y - top_t) * 0.3, -sz.z * 0.4), mat("desk_body", Color(0.55, 0.56, 0.57), 0.6))
-		# Monitor and keyboard.
-		var mx := rng.randf_range(-0.2, 0.2) * sz.x
-		b(root, Vector3(0.55, 0.34, 0.03), Vector3(mx, sz.y + 0.27, -sz.z * 0.2), mat("screen", Color(0.03, 0.03, 0.035), 0.2))
-		b(root, Vector3(0.05, 0.1, 0.05), Vector3(mx, sz.y + 0.05, -sz.z * 0.2), mat("plastic_dark", Color(0.05, 0.05, 0.05), 0.5))
-		b(root, Vector3(0.45, 0.02, 0.15), Vector3(mx, sz.y + 0.01, sz.z * 0.1), mat("plastic_dark", Color(0.05, 0.05, 0.05), 0.5))
+		_workstation(root, Vector3(rng.randf_range(-0.2, 0.2) * sz.x, sz.y, 0), sz, rng)
 	elif tag == "conference_table":
 		for sx in [-0.3, 0.3]:
 			b(root, Vector3(0.5, sz.y - top_t, sz.z * 0.4), Vector3(sx * sz.x, (sz.y - top_t) * 0.5, 0), mat("desk_body", Color(0.55, 0.56, 0.57), 0.6))
@@ -192,6 +188,87 @@ static func _table(root: Node3D, sz: Vector3, tag: String, rng: RandomNumberGene
 		for sx in [-1.0, 1.0]:
 			for sz_ in [-1.0, 1.0]:
 				b(root, Vector3(0.06, sz.y - top_t, 0.06), Vector3(sx * (sz.x * 0.5 - 0.08), (sz.y - top_t) * 0.5, sz_ * (sz.z * 0.5 - 0.08)), wood)
+
+
+## A computer on a desk (user on the +Z side): monitor with a lit desktop,
+## stand, keyboard and mouse, plus a mug, papers and a phone.
+static func _workstation(root: Node3D, top: Vector3, sz: Vector3, rng: RandomNumberGenerator) -> void:
+	var dark := mat("plastic_dark", Color(0.05, 0.05, 0.055), 0.45)
+	var mz := -sz.z * 0.22
+	# Monitor: bezel, inset lit screen, neck and base.
+	b(root, Vector3(0.6, 0.37, 0.025), top + Vector3(0, 0.33, mz), dark)
+	b(root, Vector3(0.57, 0.32, 0.004), top + Vector3(0, 0.335, mz + 0.0135), _screen_material(rng.randi() % 3))
+	b(root, Vector3(0.12, 0.08, 0.05), top + Vector3(0, 0.33, mz - 0.03), dark)
+	b(root, Vector3(0.045, 0.16, 0.03), top + Vector3(0, 0.1, mz - 0.03), dark)
+	b(root, Vector3(0.22, 0.012, 0.16), top + Vector3(0, 0.006, mz - 0.01), dark)
+	# Keyboard (key grid texture) and mouse.
+	var kz := sz.z * 0.12
+	b(root, Vector3(0.44, 0.018, 0.14), top + Vector3(0, 0.009, kz), dark)
+	b(root, Vector3(0.42, 0.003, 0.12), top + Vector3(0, 0.0195, kz), _keys_material())
+	b(root, Vector3(0.06, 0.03, 0.1), top + Vector3(0.3, 0.015, kz), dark)
+	# Desk clutter.
+	var side := -1.0 if rng.randf() < 0.5 else 1.0
+	c(root, 0.04, 0.1, top + Vector3(side * sz.x * 0.33, 0.05, kz - 0.05), mat("mug_%d" % (rng.randi() % 3), [Color(0.8, 0.8, 0.78), Color(0.15, 0.25, 0.45), Color(0.5, 0.1, 0.08)][rng.randi() % 3], 0.4), Vector3.UP, 16)
+	for k in rng.randi_range(1, 3):
+		var paper := b(root, Vector3(0.21, 0.002, 0.297), top + Vector3(-side * rng.randf_range(0.25, 0.4) * sz.x, 0.001 + k * 0.002, rng.randf_range(-0.1, 0.15) * sz.z), mat("paper", Color(0.92, 0.92, 0.9), 0.85))
+		paper.rotation.y = rng.randf_range(-0.5, 0.5)
+	if rng.randf() < 0.6:
+		var phone := b(root, Vector3(0.2, 0.05, 0.18), top + Vector3(side * sz.x * 0.38, 0.025, mz + 0.1), mat("phone", Color(0.12, 0.12, 0.13), 0.4))
+		phone.rotation.y = -side * 0.3
+
+
+static var _screens := {}
+
+
+## A lit desktop: wallpaper, two windows with text lines, a taskbar.
+static func _screen_material(kind: int) -> Material:
+	if _screens.has(kind):
+		return _screens[kind]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242 + kind
+	var img := Image.create(160, 90, false, Image.FORMAT_RGB8)
+	var a := Color.from_hsv(rng.randf_range(0.5, 0.7), 0.6, 0.55)
+	var bcol := Color.from_hsv(rng.randf_range(0.5, 0.75), 0.5, 0.25)
+	for y in 90:
+		for x in 160:
+			img.set_pixel(x, y, a.lerp(bcol, (x + y) / 250.0))
+	for w in 2:
+		var x0 := rng.randi_range(8, 70)
+		var y0 := rng.randi_range(6, 30)
+		var ww := rng.randi_range(60, 85)
+		var hh := rng.randi_range(35, 50)
+		img.fill_rect(Rect2i(x0, y0, ww, hh), Color(0.93, 0.94, 0.96))
+		img.fill_rect(Rect2i(x0, y0, ww, 6), Color(0.25, 0.4, 0.65) if w == 1 else Color(0.6, 0.62, 0.66))
+		for line in range(y0 + 10, y0 + hh - 4, 4):
+			img.fill_rect(Rect2i(x0 + 4, line, rng.randi_range(ww / 3, ww - 8), 1), Color(0.45, 0.47, 0.5))
+	img.fill_rect(Rect2i(0, 84, 160, 6), Color(0.12, 0.13, 0.15))
+	var m := StandardMaterial3D.new()
+	var tex := ImageTexture.create_from_image(img)
+	m.albedo_texture = tex
+	m.emission_enabled = true
+	m.emission_texture = tex
+	m.emission_energy_multiplier = 0.9
+	m.roughness = 0.15
+	_screens[kind] = m
+	return m
+
+
+## Keyboard keys: a grid of light keycaps on a dark deck.
+static func _keys_material() -> Material:
+	if _screens.has("keys"):
+		return _screens["keys"]
+	var img := Image.create(84, 24, false, Image.FORMAT_RGB8)
+	img.fill(Color(0.04, 0.04, 0.045))
+	for row in 5:
+		for col in 15:
+			img.fill_rect(Rect2i(1 + col * 5 + (row % 2), 1 + row * 5, 4, 4), Color(0.16, 0.16, 0.17))
+	img.fill_rect(Rect2i(22, 21, 30, 3), Color(0.16, 0.16, 0.17))
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = ImageTexture.create_from_image(img)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	m.roughness = 0.5
+	_screens["keys"] = m
+	return m
 
 
 static func _shelving(root: Node3D, sz: Vector3, tag: String, rng: RandomNumberGenerator) -> void:

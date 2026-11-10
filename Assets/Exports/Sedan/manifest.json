@@ -1,0 +1,23 @@
+{
+  "asset": "Sedan",
+  "mesh": "SM_Sedan",
+  "dimensions_m": [
+    2.02,
+    4.551,
+    1.4498
+  ],
+  "triangles_lod0": 229344,
+  "triangles_lod1": 80270,
+  "collision_primitives": 0,
+  "texture_size": 2048,
+  "files": {
+    "BC": "Assets/Exports/Sedan/T_Sedan_BC.png",
+    "N": "Assets/Exports/Sedan/T_Sedan_N.png",
+    "ORM": "Assets/Exports/Sedan/T_Sedan_ORM.png",
+    "fbx_lod0": "Assets/Exports/Sedan/SM_Sedan.fbx",
+    "fbx_lod1": "Assets/Exports/Sedan/SM_Sedan_LOD1.fbx",
+    "preview": "Assets/Exports/Sedan/preview.png",
+    "blend": "Assets/Blender/Sedan.blend"
+  },
+  "notes": "Dresses 'car' solids (1.8 x 4.5 m body box 0.25-1.0 m up, cabin above); origin at the ground, front along +Y (Godot -Z)."
+}

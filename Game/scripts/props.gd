@@ -6,12 +6,16 @@
 class_name TfpsProps
 extends RefCounted
 
-# tag -> [asset, nominal size (Godot x, y, z), long horizontal axis of the model]
+# tag -> [asset, nominal size of the solid (Godot x, y, z), optional vertical
+# offset of the model's origin below the solid's bottom (metres, at nominal size)]
 const DRESSING := {
 	"crate": ["WoodCrate", Vector3(1.248, 1.202, 1.248)],
 	"barrier": ["JerseyBarrier", Vector3(0.6, 0.93, 3.0)],
 	"container": ["ShippingContainer", Vector3(6.061, 2.6, 2.532)],
 	"door": ["WoodDoor", Vector3(1.0, 2.15, 0.116)],
+	# The car solid is the body box 0.25-1.0 m up; the model has its wheels
+	# below it and the cabin (a solid of its own) above.
+	"car": ["Sedan", Vector3(1.8, 0.75, 4.5), -0.25],
 }
 
 static var _scenes := {}
@@ -76,7 +80,8 @@ static func for_solid(tag: String, box: AABB) -> Node3D:
 	var p := instance(asset)
 	if p == null:
 		return null
-	p.position = Vector3(box.get_center().x, box.position.y, box.get_center().z)
+	var drop: float = entry[2] if entry.size() > 2 else 0.0
+	p.position = Vector3(box.get_center().x, box.position.y + drop * size.y / nominal.y, box.get_center().z)
 	if turned:
 		p.rotation.y = PI * 0.5
 		p.scale = Vector3(size.z / nominal.x, size.y / nominal.y, size.x / nominal.z)

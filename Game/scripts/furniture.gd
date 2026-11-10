@@ -57,7 +57,8 @@ static func model(tag: String, box: AABB) -> Node3D:
 		"car":
 			_car(root, size, rng)
 		"car_cabin":
-			_car_cabin(root, size)
+			if not TfpsProps.available("Sedan"):   # the Sedan model includes the cabin
+				_car_cabin(root, size)
 		"dumpster":
 			_dumpster(root, size)
 		"railing", "balustrade":

@@ -50,6 +50,7 @@ Assets/Exports/<Asset>/manifest.json          dimensions, triangle counts, files
 | JerseyBarrier | 0.6 × 3 × 0.93 | 436 / 218 | 1 | 512² | `barrier` |
 | ShippingContainer | 6.061 × 2.532 × 2.6 | 4,420 / 1,326 | 5 | 512² | `container` (kit reference) |
 | WoodDoor | 1 × 0.116 × 2.15 | 1,636 / 490 | 1 | 1024² | `door` (mapkit door slab) |
+| Sedan | 1.8 (2.0 with mirrors) × 4.5 × 1.45 | 228k / 80k | 0 | 2048² | `car` (body box; the model includes the cabin and wheels, so the `car_cabin` solid draws nothing). Body lofted from superellipse sections with wheel arches, greenhouse with pillars and glass, lamps, plates, slatted grille, mirrors, five-spoke wheels |
 | WindowFrame | 1.5 × 0.35 × 1.15 | 756 / 378 | 1 | 512² | frames `window_glass` panes |
 | BrickWallPanel | 2.4 × 0.3 × 3 | 108 / 54 | 1 | 1024² | one mapkit wall panel |
 | ReconDrone | 0.28 × 0.146 × 0.205 | 1,320 / 528 | 1 | 512² | gadget 5 |
@@ -165,7 +166,7 @@ game falls back to procedural shapes.
 
 * `TfpsProps` (`Game/scripts/props.gd`) dresses map solids whose tag and
   size match a prop: `crate` → WoodCrate, `barrier` → JerseyBarrier,
-  `container` → ShippingContainer, `door` → WoodDoor, and window panes get a
+  `container` → ShippingContainer, `door` → WoodDoor, `car` → Sedan, and window panes get a
   WindowFrame. A destructible solid shows the prop until its first cell
   breaks. Then the surviving cells replace it, so the visuals never disagree
   with gameplay.

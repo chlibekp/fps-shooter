@@ -192,6 +192,61 @@ static func procedural_weapon(weapon_class: String) -> Node3D:
 	return root
 
 
+## A capsule from `a` to `b` (a forearm, an upper arm).
+static func segment(parent: Node3D, a: Vector3, b: Vector3, radius: float, m: Material, end_radius := -1.0) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var length := a.distance_to(b)
+	if end_radius > 0.0:
+		var cm := CylinderMesh.new()
+		cm.top_radius = end_radius
+		cm.bottom_radius = radius
+		cm.height = length
+		cm.radial_segments = 14
+		mi.mesh = cm
+	else:
+		var cap := CapsuleMesh.new()
+		cap.radius = radius
+		cap.height = length + radius * 2.0
+		cap.radial_segments = 14
+		cap.rings = 4
+		mi.mesh = cap
+	var dir := (b - a).normalized()
+	var side := Vector3.RIGHT if absf(dir.dot(Vector3.RIGHT)) < 0.9 else Vector3.FORWARD
+	var x := side.cross(dir).normalized()
+	mi.transform = Transform3D(Basis(x, dir, x.cross(dir)), (a + b) * 0.5)
+	mi.material_override = m
+	parent.add_child(mi)
+	return mi
+
+
+## First-person arms holding a weapon made by weapon(): a gloved right hand
+## on the grip and the left hand on the handguard (or around the right hand
+## for a pistol). Added as children of the weapon, so they move with it.
+static func add_arms(weapon_root: Node3D, weapon_class: String) -> void:
+	var sleeve := mat("fp_sleeve", Color(0.17, 0.18, 0.15), 0.9)
+	var glove := mat("fp_glove", Color(0.06, 0.06, 0.055), 0.7)
+	var cuff := mat("fp_cuff", Color(0.1, 0.1, 0.09), 0.85)
+	var muzzle_node := weapon_root.get_node_or_null("muzzle") as Node3D
+	var muzzle := muzzle_node.position if muzzle_node else Vector3(0, 0.04, -0.6)
+	# Right hand around the grip (origin), forearm back and down to the right.
+	box(weapon_root, Vector3(0.05, 0.085, 0.075), Vector3(0.004, -0.045, 0.012), glove, Vector3(-14, 0, 0))
+	box(weapon_root, Vector3(0.022, 0.02, 0.05), Vector3(-0.026, -0.012, -0.03), glove, Vector3(0, 8, 0))  # trigger finger
+	var r_wrist := Vector3(0.012, -0.07, 0.075)
+	segment(weapon_root, r_wrist, Vector3(0.17, -0.19, 0.4), 0.034, cuff)
+	segment(weapon_root, r_wrist + Vector3(0.025, -0.02, 0.06), Vector3(0.32, -0.3, 0.72), 0.05, sleeve)
+	# Left hand.
+	var l_hand: Vector3
+	if weapon_class == "pistol":
+		l_hand = Vector3(-0.03, -0.06, 0.02)
+	else:
+		var along := 0.5 if weapon_class != "smg" else 0.62
+		l_hand = Vector3(0.0, muzzle.y - 0.045, muzzle.z * along)
+	box(weapon_root, Vector3(0.05, 0.05, 0.09), l_hand + Vector3(-0.01, 0, 0), glove, Vector3(0, 0, 20))
+	var l_wrist := l_hand + Vector3(-0.03, -0.04, 0.05)
+	segment(weapon_root, l_wrist, l_wrist + Vector3(-0.1, -0.12, 0.3), 0.032, cuff)
+	segment(weapon_root, l_wrist + Vector3(-0.02, -0.03, 0.07), l_wrist + Vector3(-0.2, -0.3, 0.62), 0.048, sleeve)
+
+
 ## Weapon class for a weapon id from weapons.json.
 static func weapon_class(id: int) -> String:
 	match id:

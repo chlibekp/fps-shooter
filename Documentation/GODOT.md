@@ -134,6 +134,6 @@ They take a screenshot with scripted input, then quit.
 
 ## Not done yet
 
-* Operators are procedural primitives with no rig; the first-person view
-  has no hands.
+* Operators are procedural primitives with no rig; first-person arms are
+  simple procedural shapes.
 * Nothing has been played on a GPU, on Windows or on macOS yet.

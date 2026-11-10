@@ -111,6 +111,7 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 			_weapon = null
 		if id > 0:
 			_weapon = TfpsModels.weapon(TfpsModels.weapon_class(id))
+			TfpsModels.add_arms(_weapon, TfpsModels.weapon_class(id))
 			for g in _weapon.find_children("*", "GeometryInstance3D", true, false):
 				(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			_weapon.scale = Vector3.ONE * 0.72

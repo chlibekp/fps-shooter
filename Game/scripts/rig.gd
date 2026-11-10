@@ -150,8 +150,10 @@ static func grip_targets(weapon: Node3D) -> Dictionary:
 ## Arms holding a weapon: two-bone IK onto the wrists from grip_targets()
 ## and hands turned along the given directions (skeleton space via
 ## `to_skel`). Elbows bend down and out.
-func hold(weapon: Node3D, to_skel: Transform3D) -> void:
+func hold(weapon: Node3D, to_skel: Transform3D, left_wrist_override = null) -> void:
 	var t := grip_targets(weapon)
+	if left_wrist_override != null:
+		t["L"] = [left_wrist_override as Vector3, (weapon.global_basis * Vector3(0.2, 0.6, -0.5)).normalized()]
 	for side in ["R", "L"]:
 		var sgn := 1.0 if side == "R" else -1.0
 		var wrist: Vector3 = to_skel * (t[side][0] as Vector3)

@@ -188,9 +188,11 @@ def magazine_curved(x_front, x_back, top, depth, curve, width, finish, ribs=True
             dx = curve * t * t
             cx = (x_front + x_back) / 2 + dx * 1.05
             parts.append(bx("mag_rib", (abs(x_front - x_back) * 0.8, width + 0.002, 0.0035), (cx, 0, z), finish, 0.0012))
-    t = 1.0
     cx = (x_front + x_back) / 2 + curve * 1.05
     parts.append(bx("mag_base", (abs(x_front - x_back) + 0.01, width + 0.004, 0.012), (cx, 0, top - depth - 0.004), finish, 0.002))
+    for o in parts:
+        g = o.vertex_groups.new(name="mag")
+        g.add(list(range(len(o.data.vertices))), 1.0, 'REPLACE')
     return parts
 
 
@@ -524,10 +526,52 @@ def build_one(asset, fn):
     mat = worn_material(f"M_{asset}_Proc")
     gun.data.materials.append(mat)
     lod1 = tc.make_lod(gun, 0.4, f"{asset}_LOD1")
-    return tc.finish_asset(asset, gun, lod1, [], mat,
-                           notes="Weapon model; barrel along +Y (Godot -Z). grip_m / muzzle_m / sight_m in model space (Blender axes).",
-                           extra={"grip_m": [round(c, 4) for c in grip], "muzzle_m": [round(c, 4) for c in muzzle_v],
-                                  "sight_m": [round(c, 4) for c in sight_v]})
+    manifest = tc.finish_asset(asset, gun, lod1, [], mat,
+                               notes="Weapon model; barrel along +Y (Godot -Z). grip_m / muzzle_m / sight_m in model space (Blender axes); the magazine is the separate mesh SM_<asset>_Mag (mag_m: its top centre).",
+                               extra={"grip_m": [round(c, 4) for c in grip], "muzzle_m": [round(c, 4) for c in muzzle_v],
+                                      "sight_m": [round(c, 4) for c in sight_v]})
+    split_magazine(asset, gun, manifest)
+    return manifest
+
+
+def split_magazine(asset, gun, manifest):
+    """Moves the faces of vertex group 'mag' into their own object (same
+    baked material and UVs) and re-exports the FBX with both, so the game
+    can animate the magazine on reload."""
+    import bmesh
+    import json
+    g = gun.vertex_groups.get("mag")
+    if g is None:
+        return
+    gi = g.index
+    in_mag = {v.index for v in gun.data.vertices if any(e.group == gi and e.weight > 0.5 for e in v.groups)}
+    if not in_mag:
+        return
+    tc.select_only([gun])
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    for v in gun.data.vertices:
+        v.select = v.index in in_mag
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_mode(type='VERT')
+    bpy.ops.mesh.separate(type='SELECTED')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    mag = [o for o in bpy.context.selected_objects if o is not gun][0]
+    mag.name = f"SM_{asset}_Mag"
+    vs = [mag.matrix_world @ v.co for v in mag.data.vertices]
+    top = [round((min(v.x for v in vs) + max(v.x for v in vs)) / 2, 4),
+           round((min(v.y for v in vs) + max(v.y for v in vs)) / 2, 4),
+           round(max(v.z for v in vs), 4)]
+    path = os.path.join(tc.REPO, manifest["files"]["fbx_lod0"])
+    tc.export_fbx([gun, mag], path)
+    manifest["mag_m"] = top
+    manifest["triangles_lod0"] = tc.triangle_count(gun) + tc.triangle_count(mag)
+    out = os.path.join(tc.REPO, "Assets", "Exports", asset, "manifest.json")
+    with open(out, "w", newline="\n") as f:
+        json.dump(manifest, f, indent=2)
+        f.write("\n")
+    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(tc.REPO, manifest["files"]["blend"]), compress=True)
 
 
 def build():

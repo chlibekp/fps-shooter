@@ -22,6 +22,7 @@ var _team := 0
 var _arms_root: Node3D
 var _arms_rig: TfpsRig
 var _arms_asset := ""
+var _hand_target = null   # support-hand override during reloads (Vector3 or null)
 var _crouch_on := false
 var _prone_on := false
 var _last_weapon_slot := 0
@@ -158,7 +159,38 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	pos.y -= equip * 0.25
 	_weapon.position = pos
 	_weapon.rotation_degrees = rot
+	_animate_magazine(rp)
 	_pose_arms()
+
+
+## Reload: the magazine drops out, the support hand brings a fresh one up
+## from the vest and seats it (weapons whose magazine is a separate mesh).
+func _animate_magazine(rp: float) -> void:
+	var mag := _weapon.find_child("*_Mag", true, false) as Node3D
+	_hand_target = null
+	if mag == null:
+		return
+	if not mag.has_meta("rest"):
+		mag.set_meta("rest", mag.transform)
+	var rest: Transform3D = mag.get_meta("rest")
+	var drop := Vector3.ZERO
+	var visible_now := true
+	if rp > 0.08 and rp < 0.34:
+		var k := smoothstep(0.08, 0.34, rp)
+		drop = Vector3(0, -0.38 * k * k, 0.04 * k)
+	elif rp >= 0.34 and rp < 0.45:
+		visible_now = false
+	elif rp >= 0.45 and rp < 0.8:
+		var k := 1.0 - smoothstep(0.45, 0.8, rp)
+		drop = Vector3(-0.03 * k, -0.18 * k, 0.05 * k)
+	mag.transform = Transform3D(rest.basis, rest.origin + drop / maxf(_weapon.scale.x, 0.01))
+	mag.visible = visible_now
+	# The support hand holds the magazine while it comes in (and reaches for
+	# the vest while it is out of sight).
+	if rp > 0.36 and rp < 0.86 and mag is MeshInstance3D:
+		var mi := mag as MeshInstance3D
+		var bottom := mi.get_aabb().get_center() - Vector3(0, mi.get_aabb().size.y * 0.35, 0)
+		_hand_target = mi.global_transform * bottom if visible_now else _weapon.to_global(Vector3(-0.15, -0.35, 0.15))
 
 
 ## First-person arms: the team's skinned operator sleeves and gloves
@@ -194,7 +226,7 @@ func _pose_arms() -> void:
 		return
 	var r := _arms_rig
 	r.begin()
-	r.hold(_weapon, r.skel.global_transform.affine_inverse())
+	r.hold(_weapon, r.skel.global_transform.affine_inverse(), _hand_target)
 	r.commit()
 
 

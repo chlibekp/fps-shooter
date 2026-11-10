@@ -19,7 +19,7 @@
     "preview": "Assets/Exports/WeaponPistol/preview.png",
     "blend": "Assets/Blender/WeaponPistol.blend"
   },
-  "notes": "Weapon model; barrel along +Y (Godot -Z). grip_m / muzzle_m / sight_m in model space (Blender axes).",
+  "notes": "Weapon model; barrel along +Y (Godot -Z). grip_m / muzzle_m / sight_m in model space (Blender axes); the magazine is the separate mesh SM_<asset>_Mag (mag_m: its top centre).",
   "grip_m": [
     0.0,
     -0.046,

@@ -496,12 +496,12 @@ def material(asset):
     folds.inputs["Distortion"].default_value = 1.4
     nt.links.new(mapping.outputs["Vector"], folds.inputs["Vector"])
     weave = tc.node(nt, "ShaderNodeTexWave")
-    weave.inputs["Scale"].default_value = 260.0
+    weave.inputs["Scale"].default_value = 110.0
     weave.inputs["Distortion"].default_value = 2.0
     nt.links.new(coord.outputs["Object"], weave.inputs["Vector"])
     height = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY_ADD')
     nt.links.new(weave.outputs["Fac"], height.inputs[0])
-    height.inputs[1].default_value = 0.08
+    height.inputs[1].default_value = 0.04
     nt.links.new(folds.outputs["Fac"], height.inputs[2])
     masked = tc.node(nt, "ShaderNodeMath", operation='MULTIPLY')
     nt.links.new(height.outputs["Value"], masked.inputs[0])

@@ -32,6 +32,25 @@ func build(world: Dictionary, p_net: TfpsNet) -> void:
 		if box.size.y < 0.6 and box.position.y > 2.4 and box.size.x * box.size.z > 12.0 and s.get("tag", "") != "ground":
 			ceilings.append(box)
 	_build_interior_lights(ceilings)
+	_build_surroundings()
+
+
+## Ground beyond the playable area, out to the horizon (just below the map's ground).
+func _build_surroundings() -> void:
+	var lo := Vector3.INF
+	for s in _solids:
+		if s.get("tag", "") == "ground":
+			lo = TfpsNet.vec(s["max"])
+	var y := (lo.y if lo != Vector3.INF else 0.0) - 0.02
+	var mi := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(1600, 1600)
+	mi.mesh = pm
+	mi.position = Vector3(0, y, 0)
+	mi.material_override = TfpsMaterials.get_material(TfpsMaterials.DIRT)
+	mi.set_instance_shader_parameter("tint", Color(0.78, 0.8, 0.7))
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
 
 
 static func _aabb(s: Dictionary) -> AABB:
@@ -163,10 +182,10 @@ func _build_environment() -> void:
 	env.glow_intensity = 0.6
 	env.glow_bloom = 0.05
 	env.volumetric_fog_enabled = quality >= 1
-	env.volumetric_fog_density = 0.012
+	env.volumetric_fog_density = 0.005
 	env.volumetric_fog_albedo = Color(0.9, 0.88, 0.85)
 	env.volumetric_fog_anisotropy = 0.6
-	env.volumetric_fog_length = 80.0
+	env.volumetric_fog_length = 64.0
 	env.adjustment_enabled = true
 	env.adjustment_contrast = 1.08
 	env.adjustment_saturation = 1.05

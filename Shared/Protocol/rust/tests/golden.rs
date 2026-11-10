@@ -42,6 +42,7 @@ fn vectors() -> String {
         reconnect_token: 0x1111_2222_3333_4444,
         join_token: 0x5555,
         name: "Operator-7".into(),
+        armor: 2,
     }
     .encode(&mut b);
     add("challenge_response", &b);

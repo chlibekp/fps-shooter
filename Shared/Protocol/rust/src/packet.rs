@@ -162,6 +162,9 @@ pub struct ChallengeResponse {
     /// Match access token (lobby invite system, Phase 6). 0 = none.
     pub join_token: u64,
     pub name: String,
+    /// Requested armour class (0 medium, 1 light, 2 heavy). Sits in what
+    /// older clients sent as padding (zero = medium).
+    pub armor: u8,
 }
 
 impl ChallengeResponse {
@@ -173,6 +176,7 @@ impl ChallengeResponse {
         w.u64(self.reconnect_token);
         w.u64(self.join_token);
         w.str8(&self.name, MAX_NAME_LEN);
+        w.u8(self.armor);
         w.pad_to(HANDSHAKE_PACKET_SIZE);
     }
     pub fn decode(r: &mut Reader, total_len: usize) -> Result<Self, DecodeError> {
@@ -185,6 +189,7 @@ impl ChallengeResponse {
             reconnect_token: r.u64()?,
             join_token: r.u64()?,
             name: r.str8(MAX_NAME_LEN)?,
+            armor: r.u8()?.min(2),
         })
     }
 }
@@ -360,6 +365,7 @@ mod tests {
             reconnect_token: 3,
             join_token: 4,
             name: "Operator".into(),
+            armor: 0,
         };
         buf.clear();
         cr.encode(&mut buf);
@@ -411,6 +417,7 @@ mod tests {
             reconnect_token: 0,
             join_token: 0,
             name,
+            armor: 0,
         }
         .encode(&mut buf);
         let (_, mut r) = read_header(&buf).unwrap();

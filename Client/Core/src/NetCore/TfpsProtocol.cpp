@@ -57,7 +57,7 @@ namespace tfps
 			const MoveState& L = H.Local;
 			W.F32(L.Pos.X); W.F32(L.Pos.Y); W.F32(L.Pos.Z);
 			W.F32(L.Vel.X); W.F32(L.Vel.Y); W.F32(L.Vel.Z);
-			W.U8(static_cast<uint8_t>((L.bOnGround ? 1 : 0) | (L.bCrouched ? 2 : 0) | (L.bProne ? 4 : 0)));
+			W.U8(static_cast<uint8_t>((L.bOnGround ? 1 : 0) | (L.bCrouched ? 2 : 0) | (L.bProne ? 4 : 0) | ((L.Armor & 3) << 3)));
 			W.F32(L.JumpTimer); W.F32(L.StanceTimer); W.F32(L.Lean); W.F32(L.Aim);
 			const WeaponState& Ws = H.Weapon;
 			W.U8(Ws.Active);
@@ -81,6 +81,8 @@ namespace tfps
 			L.Vel.X = R.F32Finite(); L.Vel.Y = R.F32Finite(); L.Vel.Z = R.F32Finite();
 			const uint8_t MF = R.U8();
 			L.bOnGround = (MF & 1) != 0; L.bCrouched = (MF & 2) != 0; L.bProne = (MF & 4) != 0;
+			L.Armor = static_cast<uint8_t>((MF >> 3) & 3);
+			if (L.Armor > 2) { R.Fail(); return false; }
 			L.JumpTimer = R.F32Finite(); L.StanceTimer = R.F32Finite(); L.Lean = R.F32Finite(); L.Aim = R.F32Finite();
 			WeaponState& Ws = H.Weapon;
 			Ws.Active = R.U8();
@@ -203,6 +205,7 @@ namespace tfps
 		W.U64(ReconnectToken);
 		W.U64(JoinToken);
 		W.Str8(Name, kMaxNameLen);
+		W.U8(Armor);
 		W.PadTo(kHandshakePacketSize);
 	}
 

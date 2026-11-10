@@ -200,7 +200,10 @@ fn encode_local(w: &mut Writer, h: &SnapshotHeader) {
     for v in [l.pos.x, l.pos.y, l.pos.z, l.vel.x, l.vel.y, l.vel.z] {
         w.f32(v);
     }
-    w.u8((l.on_ground as u8) | ((l.crouched as u8) << 1) | ((l.prone as u8) << 2));
+    w.u8((l.on_ground as u8)
+        | ((l.crouched as u8) << 1)
+        | ((l.prone as u8) << 2)
+        | ((l.armor & 3) << 3));
     for v in [l.jump_timer, l.stance_timer, l.lean, l.aim] {
         w.f32(v);
     }
@@ -242,6 +245,10 @@ fn decode_local(r: &mut Reader, h: &mut SnapshotHeader) -> Result<(), DecodeErro
     l.on_ground = mf & 1 != 0;
     l.crouched = mf & 2 != 0;
     l.prone = mf & 4 != 0;
+    l.armor = (mf >> 3) & 3;
+    if l.armor > 2 {
+        return Err(DecodeError::Invalid("bad armour class"));
+    }
     l.jump_timer = r.f32_finite()?;
     l.stance_timer = r.f32_finite()?;
     l.lean = r.f32_finite()?;

@@ -108,11 +108,13 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([p + dir * 18.0 * s, p + dir.orthogonal() * 22.0 * s, p - dir.orthogonal() * 22.0 * s]), Color(0.9, 0.15, 0.1, 0.8 * a2))
 	# Health (bottom left).
 	var hp := int(state.get("health", 100))
+	var armor := int(state.get("armor", 0))
+	var max_hp: float = [100.0, 90.0, 120.0][clampi(armor, 0, 2)]
 	_panel(Rect2(Vector2(30, vs.y / s - 110) * s, Vector2(300, 80) * s))
 	_text(str(hp), Vector2(46, vs.y / s - 52) * s, int(44 * s), TEXT if hp > 35 else Color(1, 0.35, 0.3))
 	draw_rect(Rect2(Vector2(130, vs.y / s - 78) * s, Vector2(180, 10) * s), Color(1, 1, 1, 0.15))
-	draw_rect(Rect2(Vector2(130, vs.y / s - 78) * s, Vector2(180 * clampf(hp / 100.0, 0, 1), 10) * s), TEXT if hp > 35 else Color(1, 0.35, 0.3))
-	_text("HEALTH", Vector2(130, vs.y / s - 88) * s, int(13 * s), DIM)
+	draw_rect(Rect2(Vector2(130, vs.y / s - 78) * s, Vector2(180 * clampf(hp / max_hp, 0, 1), 10) * s), TEXT if hp > 35 else Color(1, 0.35, 0.3))
+	_text("HEALTH  ·  %s ARMOUR" % ["MEDIUM", "LIGHT", "HEAVY"][clampi(armor, 0, 2)], Vector2(130, vs.y / s - 88) * s, int(13 * s), DIM)
 	# Weapon and ammo (bottom right).
 	var w: Dictionary = state.get("weapon", {})
 	var gadgets: Array = state.get("gadgets", [])

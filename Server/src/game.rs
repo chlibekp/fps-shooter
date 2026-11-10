@@ -237,6 +237,8 @@ pub struct Player {
     pub loadout: [u8; SLOTS],
     pub cmds: CommandQueue,
     pub health: u8,
+    /// Armour class chosen at connect (tfps_sim::movement::ARMOR_*).
+    pub armor: u8,
     pub alive: bool,
     pub respawn_timer: f32,
     pub kills: u32,
@@ -428,6 +430,15 @@ pub struct GameWorld {
     pub map_reset_this_tick: bool,
 }
 
+/// Health of an armour class: light -10, heavy +20 on the mode's maximum.
+pub fn armor_health(max_health: u8, armor: u8) -> u8 {
+    match armor {
+        movement::ARMOR_LIGHT => max_health.saturating_sub(10),
+        movement::ARMOR_HEAVY => max_health.saturating_add(20),
+        _ => max_health,
+    }
+}
+
 /// How far a player can reach a door with USE (metres from the eye).
 pub const DOOR_REACH: f32 = 2.0;
 
@@ -514,6 +525,18 @@ impl GameWorld {
         self.weapons.default_loadout
     }
 
+    /// Sets a newly joined player's armour class (speed and health).
+    pub fn set_player_armor(&mut self, id: u16, armor: u8) {
+        let max = self.rules.max_health;
+        if let Some(p) = self.player_mut(id) {
+            p.armor = armor.min(movement::ARMOR_HEAVY);
+            p.state.armor = p.armor;
+            if p.alive {
+                p.health = armor_health(max, p.armor);
+            }
+        }
+    }
+
     /// Picks a spawn point for `team`, rotating through the team's spawns
     /// and skipping occupied ones.
     pub fn spawn_state(&mut self, team: u8) -> MoveState {
@@ -590,6 +613,7 @@ impl GameWorld {
             loadout,
             cmds,
             health,
+            armor: state.armor,
             alive: health > 0,
             respawn_timer: if health > 0 {
                 0.0
@@ -638,10 +662,11 @@ impl GameWorld {
         let yaw = self.spawn_yaw_q(&s);
         let loadout = self.players[idx].loadout;
         let w = WeaponState::new(&self.loadout_defs(&loadout));
-        let max_health = self.rules.max_health;
         let stock = self.gadget_defs.loadout(team);
         let p = &mut self.players[idx];
+        let max_health = armor_health(self.rules.max_health, p.armor);
         p.state = s;
+        p.state.armor = p.armor;
         p.weapon = w;
         p.gadgets = stock;
         p.gadget_cooldown = 0.0;
@@ -2604,6 +2629,40 @@ mod tests {
             a.step(aim_only, cmd(0), 24);
         }
         assert!(broken > 0, "bullets break barricade cells");
+    }
+
+    #[test]
+    fn armour_classes_trade_speed_for_health() {
+        let mut dist = Vec::new();
+        for (armor, health) in [
+            (movement::ARMOR_LIGHT, 90),
+            (movement::ARMOR_MEDIUM, 100),
+            (movement::ARMOR_HEAVY, 120),
+        ] {
+            let mut a = Arena::new("", MatchRules::default());
+            a.w.set_player_armor(1, armor);
+            assert_eq!(a.w.player(1).unwrap().health, health);
+            let start = a.w.player(1).unwrap().state.pos;
+            let run = MoveInput {
+                buttons: buttons::FORWARD,
+                yaw_q: 0,
+                pitch_q: 0,
+                slot: 0,
+            };
+            a.step(run, cmd(0), 64);
+            let p = a.w.player(1).unwrap();
+            assert_eq!(p.state.armor, armor, "replicated in the movement state");
+            dist.push(p.state.pos.distance(&start));
+            // Respawning keeps the class.
+            let i = a.w.players.iter().position(|q| q.id == 1).unwrap();
+            a.w.respawn(i);
+            assert_eq!(a.w.player(1).unwrap().health, health);
+            assert_eq!(a.w.player(1).unwrap().state.armor, armor);
+        }
+        assert!(
+            dist[0] > dist[1] * 1.07 && dist[2] < dist[1] * 0.93,
+            "{dist:?}"
+        );
     }
 
     #[test]

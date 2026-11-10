@@ -103,7 +103,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Friendly fire rule | ✅ | Off by default |
 | Hit confirm, damage direction, kill feed messages | ✅ | |
 | Bullet penetration, material resistance | ✅ | Phase 3: thickness × resistance against a per-weapon budget, damage loss per layer |
-| Armor | ❌ | Needs operator/loadout system |
+| Armour classes | ✅ | Light (90 HP, +10 % speed), medium (100 HP), heavy (120 HP, -10 % speed), chosen in Settings (or `--armor`), sent at connect (protocol v10) and kept in the replicated movement state, so prediction moves at the same speed (C++ mirror; conformance unchanged for medium). Unit test; HUD shows the class |
 | Suppression effects | ❌ | |
 | Attachments (affect recoil/spread) | ❌ | The data model has room for multipliers |
 | Weapon inspection, shell ejection, weapon-specific animations, sound variation | 🟡 | Per-weapon gunshots with 3–4 variations each, reload and dry-fire sounds; spent casings eject from the local weapon (cosmetic, no collision); no inspection or weapon animations |

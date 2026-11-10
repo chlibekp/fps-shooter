@@ -384,6 +384,9 @@ func _show_settings() -> void:
 	_row("Effects volume", _slider(0, 1, 0.05, settings.effects_volume, func(v: float) -> void: settings.effects_volume = v))
 	_row("Graphics", _choice(["Low", "Medium", "High", "Ultra"], ["Low", "Medium", "High", "Ultra"][settings.quality],
 		func(v: String) -> void: settings.quality = ["Low", "Medium", "High", "Ultra"].find(v)))
+	# Armour class: index 0 medium, 1 light, 2 heavy (as the server expects).
+	var armours := ["Medium (100 HP)", "Light (90 HP, +10% speed)", "Heavy (120 HP, -10% speed)"]
+	_row("Armour", _choice(armours, armours[settings.armor], func(v: String) -> void: settings.armor = armours.find(v)))
 	var lob := LineEdit.new()
 	lob.text = settings.lobby_url
 	lob.text_changed.connect(func(t: String) -> void: settings.lobby_url = t)

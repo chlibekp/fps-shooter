@@ -13,6 +13,7 @@ var fov := 90.0
 var master_volume := 0.8
 var effects_volume := 1.0
 var quality := 2
+var armor := 0   # 0 medium, 1 light, 2 heavy
 var lobby_url := "http://127.0.0.1:7700"
 var last_server := "127.0.0.1:7777"
 var last_map := "harbor"
@@ -24,7 +25,7 @@ static func load_or_default() -> TfpsSettings:
 	var c := ConfigFile.new()
 	if c.load(PATH) == OK:
 		for p in ["player_name", "sensitivity", "ads_sensitivity", "invert_y", "toggle_crouch", "fov", "master_volume",
-				"effects_volume", "quality", "lobby_url", "last_server", "last_map", "keys"]:
+				"effects_volume", "quality", "armor", "lobby_url", "last_server", "last_map", "keys"]:
 			if c.has_section_key("settings", p):
 				s.set(p, c.get_value("settings", p))
 	s.sanitize()
@@ -41,12 +42,13 @@ func sanitize() -> void:
 	master_volume = clampf(master_volume, 0.0, 1.0)
 	effects_volume = clampf(effects_volume, 0.0, 1.0)
 	quality = clampi(quality, 0, 3)
+	armor = clampi(armor, 0, 2)
 
 
 func save() -> void:
 	sanitize()
 	var c := ConfigFile.new()
 	for p in ["player_name", "sensitivity", "ads_sensitivity", "invert_y", "toggle_crouch", "fov", "master_volume",
-			"effects_volume", "quality", "lobby_url", "last_server", "last_map", "keys"]:
+			"effects_volume", "quality", "armor", "lobby_url", "last_server", "last_map", "keys"]:
 		c.set_value("settings", p, get(p))
 	c.save(PATH)

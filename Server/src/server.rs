@@ -325,7 +325,11 @@ impl ServerCore {
             let state = restored
                 .as_ref()
                 .map(|s| (s.state, s.weapon, s.health, s.gadgets));
+            let fresh = state.is_none();
             self.game.add_player(player_id, team, pname.clone(), state);
+            if fresh {
+                self.game.set_player_armor(player_id, resp.armor);
+            }
         } else if let Some(p) = self.game.player_mut(player_id) {
             // New client process: its command sequence restarts.
             p.cmds = Default::default();

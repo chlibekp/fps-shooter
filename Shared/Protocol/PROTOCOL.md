@@ -1,4 +1,4 @@
-# TacticalFPS wire protocol — version 9
+# TacticalFPS wire protocol — version 10
 
 Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
 stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions),
@@ -7,12 +7,13 @@ v5 (three gadget slots, drone remote control, Spotted),
 v6 (four gadget slots; cameras, motion sensors, jammers),
 v7 (runtime solids for barricades, wall reinforcement),
 v8 (game modes: MatchState, MapReset, hold-action kind),
-v9 (doors: DoorState).
+v9 (doors: DoorState),
+v10 (armour classes: ChallengeResponse `armor`, movement flags bits 3-4).
 
 Implementations:
 
 * Rust: `Shared/Protocol/rust` (`tfps-protocol` crate) — server and dev clients.
-* C++: `Client/Source/TacticalFPS/{Public,Private}/NetCore/TfpsProtocol.*` — Unreal client.
+* C++: `Client/Core/{include,src}/NetCore/TfpsProtocol.*` — client core (Godot native extension).
 
 Any change to this document's byte layouts must bump `PROTOCOL_VERSION` on
 both sides.
@@ -46,7 +47,7 @@ with `ConnectRejected(VersionMismatch)`.
 client                                   server
   | ConnectRequest(nonce)  [padded 256]  ->|  stateless: cookie = SipHash(secret, addr, nonce, time bucket)
   |<- Challenge(nonce, cookie)             |
-  | ChallengeResponse(nonce, cookie, reconnect_token, join_token, name) [padded 256] ->|
+  | ChallengeResponse(nonce, cookie, reconnect_token, join_token, name, armor) [padded 256] ->|
   |<- ConnectAccepted(...) or ConnectRejected(reason)
 ```
 
@@ -55,7 +56,10 @@ Client resends each step every 250 ms, gives up after 10 s.
 * **ConnectRequest** (C→S): `u64 client_nonce`, zero padding to 256 bytes.
 * **Challenge** (S→C): `u64 client_nonce, u64 cookie`.
 * **ChallengeResponse** (C→S): `u64 client_nonce, u64 cookie, u64 reconnect_token,
-  u64 join_token, str8 name (≤24 bytes)`, zero padding to 256 bytes.
+  u64 join_token, str8 name (≤24 bytes), u8 armor`, zero padding to 256 bytes.
+  `armor` = requested armour class (0 medium, 1 light, 2 heavy; larger values
+  are clamped to heavy): light has 10 HP less and moves 10 % faster, heavy has
+  20 HP more and moves 10 % slower.
   `reconnect_token` = token from an earlier `ConnectAccepted` to resume a lost
   session (0 = new player). `join_token` = match access token (0 = open server;
   Phase 6 lobbies will require it).
@@ -206,7 +210,7 @@ u32 last_cmd_seq         last command simulated for this client
 i8  input_buffer_depth   commands still queued for this client (-1 = starved this tick)
 -- local player, exact (prediction reconciliation) --
 f32×6 pos, vel
-u8  move flags           bit0 on_ground, bit1 crouched, bit2 prone
+u8  move flags           bit0 on_ground, bit1 crouched, bit2 prone, bits3-4 armour class (0 medium, 1 light, 2 heavy; 3 invalid)
 f32 jump_timer, stance_timer, lean, aim
 u8  active weapon slot
 2 × { u16 ammo, u8 chambered, u16 reserve }

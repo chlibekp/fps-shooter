@@ -142,6 +142,7 @@ namespace tfps
 			P.ReconnectToken = Config.ReconnectToken;
 			P.JoinToken = Config.JoinToken;
 			P.Name = Config.Name;
+			P.Armor = Config.Armor;
 			P.Encode(SendBuf);
 		}
 		SendCurrent();

@@ -304,6 +304,7 @@ fn speed_hack_flooding_commands_gains_nothing() {
         reconnect_token: 0,
         join_token: 0,
         name: "Cheater".into(),
+        armor: 0,
     }
     .encode(&mut buf);
     sock.send_to(&buf, srv.local_addr).unwrap();

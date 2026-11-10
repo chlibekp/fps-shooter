@@ -119,6 +119,23 @@ pub struct MoveState {
     pub lean: f32,
     /// 0 (hip) .. 1 (fully aimed down sights). Driven by the weapon simulation.
     pub aim: f32,
+    /// Armour class: 0 medium (default), 1 light, 2 heavy. Set by the server
+    /// at spawn; scales movement speed (see `armor_speed`).
+    pub armor: u8,
+}
+
+pub const ARMOR_MEDIUM: u8 = 0;
+pub const ARMOR_LIGHT: u8 = 1;
+pub const ARMOR_HEAVY: u8 = 2;
+
+/// Movement speed factor of an armour class: light +10 %, heavy -10 %.
+#[inline]
+pub fn armor_speed(armor: u8) -> f32 {
+    match armor {
+        ARMOR_LIGHT => 1.1,
+        ARMOR_HEAVY => 0.9,
+        _ => 1.0,
+    }
 }
 
 #[inline]
@@ -359,6 +376,7 @@ pub fn simulate(state: &mut MoveState, input: &MoveInput, dt: f32, world: &Colli
         RUN_SPEED
     };
     speed *= 1.0 - (1.0 - ADS_SPEED_MULT) * state.aim;
+    speed *= armor_speed(state.armor);
     let tx = wx * speed;
     let ty = wy * speed;
 

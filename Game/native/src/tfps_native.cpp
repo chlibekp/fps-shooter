@@ -344,6 +344,8 @@ std::string TfpsNative::Connect(const tfps::JsonValue& R)
 	tfps::ClientConfig Config;
 	Config.Name = Text(R, "name").substr(0, 24);
 	Config.JoinToken = std::strtoull(Text(R, "join_token").c_str(), nullptr, 16);
+	const int ArmorReq = static_cast<int>(tfps::JsonNumber(R, "armor", 0));
+	Config.Armor = static_cast<uint8_t>(ArmorReq < 0 ? 0 : (ArmorReq > 2 ? 2 : ArmorReq));
 	Core = std::make_unique<tfps::ClientCore>(Config, Map, Weapons, *Transport, NowSeconds());
 	return Ok();
 }
@@ -403,7 +405,7 @@ std::string TfpsNative::Frame(const tfps::JsonValue& R)
 	O.Key("eye").Vec(tfps::Vec3(Feet.X + Eye.X - M.Pos.X, Feet.Y + Eye.Y - M.Pos.Y, Feet.Z + Eye.Z - M.Pos.Z));
 	O.Key("velocity").Vec(M.Vel);
 	O.Key("on_ground").Bool(M.bOnGround).Key("crouched").Bool(M.bCrouched).Key("prone").Bool(M.bProne);
-	O.Key("lean").Num(M.Lean).Key("aim").Num(M.Aim);
+	O.Key("lean").Num(M.Lean).Key("aim").Num(M.Aim).Key("armor").Int(M.Armor);
 	O.Key("health").Int(Core->Health()).Key("alive").Bool(Core->IsAlive()).Key("respawn_in").Num(Core->RespawnIn());
 	O.Key("side").Int(Core->Side()).Key("squad").Int(Core->Squad()).Key("action").Int(Core->Action());
 	O.Key("reinforcements").Int(Core->Reinforcements()).Key("reinforce_progress").Num(Core->ReinforceProgress());

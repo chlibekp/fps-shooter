@@ -1,5 +1,5 @@
 ## Entry point: menus over a live map backdrop, and matches.
-## Command line (after "--"):
+## Command line (after "--"): --armor 0..2 (medium, light, heavy) also applies
 ##   --connect host:port --map NAME [--name NAME]   join a server directly
 ##   --lobby http://host:7700 [--invite CODE]       lobby service (Play launcher)
 ##   --quality 0..3
@@ -169,7 +169,8 @@ func _start_match(address: String, map_name: String, join_token: String) -> void
 	game = TfpsGame.new()
 	add_child(game)
 	game.left_match.connect(_on_left_match)
-	if not game.start(net, address, settings.player_name, join_token):
+	var armor := int(args.get("armor", str(settings.armor)))
+	if not game.start(net, address, settings.player_name, join_token, armor):
 		menu.show_error(net.error)
 		return
 	_apply_settings()

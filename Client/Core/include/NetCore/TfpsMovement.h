@@ -89,6 +89,8 @@ namespace tfps
 		float Lean = 0.0f;
 		/** 0 (hip) .. 1 (fully aimed down sights). */
 		float Aim = 0.0f;
+		/** Armour class: 0 medium (default), 1 light, 2 heavy (speed factor, see ArmorSpeed). */
+		uint8_t Armor = 0;
 
 		float Height() const { return StanceHeight(bCrouched, bProne); }
 		float EyeHeight() const { return bProne ? MoveTuning::ProneEye : (bCrouched ? MoveTuning::CrouchEye : MoveTuning::StandEye); }
@@ -97,11 +99,14 @@ namespace tfps
 		bool operator==(const MoveState& O) const
 		{
 			return Pos == O.Pos && Vel == O.Vel && bOnGround == O.bOnGround && bCrouched == O.bCrouched && bProne == O.bProne
-				&& JumpTimer == O.JumpTimer && StanceTimer == O.StanceTimer && Lean == O.Lean && Aim == O.Aim;
+				&& JumpTimer == O.JumpTimer && StanceTimer == O.StanceTimer && Lean == O.Lean && Aim == O.Aim && Armor == O.Armor;
 		}
 	};
 
 	Aabb PlayerBox(const Vec3& Pos, float Height);
+
+	/** Movement speed factor of an armour class (mirror of armor_speed in movement.rs). */
+	inline float ArmorSpeed(uint8_t Armor) { return Armor == 1 ? 1.1f : (Armor == 2 ? 0.9f : 1.0f); }
 
 	/** Moves V toward Target by at most Step. */
 	float ApproachScalar(float V, float Target, float Step);

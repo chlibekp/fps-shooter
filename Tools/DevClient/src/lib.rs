@@ -41,6 +41,8 @@ pub struct ClientConfig {
     pub name: String,
     pub reconnect_token: u64,
     pub join_token: u64,
+    /// Armour class requested at connect (0 medium, 1 light, 2 heavy).
+    pub armor: u8,
     /// Commands repeated in every input packet.
     pub input_redundancy: u8,
     /// Interpolation delay for remote entities, in seconds (min 2 snapshots).
@@ -57,6 +59,7 @@ impl ClientConfig {
             name: name.into(),
             reconnect_token: 0,
             join_token: 0,
+            armor: 0,
             input_redundancy: 8,
             interp_delay: 0.05,
             simulated_loss: 0.0,
@@ -489,6 +492,7 @@ impl Client {
                         reconnect_token: self.cfg.reconnect_token,
                         join_token: self.cfg.join_token,
                         name: self.cfg.name.clone(),
+                        armor: self.cfg.armor,
                     }
                     .encode(&mut self.send_buf);
                     self.send_current();

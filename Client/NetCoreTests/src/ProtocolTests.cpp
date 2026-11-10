@@ -73,7 +73,7 @@ TFPS_TEST(GoldenHandshakeBytesMatchRust)
 	TFPS_EXPECT(B == V["challenge"]);
 	B.clear();
 	ChallengeResponse Resp; Resp.ClientNonce = 0x0102030405060708ull; Resp.Cookie = 0xAABBCCDDEEFF0011ull;
-	Resp.ReconnectToken = 0x1111222233334444ull; Resp.JoinToken = 0x5555; Resp.Name = "Operator-7"; Resp.Encode(B);
+	Resp.ReconnectToken = 0x1111222233334444ull; Resp.JoinToken = 0x5555; Resp.Name = "Operator-7"; Resp.Armor = 2; Resp.Encode(B);
 	TFPS_EXPECT(B == V["challenge_response"]);
 	B.clear();
 	DisconnectPacket D; D.SessionKey = 0xDEADBEEFCAFEF00Dull; D.Reason = EDisconnectReason::ClientQuit; D.Encode(B);

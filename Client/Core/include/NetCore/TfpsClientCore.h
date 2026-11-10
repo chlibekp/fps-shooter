@@ -37,6 +37,8 @@ namespace tfps
 		std::string Name = "Operator";
 		uint64_t ReconnectToken = 0;
 		uint64_t JoinToken = 0;
+		/** Armour class requested at connect (0 medium, 1 light, 2 heavy). */
+		uint8_t Armor = 0;
 		uint8_t InputRedundancy = 8;
 		/** Remote entity interpolation delay in seconds (minimum: 2 snapshots). */
 		float InterpDelay = 0.05f;

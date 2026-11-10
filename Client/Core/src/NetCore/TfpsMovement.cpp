@@ -288,6 +288,7 @@ namespace tfps
 		else if (bSprinting) { Speed = MoveTuning::SprintSpeed; }
 		else { Speed = MoveTuning::RunSpeed; }
 		Speed *= 1.0f - (1.0f - MoveTuning::AdsSpeedMult) * State.Aim;
+		Speed *= ArmorSpeed(State.Armor);
 		const float TX = WX * Speed;
 		const float TY = WY * Speed;
 

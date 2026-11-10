@@ -24,7 +24,7 @@ var _was_reloading := false
 var _last_phase := -1
 
 
-func start(p_net: TfpsNet, address: String, player_name: String, join_token := "0") -> bool:
+func start(p_net: TfpsNet, address: String, player_name: String, join_token := "0", armor := 0) -> bool:
 	net = p_net
 	world = TfpsWorld.new()
 	add_child(world)
@@ -46,7 +46,7 @@ func start(p_net: TfpsNet, address: String, player_name: String, join_token := "
 	if not spawns.is_empty():
 		player.yaw = float(spawns[0]["yaw"])
 	hud.status_text = "Connecting to %s..." % address
-	return net.connect_to(address, player_name, join_token)
+	return net.connect_to(address, player_name, join_token, armor)
 
 
 func _process(delta: float) -> void:

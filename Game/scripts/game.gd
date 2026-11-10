@@ -24,7 +24,7 @@ var _was_reloading := false
 var _last_phase := -1
 
 
-func start(p_net: TfpsNet, address: String, player_name: String, join_token := "0", armor := 0, attachments := 0) -> bool:
+func start(p_net: TfpsNet, address: String, player_name: String, join_token := "0", armor := 0, attachments := 0, primary := 0) -> bool:
 	net = p_net
 	world = TfpsWorld.new()
 	add_child(world)
@@ -47,7 +47,7 @@ func start(p_net: TfpsNet, address: String, player_name: String, join_token := "
 	if not spawns.is_empty():
 		player.yaw = float(spawns[0]["yaw"])
 	hud.status_text = "Connecting to %s..." % address
-	return net.connect_to(address, player_name, join_token, armor, attachments)
+	return net.connect_to(address, player_name, join_token, armor, attachments, primary)
 
 
 func _process(delta: float) -> void:
@@ -70,6 +70,12 @@ func _process(delta: float) -> void:
 		left_match.emit(reason)
 		return
 	hud.my_squad = int(s.get("squad", 0))
+	# How far the view is from a wall ahead (the view model tucks in).
+	var cam := player.camera.global_transform
+	var fwd := -cam.basis.z
+	var probe := net.request({"op": "raycast", "origin": [cam.origin.x, cam.origin.y, cam.origin.z],
+		"direction": [fwd.x, fwd.y, fwd.z], "max": 1.2})
+	player.wall_distance = float(probe.get("distance", 1.2)) if probe.get("hit", false) else 1.2
 	player.apply(s, delta, effects.shake)
 	# Viewing through a drone or wall camera of ours: the camera moves to it.
 	device = _my_remote_device()

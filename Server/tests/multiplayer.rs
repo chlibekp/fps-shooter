@@ -307,6 +307,7 @@ fn speed_hack_flooding_commands_gains_nothing() {
         name: "Cheater".into(),
         armor: 0,
         attachments: 0,
+        primary: 0,
         client_public: keys.public,
     }
     .encode(&mut buf);

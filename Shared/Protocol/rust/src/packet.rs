@@ -167,6 +167,9 @@ pub struct ChallengeResponse {
     pub armor: u8,
     /// Primary weapon attachments (tfps_sim::weapon::attachment).
     pub attachments: u8,
+    /// Requested primary weapon id (0 = the server's default; the server
+    /// falls back to the default for unknown ids and pistols).
+    pub primary: u8,
     /// Client's X25519 public key for this session (see `crypto`).
     pub client_public: [u8; 32],
 }
@@ -182,6 +185,7 @@ impl ChallengeResponse {
         w.str8(&self.name, MAX_NAME_LEN);
         w.u8(self.armor);
         w.u8(self.attachments);
+        w.u8(self.primary);
         w.bytes(&self.client_public);
         w.pad_to(HANDSHAKE_PACKET_SIZE);
     }
@@ -197,6 +201,7 @@ impl ChallengeResponse {
             name: r.str8(MAX_NAME_LEN)?,
             armor: r.u8()?.min(2),
             attachments: r.u8()? & 0x0F,
+            primary: r.u8()?,
             client_public: r.take(32)?.try_into().expect("32 bytes"),
         })
     }
@@ -379,6 +384,7 @@ mod tests {
             name: "Operator".into(),
             armor: 0,
             attachments: 0,
+            primary: 0,
             client_public: [0; 32],
         };
         buf.clear();
@@ -434,6 +440,7 @@ mod tests {
             name,
             armor: 0,
             attachments: 0,
+            primary: 0,
             client_public: [0; 32],
         }
         .encode(&mut buf);

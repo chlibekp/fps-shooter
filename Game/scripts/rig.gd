@@ -13,6 +13,9 @@ var _rest_local: Array[Transform3D] = []
 var _rest_global: Array[Transform3D] = []
 var _pose: Array[Transform3D] = []
 var _touched: Array[bool] = []
+## Modelled hands (first-person arms): side -> the hand's hold frame in
+## skeleton space at rest (manifest "hand_frames"); empty for other assets.
+var hand_frames := {}
 
 
 func _init(skeleton: Skeleton3D) -> void:
@@ -161,6 +164,47 @@ func hold(weapon: Node3D, to_skel: Transform3D, left_wrist_override = null) -> v
 		var shoulder := base("upper_arm." + side).origin
 		limb("upper_arm." + side, "forearm." + side, wrist, shoulder + Vector3(sgn * 0.45, -0.2, -0.6))
 		aim("hand." + side, dir)
+
+
+## Places a modelled hand so its hold frame lands on `hold` (skeleton
+## space), with the arm reaching its wrist by two-bone IK. The hand bone is
+## set exactly, so a hand modelled around a grip closes on the real grip.
+func place_hand(side: String, hold: Transform3D, pole: Vector3) -> void:
+	var h := "hand." + side
+	var t := hold * (hand_frames[side] as Transform3D).affine_inverse() * _rest_global[bone[h]]
+	limb("upper_arm." + side, "forearm." + side, t.origin, pole)
+	_put(h, t)
+
+
+## Both modelled hands on a weapon made by TfpsModels.weapon(): the right
+## on the pistol grip (the weapon's own frame), the left on
+## TfpsModels.support_frame() or on `left_override` (a global frame, e.g. a
+## magazine during a reload). Elbows bend down and out.
+func hold_modelled(weapon: Node3D, to_skel: Transform3D, left_override = null) -> void:
+	var right := (to_skel * weapon.global_transform).orthonormalized()
+	var lg: Transform3D = left_override if left_override != null else weapon.global_transform * TfpsModels.support_frame(weapon)
+	var left := (to_skel * lg).orthonormalized()
+	for side in ["R", "L"]:
+		var sgn := 1.0 if side == "R" else -1.0
+		var shoulder := base("upper_arm." + side).origin
+		# Skeleton space: +X right, +Y forward, +Z up (Blender axes).
+		place_hand(side, right if side == "R" else left, shoulder + Vector3(sgn * 0.5, -0.1, -0.55))
+
+
+## The hold frames of an asset's modelled hands from its manifest.
+static func load_hand_frames(asset: String) -> Dictionary:
+	var out := {}
+	var f := FileAccess.open("res://assets/%s/manifest.json" % asset, FileAccess.READ)
+	if f == null:
+		return out
+	var m: Variant = JSON.parse_string(f.get_as_text())
+	if not (m is Dictionary and (m as Dictionary).has("hand_frames")):
+		return out
+	for side in ["R", "L"]:
+		var a: Array = m["hand_frames"][side]
+		out[side] = Transform3D(Basis(Vector3(a[0], a[4], a[8]), Vector3(a[1], a[5], a[9]), Vector3(a[2], a[6], a[10])),
+			Vector3(a[3], a[7], a[11]))
+	return out
 
 
 ## Instances a skinned operator asset with its baked material; returns the

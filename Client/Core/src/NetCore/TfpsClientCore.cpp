@@ -156,6 +156,7 @@ namespace tfps
 			P.Name = Config.Name;
 			P.Armor = Config.Armor;
 			P.Attachments = Config.Attachments;
+			P.Primary = Config.Primary;
 			std::memcpy(P.ClientPublic, PublicKey, 32);
 			P.Encode(SendBuf);
 		}

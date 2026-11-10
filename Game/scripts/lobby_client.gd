@@ -74,7 +74,7 @@ func _process(delta: float) -> void:
 
 func _send(method: String, path: String, body, with_token_reply := false) -> void:
 	var req := HTTPRequest.new()
-	req.timeout = 5.0
+	req.timeout = 15.0   # real time: the first frames (shader compilation) can stall for seconds
 	add_child(req)
 	var headers := PackedStringArray(["Content-Type: application/json"])
 	if token != "":

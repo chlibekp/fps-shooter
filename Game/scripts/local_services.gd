@@ -48,7 +48,8 @@ static func start_practice(map_name: String, bots: int, port: int, skill := 0.5)
 	if bots > 0:
 		OS.delay_msec(400)
 		var bp := OS.create_process(dir.path_join(_exe("tfps-bot")), ["--server", "127.0.0.1:%d" % port, "--count", str(bots), "--seconds", "86400",
-			"--pattern", "combat", "--skill", str(skill), "--map", defs.path_join("maps/%s.json" % map_name), "--weapons", defs.path_join("weapons.json"), "--report", "0"])
+			"--pattern", "combat", "--skill", str(skill), "--map", defs.path_join("maps/%s.json" % map_name), "--weapons", defs.path_join("weapons.json"), "--report", "0",
+			"--primaries", "1,2,3,5"])
 		if bp > 0:
 			_pids.append(bp)
 	return true

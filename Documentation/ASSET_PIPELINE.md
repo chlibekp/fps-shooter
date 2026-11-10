@@ -131,9 +131,17 @@ Build one weapon only: `TFPS_WEAPON=WeaponPistol python3 Tools/AssetPipeline/bui
 * **Textures:** 2048 px. One FBX holds the mesh and the armature.
 * **Cloth:** fabric regions (roughness above 0.84) get creases and a fine
   weave in the normal bake, and darker tone in the folds.
-* **First-person arms:** `Operator{A,B}Arms` holds the sleeves, gloves,
-  cuffs and patches cut from the same weighted body, on the same rig. It
-  has its own 2048 px texture set, for close viewing.
+* **First-person arms:** `Operator{A,B}Arms` holds the sleeves and
+  patches cut from the same weighted body, on the same rig, plus modelled
+  gloved hands (coyote for team A, grey for team B): palm, jointed fingers,
+  thumb, knuckle guard and gauntlet, merged by a voxel remesh. Each hand is
+  modelled in its holding pose (`HANDS` in `build_character.py`): the right
+  hand around a pistol grip with the index finger on the trigger, the left
+  under a 2.2 cm handguard with the fingers wrapped up its side. The
+  manifest's `hand_frames` map each pose's "hold frame" to skeleton space;
+  the game places the hand bone so the hold frame lands on the weapon's
+  grip or support frame (`TfpsRig.hold_modelled`), and the arm reaches the
+  wrist by two-bone IK. It has its own 2048 px texture set.
 
 `TfpsOperator` poses the skeleton procedurally:
 * the hips drop and the spine leans;

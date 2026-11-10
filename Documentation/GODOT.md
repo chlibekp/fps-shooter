@@ -159,7 +159,8 @@ Game options (after `--`):
 | `--invite CODE` | join that lobby at start-up |
 | `--quality 0..3` | graphics preset |
 
-Test options: `--shot PATH --after SECONDS [--yaw --pitch --fire --walk --aim --slot --menu SCREEN --test-host]`.
+Test options: `--shot PATH --after SECONDS [--yaw --pitch --fire --walk --aim --reload [LEAD] --slot --primary ID --menu SCREEN --test-host --ready]`
+(`--ready` readies up on joining a lobby, e.g. with `--invite CODE`).
 They take a screenshot with scripted input, then quit.
 
 ## Not done yet

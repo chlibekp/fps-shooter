@@ -18,6 +18,7 @@
 #include "NetCore/TfpsMovement.h"
 #include "NetCore/TfpsProtocol.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -347,6 +348,7 @@ std::string TfpsNative::Connect(const tfps::JsonValue& R)
 	const int ArmorReq = static_cast<int>(tfps::JsonNumber(R, "armor", 0));
 	Config.Armor = static_cast<uint8_t>(ArmorReq < 0 ? 0 : (ArmorReq > 2 ? 2 : ArmorReq));
 	Config.Attachments = static_cast<uint8_t>(static_cast<int>(tfps::JsonNumber(R, "attachments", 0)) & 0x0F);
+	Config.Primary = static_cast<uint8_t>(std::clamp(static_cast<int>(tfps::JsonNumber(R, "primary", 0)), 0, 255));
 	Core = std::make_unique<tfps::ClientCore>(Config, Map, Weapons, *Transport, NowSeconds());
 	return Ok();
 }

@@ -1,7 +1,7 @@
 {
   "asset": "OperatorAArms",
   "mesh": "SM_OperatorAArms",
-  "triangles_lod0": 12426,
+  "triangles_lod0": 20254,
   "texture_size": 2048,
   "files": {
     "BC": "Assets/Exports/OperatorAArms/T_OperatorAArms_BC.png",
@@ -9,5 +9,43 @@
     "ORM": "Assets/Exports/OperatorAArms/T_OperatorAArms_ORM.png",
     "fbx_lod0": "Assets/Exports/OperatorAArms/SM_OperatorAArms.fbx"
   },
-  "notes": "First-person arms: the operator's sleeves and gloves on the full operator rig."
+  "notes": "First-person arms: the operator's sleeves and gloves on the full operator rig. hand_frames: per hand, the hold frame (Godot axes, see HANDS in build_character.py) to skeleton space at rest, row-major 4x4.",
+  "hand_frames": {
+    "R": [
+      1.0,
+      0.0,
+      0.0,
+      0.48,
+      0.0,
+      0.0,
+      -1.0,
+      0.112,
+      0.0,
+      1.0,
+      0.0,
+      1.07,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "L": [
+      1.0,
+      0.0,
+      0.0,
+      -0.468,
+      0.0,
+      0.0,
+      -1.0,
+      0.06,
+      0.0,
+      1.0,
+      0.0,
+      1.08,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  }
 }

@@ -1,4 +1,4 @@
-# TacticalFPS wire protocol — version 12
+# TacticalFPS wire protocol — version 13
 
 Version history: v1 (Milestone 1: movement), v2 (Phase 2: weapons, combat,
 stance/lean/ADS, shot events), v3 (Phase 3: destruction and explosions),
@@ -10,7 +10,8 @@ v8 (game modes: MatchState, MapReset, hold-action kind),
 v9 (doors: DoorState),
 v10 (armour classes: ChallengeResponse `armor`, movement flags bits 3-4; vaulting bit 5),
 v11 (attachments: ChallengeResponse `attachments`, suppressed-shot flag),
-v12 (encryption: X25519 in the handshake, ChaCha20-Poly1305 on every Data packet).
+v12 (encryption: X25519 in the handshake, ChaCha20-Poly1305 on every Data packet),
+v13 (primary weapon choice: ChallengeResponse `primary`).
 
 Implementations:
 
@@ -86,10 +87,14 @@ Client resends each step every 250 ms, gives up after 10 s.
 * **ConnectRequest** (C→S): `u64 client_nonce`, zero padding to 256 bytes.
 * **Challenge** (S→C): `u64 client_nonce, u64 cookie`.
 * **ChallengeResponse** (C→S): `u64 client_nonce, u64 cookie, u64 reconnect_token,
-  u64 join_token, str8 name (≤24 bytes), u8 armor, u8 attachments, u8 client_public[32]`,
+  u64 join_token, str8 name (≤24 bytes), u8 armor, u8 attachments, u8 primary, u8 client_public[32]`,
   zero padding to 256 bytes.
   `attachments` = primary weapon attachments: barrel in bits 0-1 (1 compensator,
   2 suppressor), grip in bits 2-3 (1 vertical, 2 angled).
+  `primary` = requested primary weapon id (0 = the server's default). The
+  server takes any weapon that is not of class `pistol` and falls back to the
+  default loadout otherwise; the loadout it chose is in `ConnectAccepted`.
+  A resumed session keeps the loadout it had.
   `armor` = requested armour class (0 medium, 1 light, 2 heavy; larger values
   are clamped to heavy): light has 10 HP less and moves 10 % faster, heavy has
   20 HP more and moves 10 % slower.

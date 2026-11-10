@@ -44,6 +44,7 @@ struct SavedPlayer {
     weapon: WeaponState,
     health: u8,
     gadgets: [tfps_sim::gadget::GadgetStock; tfps_sim::weapon::GADGET_SLOTS],
+    loadout: [u8; tfps_sim::weapon::SLOTS],
     expires: Instant,
 }
 
@@ -356,6 +357,11 @@ impl ServerCore {
             self.game.add_player(player_id, team, pname.clone(), state);
             if fresh {
                 self.game.set_player_armor(player_id, resp.armor);
+                let loadout = self.game.loadout_for_primary(resp.primary);
+                self.game.set_player_loadout(player_id, loadout, true);
+            } else if let Some(s) = &restored {
+                // A resumed session keeps the loadout its weapon state is for.
+                self.game.set_player_loadout(player_id, s.loadout, false);
             }
             // Attachments come with every connect (a resumed session's
             // client sends the same ones its prediction uses).
@@ -625,6 +631,7 @@ impl ServerCore {
                             weapon: p.weapon,
                             health: p.health,
                             gadgets: p.gadgets,
+                            loadout: p.loadout,
                             expires: now + self.cfg.reconnect_window,
                         },
                     );

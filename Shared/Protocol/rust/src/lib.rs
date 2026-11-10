@@ -17,7 +17,7 @@ pub use bytes::{Reader, Writer};
 
 /// 'T','F' little-endian.
 pub const MAGIC: u16 = 0x4654;
-pub const PROTOCOL_VERSION: u16 = 12;
+pub const PROTOCOL_VERSION: u16 = 13;
 /// Conservative MTU-safe payload size (IPv6 minimum MTU 1280 minus headers).
 pub const MAX_PACKET_SIZE: usize = 1200;
 /// Largest plaintext `Data` packet: sealing adds `crypto::SEAL_OVERHEAD`.

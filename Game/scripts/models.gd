@@ -223,9 +223,30 @@ static func add_attachments(weapon_root: Node3D, att: int) -> void:
 			cyl(weapon_root, 0.015, 0.1, at + Vector3(0, -0.055, 0), black, Vector3(0, 0, 0))
 			box(weapon_root, Vector3(0.03, 0.012, 0.045), at + Vector3(0, -0.004, 0), black)
 			fg.position = at + Vector3(0, -0.07, 0.02)
+			# Hold frame: along the grip (down), palm behind it.
+			fg.set_meta("hold", Transform3D(Basis(Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0)), at + Vector3(0, -0.06, 0)))
 		else:   # angled grip: a ramp under the handguard
 			box(weapon_root, Vector3(0.028, 0.03, 0.09), at + Vector3(0, -0.02, 0.0), black, Vector3(-28, 0, 0))
 			fg.position = at + Vector3(0, -0.04, 0.03)
+			fg.set_meta("hold", Transform3D(Basis(), at + Vector3(0, -0.012, 0.035)))
+
+
+## The support (left) hand's hold frame on a weapon made by weapon(), in
+## its local space, for modelled hands (TfpsRig.hold_modelled): the frame's
+## -Z runs along what the hand wraps (2.2 cm radius) with the palm on its -Y
+## side. Handguard: palm under it, a short reach ahead of the magazine;
+## vertical grip: palm behind it; pistol: palm over the right hand's fingers.
+static func support_frame(weapon_root: Node3D) -> Transform3D:
+	var fg := weapon_root.get_node_or_null("foregrip") as Node3D
+	if fg != null and fg.has_meta("hold"):
+		return fg.get_meta("hold")
+	var muzzle := weapon_root.get_node_or_null("muzzle") as Node3D
+	var m := muzzle.position if muzzle else Vector3(0, 0.04, -0.5)
+	if m.length() < 0.25:
+		var up := Vector3(0, 0.97, 0.24).normalized()
+		return Transform3D(Basis(Vector3(0, 0.24, -0.97).normalized(), Vector3(1, 0, 0), -up), Vector3(-0.006, -0.05, 0.022))
+	var reach := clampf(-m.z * 0.38, 0.16, 0.24)
+	return Transform3D(Basis(), Vector3(0, m.y - 0.012, -reach))
 
 
 ## Where the support (left) hand holds a weapon made by weapon(), in its

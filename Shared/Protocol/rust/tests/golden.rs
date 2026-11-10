@@ -44,6 +44,7 @@ fn vectors() -> String {
         name: "Operator-7".into(),
         armor: 2,
         attachments: 6,
+        primary: 2,
         client_public: [0x5a; 32],
     }
     .encode(&mut b);

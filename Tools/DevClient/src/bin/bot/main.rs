@@ -44,6 +44,10 @@ struct Args {
     /// Join token (hex), if the server requires one.
     #[arg(long, default_value = "0")]
     join_token: String,
+    /// Primary weapon ids, comma separated, given to the bots in turn
+    /// (0 or empty = the server's default).
+    #[arg(long, default_value = "")]
+    primaries: String,
     /// Print a status line every N seconds (0 = only summary).
     #[arg(long, default_value_t = 2)]
     report: u64,
@@ -114,11 +118,19 @@ fn main() -> anyhow::Result<()> {
     let map = MapDef::load(&args.map)?;
     let weapons = WeaponSet::load(&args.weapons)?;
     let join_token = u64::from_str_radix(args.join_token.trim_start_matches("0x"), 16)?;
+    let primaries: Vec<u8> = args
+        .primaries
+        .split(',')
+        .filter_map(|p| p.trim().parse().ok())
+        .collect();
     let mut bots = Vec::new();
     for i in 0..args.count {
         let mut cfg = ClientConfig::new(args.server, &format!("Bot{}", i + 1));
         cfg.simulated_loss = args.loss;
         cfg.join_token = join_token;
+        if !primaries.is_empty() {
+            cfg.primary = primaries[i % primaries.len()];
+        }
         bots.push(Client::connect(cfg, &map, &weapons)?);
     }
     let start = Instant::now();

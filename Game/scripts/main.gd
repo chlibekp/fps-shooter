@@ -1,9 +1,10 @@
 ## Entry point: menus over a live map backdrop, and matches.
-## Command line (after "--"): --armor 0..2 (medium, light, heavy) also applies
+## Command line (after "--"): --armor 0..2 (medium, light, heavy) and
+##   --primary ID (weapons.json id) also apply
 ##   --connect host:port --map NAME [--name NAME]   join a server directly
 ##   --lobby http://host:7700 [--invite CODE]       lobby service (Play launcher)
 ##   --quality 0..3
-## Test options: --shot PATH --after SECONDS [--yaw D --pitch D --fire --walk --aim --reload --slot N --menu SCREEN]
+## Test options: --shot PATH --after SECONDS [--ready (on joining a lobby) --yaw D --pitch D --fire --walk --aim --reload --slot N --menu SCREEN]
 extends Node
 
 var args := {}
@@ -147,6 +148,9 @@ func _wait_for_lobby() -> void:
 	var on_change := func() -> void:
 		if lobby.in_lobby() and menu.current() != "lobby" and game == null:
 			menu.open("lobby")
+		if lobby.in_lobby() and args.get("ready", "") == "true":   # test option: ready up on joining
+			args["ready"] = "sent"
+			lobby.set_ready(true)
 	if not lobby.changed.is_connected(on_change):
 		lobby.changed.connect(on_change)
 
@@ -171,7 +175,8 @@ func _start_match(address: String, map_name: String, join_token: String) -> void
 	game.left_match.connect(_on_left_match)
 	var armor := int(args.get("armor", str(settings.armor)))
 	var att := int(args.get("attachments", str(settings.attachments())))
-	if not game.start(net, address, settings.player_name, join_token, armor, att):
+	var primary := int(args.get("primary", str(settings.primary)))
+	if not game.start(net, address, settings.player_name, join_token, armor, att, primary):
 		menu.show_error(net.error)
 		return
 	_apply_settings()

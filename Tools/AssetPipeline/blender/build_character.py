@@ -53,6 +53,8 @@ BALACLAVA = ((0.03, 0.03, 0.03), 0.0, 0.95)
 BOOT = ((0.07, 0.052, 0.035), 0.0, 0.62)
 RUBBER = ((0.018, 0.018, 0.018), 0.0, 0.88)
 GLOVE = ((0.035, 0.035, 0.032), 0.0, 0.7)
+# First-person gloves: coyote for team A, wolf grey for team B (read against black weapons).
+GLOVES = {"A": ((0.15, 0.1, 0.06), 0.0, 0.78), "B": ((0.085, 0.085, 0.08), 0.0, 0.8)}
 LENS = ((0.015, 0.02, 0.025), 0.5, 0.06)
 METAL = ((0.07, 0.07, 0.075), 0.8, 0.42)
 
@@ -537,7 +539,7 @@ def build_team(team, colours):
     paint_by(body, lambda co: region(co, colours))
     parts = gear(body, colours)
     weight_body(body)
-    arms = first_person_arms(body, parts, f"SM_{asset}Arms")
+    arms = first_person_arms(body, parts, f"SM_{asset}Arms", GLOVES[team])
     arms.hide_render = True   # not in the operator preview
     mesh = tc.join([body] + parts, f"SM_{asset}")
     mesh.data.transform(mesh.matrix_world)
@@ -580,10 +582,117 @@ def build_team(team, colours):
     print("TFPS_ASSET_DONE", json.dumps({"asset": asset, "triangles": manifest["triangles_lod0"]}))
 
 
+# ---------------------------------------------------------------------------
+# First-person gloved hands, modelled in their holding poses
+# ---------------------------------------------------------------------------
+# Each hand is modelled in a "hold frame" with Godot's axes (x right, y up,
+# z back), in metres. Right hand: the frame of a weapon from build_weapons.py
+# (origin at the top of the pistol grip, barrel along -z); the hand wraps the
+# grip, index finger on the trigger, thumb along the left of the receiver.
+# Left hand: a handguard of radius 2.2 cm along -z through the origin; the
+# palm under it, fingers wrapping up the right side, thumb along the left.
+# The game places the hand bone so the hold frame lands on the weapon
+# (hand_frames in the manifest: hold frame -> skeleton space at rest).
+
+def _fingers_left():
+    rho = 0.0315
+    out = []
+    #           MCP (x, y, z)            PIP, DIP, tip angles (deg)    radii
+    for mcp, angles, r0 in (((0.014, -0.031, -0.026), (88, 128, 155), 0.0092),
+                            ((0.016, -0.033, -0.005), (95, 138, 168), 0.0095),
+                            ((0.014, -0.035, 0.015), (97, 140, 168), 0.009),
+                            ((0.01, -0.037, 0.033), (100, 140, 164), 0.0082)):
+        pts = [mcp] + [(rho * math.sin(math.radians(a)), -rho * math.cos(math.radians(a)), mcp[2]) for a in angles]
+        out.append((pts, r0))
+    return out
+
+
+HANDS = {
+    "R": {
+        "wrist": (0.04, -0.05, 0.112),
+        "palm": [((0.042, -0.05, 0.118), (0.031, 0.024)), ((0.036, -0.047, 0.085), (0.035, 0.019)),
+                 ((0.032, -0.045, 0.045), (0.044, 0.017)), ((0.029, -0.046, 0.006), (0.043, 0.014))],
+        "palm_side": (0, 1, 0),
+        "fingers": [
+            ([(0.027, -0.014, 0.008), (0.025, -0.013, -0.025), (0.014, -0.015, -0.036), (0.005, -0.017, -0.027)], 0.0092),
+            ([(0.026, -0.035, -0.006), (-0.012, -0.037, -0.017), (-0.025, -0.039, 0.01), (-0.022, -0.04, 0.03)], 0.0095),
+            ([(0.025, -0.057, 0.0), (-0.012, -0.058, -0.008), (-0.025, -0.059, 0.016), (-0.022, -0.06, 0.033)], 0.009),
+            ([(0.023, -0.077, 0.003), (-0.008, -0.079, -0.008), (-0.023, -0.081, 0.01), (-0.021, -0.082, 0.024)], 0.0082),
+        ],
+        "thumb": ([(0.022, -0.016, 0.075), (-0.012, 0.0, 0.047), (-0.024, 0.004, 0.014), (-0.024, 0.004, -0.01)], 0.0115),
+        "pads": [((0.014, -0.018, 0.062), (0.016, 0.018, 0.024)), ((0.02, -0.072, 0.07), (0.013, 0.022, 0.02))],
+        "knuckles": ((0.047, -0.045, 0.012), (0.008, 0.04, 0.016)),
+        "forearm": (0.17, -0.5, 0.85),   # toward the elbow in the usual poses (measured in game)
+    },
+    "L": {
+        "wrist": (-0.052, -0.06, 0.06),
+        "palm": [((-0.056, -0.063, 0.066), (0.03, 0.024)), ((-0.032, -0.05, 0.034), (0.035, 0.019)),
+                 ((-0.008, -0.041, 0.006), (0.044, 0.017)), ((0.013, -0.035, 0.0), (0.043, 0.014))],
+        "palm_side": (0, 0, 1),
+        "fingers": _fingers_left(),
+        "thumb": ([(-0.036, -0.047, 0.03), (-0.031, -0.03, 0.0), (-0.033, -0.013, -0.026), (-0.031, -0.006, -0.046)], 0.0115),
+        "pads": [((-0.03, -0.044, 0.012), (0.016, 0.02, 0.022))],
+        "knuckles": ((0.022, -0.048, 0.004), (0.009, 0.012, 0.042)),
+        "forearm": (-0.68, -0.18, 0.71),
+    },
+}
+# Hold frame (Godot axes) -> Blender axes.
+_G2B = Matrix(((1, 0, 0, 0), (0, 0, -1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
+
+
+def hold_frame(tag):
+    """Hold frame -> skeleton space at rest: the modelled wrist on the rest wrist joint."""
+    return Matrix.Translation(joint(f"wrist.{tag}")) @ _G2B @ Matrix.Translation(-Vector(HANDS[tag]["wrist"]))
+
+
+def _finger(name, pts, r0):
+    taper = [r0, r0 * 0.93, r0 * 0.86, r0 * 0.8]
+    o = loft(name, [(p, (r, r)) for p, r in zip(pts, taper)], ring=14)
+    tip = blob(name + "_tip", (taper[-1],) * 3, pts[-1])
+    return [o, tip]
+
+
+def gloved_hand(tag, glove):
+    h = HANDS[tag]
+    vols = [loft(f"palm.{tag}", h["palm"], side=h["palm_side"])]
+    for i, (pts, r0) in enumerate(h["fingers"]):
+        vols += _finger(f"finger{i}.{tag}", pts, r0)
+        vols.append(blob(f"knuckle{i}.{tag}", (r0 * 1.1,) * 3, pts[0]))
+    vols += _finger(f"thumb.{tag}", *h["thumb"])
+    for i, (c, r) in enumerate(h["pads"]):
+        vols.append(blob(f"pad{i}.{tag}", r, c))
+    # Gauntlet over the sleeve's end, along the forearm.
+    w, d = Vector(h["wrist"]), Vector(h["forearm"]).normalized()
+    vols.append(loft(f"cuff.{tag}", [(w - d * 0.01, (0.031, 0.027)), (w + d * 0.032, (0.034, 0.03))], ring=20))
+    hand = tc.join(vols, f"glove.{tag}")
+    hand.data.transform(hand.matrix_world)
+    hand.matrix_world = Matrix.Identity(4)
+    m = hand.modifiers.new("Remesh", 'REMESH')
+    m.mode = 'VOXEL'
+    m.voxel_size = 0.0016
+    m.adaptivity = 0.0
+    tc.apply_modifiers(hand)
+    sm = hand.modifiers.new("Smooth", 'CORRECTIVE_SMOOTH')
+    sm.factor = 0.5
+    sm.iterations = 6
+    sm.use_only_smooth = True
+    tc.apply_modifiers(hand)
+    hand = decimate(hand, 5000)
+    part(hand, glove)
+    c, r = h["knuckles"]
+    guard = part(blob(f"knuckle_guard.{tag}", r, c), RUBBER)
+    hand = tc.join([hand, guard], f"hand_{tag}")
+    hand.data.transform(hold_frame(tag))
+    hand.matrix_world = Matrix.Identity(4)
+    g = hand.vertex_groups.new(name=f"hand.{tag}")
+    g.add(list(range(len(hand.data.vertices))), 1.0, 'REPLACE')
+    return hand
+
+
 ARM_BONES = ("upper_arm", "forearm", "hand")
 
 
-def first_person_arms(body, parts, name):
+def first_person_arms(body, parts, name, glove):
     """Sleeves, gloves, cuffs and patches for the first-person view: the
     arm region of the weighted body plus copies of the gear bound to arm
     bones, as one mesh (call after weight_body)."""
@@ -592,16 +701,27 @@ def first_person_arms(body, parts, name):
     arms = bpy.context.active_object
     bm = bmesh.new()
     bm.from_mesh(arms.data)
-    keep = lambda co: abs(co.x) > 0.135 and co.z > 0.85 and arm_t(co) > -0.12  # noqa: E731
+    # Sleeves only: the gloves are modelled separately (gloved_hand).
+    keep = lambda co: abs(co.x) > 0.135 and co.z > 0.85 and -0.12 < arm_t(co) < 0.995  # noqa: E731
     bmesh.ops.delete(bm, geom=[f for f in bm.faces if not all(keep(v.co) for v in f.verts)], context='FACES')
     bm.to_mesh(arms.data)
     bm.free()
+    # The hand bone is placed freely on the weapon, so the sleeve follows the forearm only.
+    vg = {g.name: g for g in arms.vertex_groups}
+    for v in arms.data.vertices:
+        for ge in list(v.groups):
+            name = arms.vertex_groups[ge.group].name
+            if name.startswith("hand."):
+                vg["forearm." + name[-1]].add([v.index], ge.weight, 'ADD')
+                arms.vertex_groups[ge.group].remove([v.index])
     extra = []
     for o in parts:
-        if any(g.name.split(".")[0] in ARM_BONES for g in o.vertex_groups):
+        names = [g.name.split(".")[0] for g in o.vertex_groups]
+        if any(n in ARM_BONES for n in names) and "hand" not in names:
             tc.select_only([o])
             bpy.ops.object.duplicate()
             extra.append(bpy.context.active_object)
+    extra += [gloved_hand(tag, glove) for tag in ("R", "L")]
     arms = tc.join([arms] + extra, name)
     arms.data.transform(arms.matrix_world)
     arms.matrix_world = Matrix.Identity(4)
@@ -629,7 +749,8 @@ def export_arms(arms, rig, mat, asset):
         "triangles_lod0": tc.triangle_count(arms),
         "texture_size": tc.TEX_SIZE,
         "files": files,
-        "notes": "First-person arms: the operator's sleeves and gloves on the full operator rig.",
+        "notes": "First-person arms: the operator's sleeves and gloves on the full operator rig. hand_frames: per hand, the hold frame (Godot axes, see HANDS in build_character.py) to skeleton space at rest, row-major 4x4.",
+        "hand_frames": {tag: [round(x, 6) for row in hold_frame(tag) for x in row] for tag in ("R", "L")},
     }
     import json
     with open(os.path.join(out_dir, "manifest.json"), "w", newline="\n") as f:

@@ -18,7 +18,7 @@
 namespace tfps
 {
 	constexpr uint16_t kMagic = 0x4654;
-	constexpr uint16_t kProtocolVersion = 12;
+	constexpr uint16_t kProtocolVersion = 13;
 	/** Cleartext header of a Data packet (authenticated, not encrypted) and the bytes sealing adds (tag, counter). */
 	constexpr size_t kDataHeaderLen = 2 + 2 + 1 + 8 + 2 + 2 + 4;
 	constexpr size_t kSealOverhead = 16 + 4;
@@ -144,6 +144,8 @@ namespace tfps
 		uint8_t Armor = 0;
 		/** Primary weapon attachments (see Attachment in TfpsWeapon.h). */
 		uint8_t Attachments = 0;
+		/** Requested primary weapon id (0 = server default). */
+		uint8_t Primary = 0;
 		/** Client X25519 public key for this session. */
 		uint8_t ClientPublic[32] = {};
 		void Encode(std::vector<uint8_t>& Out) const;

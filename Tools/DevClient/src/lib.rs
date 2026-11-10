@@ -45,6 +45,8 @@ pub struct ClientConfig {
     pub armor: u8,
     /// Primary weapon attachments (tfps_sim::weapon::attachment).
     pub attachments: u8,
+    /// Requested primary weapon id (0 = server default).
+    pub primary: u8,
     /// Commands repeated in every input packet.
     pub input_redundancy: u8,
     /// Interpolation delay for remote entities, in seconds (min 2 snapshots).
@@ -63,6 +65,7 @@ impl ClientConfig {
             join_token: 0,
             armor: 0,
             attachments: 0,
+            primary: 0,
             input_redundancy: 8,
             interp_delay: 0.05,
             simulated_loss: 0.0,
@@ -507,6 +510,7 @@ impl Client {
                         name: self.cfg.name.clone(),
                         armor: self.cfg.armor,
                         attachments: self.cfg.attachments,
+                        primary: self.cfg.primary,
                         client_public: self.keys.public,
                     }
                     .encode(&mut self.send_buf);

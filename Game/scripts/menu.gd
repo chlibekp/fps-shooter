@@ -387,6 +387,9 @@ func _show_settings() -> void:
 	# Armour class: index 0 medium, 1 light, 2 heavy (as the server expects).
 	var armours := ["Medium (100 HP)", "Light (90 HP, +10% speed)", "Heavy (120 HP, -10% speed)"]
 	_row("Armour", _choice(armours, armours[settings.armor], func(v: String) -> void: settings.armor = armours.find(v)))
+	var primaries := ["AR-7 Carbine (assault rifle)", "K-9 SMG (fast, short range)", "M-308 Marksman (semi-auto, hard hitting)", "SG-12 Breacher (shotgun)"]
+	_row("Primary weapon", _choice(primaries, primaries[TfpsSettings.PRIMARIES.find(settings.primary)],
+		func(v: String) -> void: settings.primary = TfpsSettings.PRIMARIES[primaries.find(v)]))
 	var barrels := ["No muzzle device", "Compensator (less recoil)", "Suppressor (quiet, no flash, -10% damage)"]
 	_row("Primary barrel", _choice(barrels, barrels[settings.barrel], func(v: String) -> void: settings.barrel = barrels.find(v)))
 	var grips := ["No grip", "Vertical grip (less vertical recoil)", "Angled grip (faster aiming)"]

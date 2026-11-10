@@ -41,6 +41,8 @@ namespace tfps
 		uint8_t Armor = 0;
 		/** Primary weapon attachments requested at connect (applied to the predicted weapon too). */
 		uint8_t Attachments = 0;
+		/** Primary weapon requested at connect (0 = server default); the server's choice comes back in ConnectAccepted. */
+		uint8_t Primary = 0;
 		uint8_t InputRedundancy = 8;
 		/** Remote entity interpolation delay in seconds (minimum: 2 snapshots). */
 		float InterpDelay = 0.05f;

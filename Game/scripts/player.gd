@@ -23,7 +23,7 @@ var attachments := 0   # primary weapon: barrel bits 0-1, grip bits 2-3
 var _arms_root: Node3D
 var _arms_rig: TfpsRig
 var _arms_asset := ""
-var _hand_target = null   # support-hand override during reloads (Vector3 or null)
+var _hand_target = null   # support-hand hold frame during reloads (global Transform3D or null)
 var _slide_t := 0.0
 var _crouch_on := false
 var _prone_on := false
@@ -34,6 +34,8 @@ var _bob := 0.0
 var _last_shot := -1
 var _mouse_delta := Vector2.ZERO
 var _aim := 0.0
+var wall_distance := 1.2   # metres to a wall straight ahead (set by the game each frame)
+var _tuck := 0.0
 
 
 func _ready() -> void:
@@ -126,7 +128,6 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 				TfpsModels.add_arms(_weapon, TfpsModels.weapon_class(id), _team)
 			for g in _weapon.find_children("*", "GeometryInstance3D", true, false):
 				(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			_weapon.scale = Vector3.ONE * 0.72
 			_view.add_child(_weapon)
 	_view.visible = s.get("alive", true) and _weapon != null
 	if _weapon == null:
@@ -145,11 +146,12 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	var speed := Vector2(vel.x, vel.z).length()
 	_bob += delta * speed * 2.2
 	var bob_amt := clampf(speed / 5.0, 0.0, 1.0) * (1.0 - _aim * 0.85) * (1.0 if s.get("on_ground", true) else 0.0)
-	var hip := Vector3(0.13, -0.15, -0.36)
+	# Hip: a long gun low on the right; a pistol held out in both hands.
+	var hip := Vector3(0.07, -0.115, -0.36) if TfpsModels.weapon_class(_weapon_id) == "pistol" else Vector3(0.15, -0.2, -0.33)
 	# Aiming puts the sight (optic centre or iron-sight line) on the view axis.
 	var sight_node := _weapon.get_node_or_null("sight") as Node3D
 	var sight := sight_node.position if sight_node else Vector3(0, 0.11, 0)
-	var ads := Vector3(-sight.x * 0.72, -sight.y * 0.72, -0.31)
+	var ads := Vector3(-sight.x, -sight.y, -0.25)
 	var pos := hip.lerp(ads, _aim)
 	pos += Vector3(sin(_bob) * 0.012, -absf(cos(_bob)) * 0.01, 0) * bob_amt
 	pos += Vector3(-_sway.x, _sway.y, 0) * (1.0 - _aim * 0.7)
@@ -160,6 +162,15 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	var dip := sin(rp * PI)
 	pos.y -= dip * 0.12
 	rot += Vector3(-dip * 25.0, 0, dip * 35.0)
+	# Close to a wall the weapon tucks in (pulled back, muzzle down and
+	# inward) instead of going through it.
+	var muzzle_node := _weapon.get_node_or_null("muzzle") as Node3D
+	var reach := -(pos.z + (muzzle_node.position.z if muzzle_node else -0.5))
+	var tuck_target := clampf((reach + 0.05 - wall_distance) / 0.4, 0.0, 1.0)
+	_tuck = move_toward(_tuck, tuck_target, delta * 4.0)
+	var tk := smoothstep(0.0, 1.0, _tuck)
+	pos += Vector3(-0.03, -0.06, 0.14) * tk
+	rot += Vector3(-38.0, 30.0, 12.0) * tk
 	var equip := clampf(float(w.get("equip_timer", 0.0)) * 2.0, 0.0, 1.0)
 	pos.y -= equip * 0.25
 	_weapon.position = pos
@@ -209,8 +220,11 @@ func _animate_magazine(rp: float) -> void:
 	# the vest while it is out of sight).
 	if rp > 0.36 and rp < 0.86 and mag is MeshInstance3D:
 		var mi := mag as MeshInstance3D
-		var bottom := mi.get_aabb().get_center() - Vector3(0, mi.get_aabb().size.y * 0.35, 0)
-		_hand_target = mi.global_transform * bottom if visible_now else _weapon.to_global(Vector3(-0.15, -0.35, 0.15))
+		# Cupping the magazine from below (the support frame's handguard
+		# pose, around the magazine's lower end), or at the vest.
+		var bottom := mi.get_aabb().get_center() - Vector3(0, mi.get_aabb().size.y * 0.32, 0)
+		var at := mi.global_transform * bottom if visible_now else _weapon.to_global(Vector3(-0.15, -0.35, 0.15))
+		_hand_target = Transform3D(_weapon.global_basis.orthonormalized(), at)
 
 
 ## First-person arms: the team's skinned operator sleeves and gloves
@@ -232,12 +246,16 @@ func _build_arms() -> bool:
 		(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_arms_root = inst
 	_arms_asset = asset
-	# The model's eyes (about 1.665 m up, 9 cm forward) near the camera; arms
-	# slightly long, as is usual for a first-person view.
-	_arms_root.scale = Vector3.ONE * 1.12
-	_arms_root.position = Vector3(0, -1.665 * 1.12 + 0.02, 0.09 * 1.12 - 0.17)
+	# Near true scale (hands and weapon in proportion; arms 8% long, as is
+	# usual in first person). The model's eyes (about
+	# 1.665 m up, 9 cm forward) at the camera, the torso bladed (left
+	# shoulder forward) so the support hand reaches the handguard.
+	_arms_root.rotation.y = deg_to_rad(-36.0)
+	_arms_root.scale = Vector3.ONE * 1.08
+	_arms_root.position = -(_arms_root.basis * Vector3(0, 1.665, -0.09)) + Vector3(0.0, 0.03, 0.02)
 	_view.add_child(_arms_root)
 	_arms_rig = TfpsRig.new(TfpsRig.skeleton_of(_arms_root))
+	_arms_rig.hand_frames = TfpsRig.load_hand_frames(asset)
 	return true
 
 
@@ -246,7 +264,11 @@ func _pose_arms() -> void:
 		return
 	var r := _arms_rig
 	r.begin()
-	r.hold(_weapon, r.skel.global_transform.affine_inverse(), _hand_target)
+	var to_skel := r.skel.global_transform.affine_inverse()
+	if r.hand_frames.size() == 2:
+		r.hold_modelled(_weapon, to_skel, _hand_target)
+	else:
+		r.hold(_weapon, to_skel, _hand_target.origin if _hand_target is Transform3D else null)
 	r.commit()
 
 

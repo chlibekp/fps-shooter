@@ -543,6 +543,38 @@ impl GameWorld {
         p.defs = defs;
     }
 
+    /// The loadout for a requested primary weapon: any weapon that is not a
+    /// pistol; anything else (0, unknown ids, pistols) gets the default.
+    pub fn loadout_for_primary(&self, primary: u8) -> [u8; SLOTS] {
+        let mut l = self.default_loadout();
+        if let Some(def) = self.weapons.get(primary) {
+            if def.class != "pistol" {
+                l[0] = primary;
+            }
+        }
+        l
+    }
+
+    /// Sets a player's loadout (validated ids, see `loadout_for_primary`).
+    /// `fresh_weapons` restarts the weapon state (full magazines) for a new
+    /// player; a resumed session keeps its weapon state.
+    pub fn set_player_loadout(&mut self, id: u16, loadout: [u8; SLOTS], fresh_weapons: bool) {
+        if loadout.iter().any(|w| self.weapons.get(*w).is_none()) {
+            return;
+        }
+        let Some(i) = self.players.iter().position(|p| p.id == id) else {
+            return;
+        };
+        let attachments = self.players[i].attachments;
+        let defs = self.fitted_defs(&loadout, attachments);
+        let p = &mut self.players[i];
+        p.loadout = loadout;
+        if fresh_weapons {
+            p.weapon = WeaponState::new(&[&defs[0], &defs[1]]);
+        }
+        p.defs = defs;
+    }
+
     fn loadout_defs(&self, loadout: &[u8; SLOTS]) -> [&WeaponDef; SLOTS] {
         [
             self.weapons.get(loadout[0]).expect("loadout validated"),
@@ -1789,6 +1821,27 @@ mod tests {
             assert_eq!(q.take(), (cmd(8), true, 0));
         }
         assert_eq!(q.take(), (cmd(0), true, 0));
+    }
+
+    #[test]
+    fn primary_choice_is_validated_and_sets_the_loadout() {
+        let mut a = Arena::new("", MatchRules::default());
+        let w = &mut a.w;
+        let default = w.default_loadout();
+        assert_eq!(w.loadout_for_primary(0), default);
+        assert_eq!(w.loadout_for_primary(200), default, "unknown id");
+        assert_eq!(w.loadout_for_primary(4), default, "a pistol is not a primary");
+        let smg = w.loadout_for_primary(2);
+        assert_eq!(smg, [2, default[1]]);
+        w.set_player_loadout(1, smg, true);
+        let p = w.player(1).unwrap();
+        assert_eq!(p.loadout, smg);
+        assert_eq!(p.defs[0].id, 2);
+        let mag = w.weapons.get(2).unwrap().mag_size;
+        assert_eq!(p.weapon.slots[0].ammo, mag - 1, "fresh SMG magazine (+1 chambered)");
+        // Invalid ids never reach a player.
+        w.set_player_loadout(1, [99, 4], true);
+        assert_eq!(w.player(1).unwrap().loadout, smg);
     }
 
     #[test]

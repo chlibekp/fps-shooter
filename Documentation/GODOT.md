@@ -92,6 +92,15 @@ The ground has:
 
 Walls get rain streaks and grime near the floor.
 
+`scripts/furniture.gd` draws modelled furniture and fittings in place of
+tagged solids (the solid stays the collision): desks with monitors,
+conference and dining tables, reception, shelving and bookcases with
+stock, pallet racks with loads, server racks with LEDs, wardrobes, beds,
+sofas, kitchen counters, wine racks with bottles, bollards, planters and
+hedges, columns, cars, dumpsters, railings and balustrades, and a
+fountain. House interiors get plaster on the inner face of outer walls,
+skirting boards and a paint colour per floor and wing.
+
 Beyond the map, `shaders/backdrop.gdshader` draws distant city blocks with
 storeys and window grids, gantry cranes at the harbour, and tree belts
 elsewhere. Exponential fog gives aerial perspective.

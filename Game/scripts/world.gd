@@ -163,6 +163,8 @@ func _add_solid(s: Dictionary) -> void:
 	solid_nodes[int(s["index"])] = mi
 	# Dress it with a Blender asset when one matches (the box stays for breaking).
 	var prop := TfpsProps.for_solid(tag, box)
+	if prop == null:
+		prop = TfpsFurniture.model(tag, box)
 	if prop != null:
 		add_child(prop)
 		props[int(s["index"])] = prop
@@ -176,6 +178,8 @@ func _add_solid(s: Dictionary) -> void:
 func _style(gi: GeometryInstance3D, mat: int, tag: String, box: AABB) -> void:
 	if mat == TfpsMaterials.GLASS:
 		gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	elif mat == TfpsMaterials.DRYWALL:
+		gi.set_instance_shader_parameter("tint", TfpsDressing.room_paint(box.get_center()))
 	else:
 		gi.set_instance_shader_parameter("tint", TfpsMaterials.tint_for(mat, tag, box.position))
 		gi.set_instance_shader_parameter("seed", float(absi(hash(Vector3i(box.position.round()))) % 997) * 0.37)

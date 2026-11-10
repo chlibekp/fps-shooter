@@ -285,6 +285,19 @@ static func _containers(root: Node3D, panels: Array, attached: Dictionary) -> vo
 
 
 # Buildings.
+## Outward direction of an outer wall from its compass letter (sim north
+## +Y is Godot +Z, east +X); centroid of nearby walls otherwise.
+static func _outward_of(tag: String, box: AABB, walls: Array) -> Vector3:
+	var base := tag.trim_suffix("_lintel").trim_suffix("_sill")
+	if base.begins_with("wall_") and base.length() > 5:
+		match base[5]:
+			"n": return Vector3(0, 0, 1)
+			"s": return Vector3(0, 0, -1)
+			"e": return Vector3(1, 0, 0)
+			"w": return Vector3(-1, 0, 0)
+	return _outward(box, walls)
+
+
 static func _outward(box: AABB, walls: Array) -> Vector3:
 	var centre := Vector3.ZERO
 	var n := 0
@@ -298,6 +311,36 @@ static func _outward(box: AABB, walls: Array) -> Vector3:
 	if box.size.x < box.size.z:
 		return Vector3(signf(d.x) if d.x != 0.0 else 1.0, 0, 0)
 	return Vector3(0, 0, signf(d.z) if d.z != 0.0 else 1.0)
+
+
+const ROOM_PAINTS := [Color(1.0, 1.0, 1.0), Color(0.96, 0.95, 0.9), Color(0.9, 0.93, 0.92),
+	Color(0.97, 0.92, 0.85), Color(0.88, 0.9, 0.95), Color(0.92, 0.95, 0.88)]
+
+
+static func room_paint(p: Vector3) -> Color:
+	var h := absi(hash(Vector3i((p / Vector3(24.0, 3.0, 24.0)).floor())))
+	return ROOM_PAINTS[h % ROOM_PAINTS.size()]
+
+
+## Plaster lining on one face (direction `inward`) of a wall, with a skirting board.
+static func _lining(root: Node3D, attached: Dictionary, idx: int, box: AABB, inward: Vector3) -> void:
+	var along_x := box.size.x >= box.size.z
+	var length := box.size.x if along_x else box.size.z
+	var thick := box.size.z if along_x else box.size.x
+	var c := box.get_center() + inward * (thick * 0.5 + 0.006)
+	var size := Vector3(length, box.size.y - 0.01, 0.012) if along_x else Vector3(0.012, box.size.y - 0.01, length)
+	_add_box(root, attached, idx, size, c, TfpsMaterials.DRYWALL, room_paint(c), false)
+	_skirting(root, attached, idx, box, inward, 0.012)
+
+
+static func _skirting(root: Node3D, attached: Dictionary, idx: int, box: AABB, normal: Vector3, offset := 0.0) -> void:
+	var along_x := box.size.x >= box.size.z
+	var length := box.size.x if along_x else box.size.z
+	var thick := box.size.z if along_x else box.size.x
+	var c := box.get_center() + normal * (thick * 0.5 + offset + 0.008)
+	c.y = box.position.y + 0.06
+	var size := Vector3(length, 0.1, 0.016) if along_x else Vector3(0.016, 0.1, length)
+	_add_box(root, attached, idx, size, c, TfpsMaterials.WOOD, Color(0.55, 0.5, 0.48), false)
 
 
 static func _buildings(root: Node3D, solids: Array, walls: Array, attached: Dictionary) -> void:
@@ -318,7 +361,7 @@ static func _buildings(root: Node3D, solids: Array, walls: Array, attached: Dict
 	for w in walls:
 		var box := _aabb(w)
 		var idx := int(w["index"])
-		var out := _outward(box, walls)
+		var out := _outward_of(w.get("tag", ""), box, walls)
 		var along_x := box.size.x >= box.size.z
 		var length := box.size.x if along_x else box.size.z
 		var thick := box.size.z if along_x else box.size.x
@@ -384,6 +427,26 @@ static func _buildings(root: Node3D, solids: Array, walls: Array, attached: Dict
 					glow.position = Vector3(0, -0.08, 0) / lamp.scale
 					glow.scale = Vector3.ONE / lamp.scale
 					lamp.add_child(glow)
+	# Interiors of houses (outer walls with a floor number): plaster on the
+	# inner face with a skirting board; room paint varies.
+	for w in walls:
+		var tag: String = w.get("tag", "")
+		if not tag.substr(tag.length() - 1).is_valid_int():
+			continue
+		var box := _aabb(w)
+		var idx := int(w["index"])
+		_lining(root, attached, idx, box, -_outward_of(tag, box, walls))
+	for s in solids:
+		if int(s.get("material", -1)) != TfpsMaterials.DRYWALL:
+			continue
+		var box := _aabb(s)
+		if box.size.y < 1.5 or minf(box.size.x, box.size.z) > 0.4:
+			continue
+		var idx := int(s["index"])
+		var along_x := box.size.x >= box.size.z
+		for side in [-1.0, 1.0]:
+			var n := Vector3(0, 0, side) if along_x else Vector3(side, 0, 0)
+			_skirting(root, attached, idx, box, n)
 	# Window sills and lintels of outer walls.
 	for s in solids:
 		var tag: String = s.get("tag", "")
@@ -401,6 +464,8 @@ static func _buildings(root: Node3D, solids: Array, walls: Array, attached: Dict
 		var thick := box.size.z if along_x else box.size.x
 		var c := box.get_center()
 		var size := (Vector3(length + 0.12, 0.06, thick + 0.1) if along_x else Vector3(thick + 0.1, 0.06, length + 0.12))
+		if base.substr(base.length() - 1).is_valid_int():
+			_lining(root, attached, idx, box, -_outward_of(tag, box, walls))
 		if is_sill:
 			_add_box(root, attached, idx, size, Vector3(c.x, box.end.y + 0.02, c.z), TfpsMaterials.CONCRETE, concrete_light)
 		else:

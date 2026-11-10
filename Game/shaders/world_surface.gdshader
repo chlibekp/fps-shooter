@@ -124,11 +124,14 @@ vec4 surface(vec2 uv, int pat, float detail) {
 		float concrete_c = clamp(slab + big * 0.3 + mid * 0.22 - oil * 0.55 + joint * 0.8 + crack * 0.45, 0.0, 1.0);
 		float asphalt_c = clamp(0.82 + mid * 0.12 - aggregate * 0.25 + tracks * 0.15 - oil * 0.1, 0.0, 1.0);
 		float c = mix(concrete_c, asphalt_c, asphalt);
-		// Puddles in low spots: dark and glossy.
-		float puddle = smoothstep(0.66, 0.7, fbm(uv * 0.11 + 13.0)) * (0.6 + 0.4 * asphalt);
+		// Puddles in low spots: standing water (a mirror, keeps the ground
+		// colour under it) inside a damp, darker, semi-glossy margin.
+		float low = fbm(uv * 0.11 + 13.0) + (grit - 0.5) * 0.02;
+		float damp = smoothstep(0.66, 0.695, low);
+		float puddle = smoothstep(0.695, 0.71, low) * (0.6 + 0.4 * asphalt);
 		float h = mix(mid * 0.2 + grit * 0.15 - joint * 0.5 - crack * 0.6, aggregate * 0.25 + grit * 0.1, asphalt) * (1.0 - puddle);
-		float rough = -oil * 0.3 - puddle * 0.88 + asphalt * 0.0;
-		return vec4(clamp(c + puddle * 0.25, 0.0, 1.0), h, rough, max(max(joint, crack), oil * 0.3));
+		float rough = -oil * 0.3 - damp * 0.2 - puddle * 0.68;
+		return vec4(clamp(c + damp * 0.06, 0.0, 1.0), h, rough, max(max(joint, crack), oil * 0.3));
 	}
 	// concrete: mottled, with stains and fine pores; formwork seams every 1.2 m
 	float mott = fbm(uv * 1.2);

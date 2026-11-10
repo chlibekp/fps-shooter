@@ -121,6 +121,9 @@ static func c(root: Node3D, radius: float, height: float, centre: Vector3, m, ax
 	return mi
 
 
+static var _leaf_sph: SphereMesh
+
+
 static func s(root: Node3D, radii: Vector3, centre: Vector3, m) -> MeshInstance3D:
 	if _sph == null:
 		_sph = SphereMesh.new()
@@ -338,20 +341,57 @@ static func _planter(root: Node3D, sz: Vector3, rng: RandomNumberGenerator) -> v
 		_plant(root, Vector3(rng.randf_range(-0.35, 0.35) * sz.x, sz.y + r * 0.6, rng.randf_range(-0.3, 0.3) * sz.z), Vector3(r, r * 0.8, r), rng)
 
 
+## A trimmed hedge: one rounded, leafy block (leaves.gdshader) the size of
+## the solid, with a woody base showing under it.
 static func _hedge(root: Node3D, sz: Vector3, rng: RandomNumberGenerator) -> void:
-	var n := maxi(2, int(sz.x / 0.6))
-	for i in n:
-		var x := -sz.x * 0.5 + (i + 0.5) * sz.x / float(n)
-		_plant(root, Vector3(x, sz.y * 0.5, 0), Vector3(sz.x / float(n) * 0.75, sz.y * 0.55, sz.z * 0.6), rng)
+	var box := BoxMesh.new()
+	var size := sz * Vector3(1.0, 0.97, 1.0)
+	box.size = size
+	box.subdivide_width = clampi(int(size.x / 0.06), 8, 120)
+	box.subdivide_height = clampi(int(size.y / 0.06), 8, 60)
+	box.subdivide_depth = clampi(int(size.z / 0.06), 8, 60)
+	var mi := MeshInstance3D.new()
+	mi.mesh = box
+	mi.material_override = leaves()
+	mi.position = Vector3(0, size.y * 0.5 + 0.03, 0)
+	mi.set_instance_shader_parameter("half_size", size * 0.5)
+	mi.set_instance_shader_parameter("corner", minf(0.22, minf(size.y, size.z) * 0.35))
+	mi.set_instance_shader_parameter("tint", Color(1, 1, 1).lerp(Color(1.15, 1.05, 0.8), rng.randf()))
+	root.add_child(mi)
+	b(root, Vector3(sz.x * 0.9, 0.12, sz.z * 0.6), Vector3(0, 0.06, 0), mat("hedge_wood", Color(0.09, 0.07, 0.05), 0.9))
 
 
+## A shrub: a few overlapping leafy masses.
 static func _plant(root: Node3D, centre: Vector3, radii: Vector3, rng: RandomNumberGenerator) -> void:
-	var g := rng.randf_range(0.08, 0.14)
-	var leaves := mat("leaf_%d" % int(g * 100), Color(g * 0.8, g * 1.4, g * 0.6), 0.9)
-	s(root, radii, centre, leaves)
-	for k in 3:
-		var o := Vector3(rng.randf_range(-0.5, 0.5) * radii.x, rng.randf_range(-0.2, 0.4) * radii.y, rng.randf_range(-0.5, 0.5) * radii.z)
-		s(root, radii * rng.randf_range(0.45, 0.7), centre + o, leaves)
+	var tint := Color(1, 1, 1).lerp(Color(1.2, 1.1, 0.75), rng.randf())
+	_leaf_mass(root, radii, centre, tint)
+	for k in 2:
+		var o := Vector3(rng.randf_range(-0.5, 0.5) * radii.x, rng.randf_range(-0.1, 0.4) * radii.y, rng.randf_range(-0.5, 0.5) * radii.z)
+		_leaf_mass(root, radii * rng.randf_range(0.55, 0.75), centre + o, tint)
+
+
+static func _leaf_mass(root: Node3D, radii: Vector3, centre: Vector3, tint: Color) -> void:
+	if _leaf_sph == null:
+		_leaf_sph = SphereMesh.new()
+		_leaf_sph.radius = 0.5
+		_leaf_sph.height = 1.0
+		_leaf_sph.radial_segments = 40
+		_leaf_sph.rings = 20
+	var mi := MeshInstance3D.new()
+	mi.mesh = _leaf_sph
+	mi.scale = radii * 2.0
+	mi.position = centre
+	mi.material_override = leaves()
+	mi.set_instance_shader_parameter("tint", tint)
+	root.add_child(mi)
+
+
+static func leaves() -> Material:
+	if not _mats.has("leaves"):
+		var m := ShaderMaterial.new()
+		m.shader = load("res://shaders/leaves.gdshader")
+		_mats["leaves"] = m
+	return _mats["leaves"]
 
 
 static func _column(root: Node3D, sz: Vector3) -> void:

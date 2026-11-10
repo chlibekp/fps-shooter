@@ -393,6 +393,7 @@ def pistol():
         cyl("slide_stop", 0.004, 0.028, (0.045, 0, 0.028), PARK, 12, 0.0, 'Y'),
         cyl("takedown", 0.0035, 0.027, (0.08, 0, 0.022), PARK, 12, 0.0, 'Y'),
     ]
+    tag(p, {"slide", "barrel_hood", "rear_sight", "front_sight", "front_dot"}, "slide")
     return p, (0.152, 0, 0.052), (0.05, 0, 0.074)
 
 
@@ -535,43 +536,55 @@ def build_one(asset, fn):
 
 
 def split_magazine(asset, gun, manifest):
-    """Moves the faces of vertex group 'mag' into their own object (same
-    baked material and UVs) and re-exports the FBX with both, so the game
-    can animate the magazine on reload."""
-    import bmesh
+    """Moves the faces of vertex groups 'mag' (the magazine) and 'slide'
+    (a pistol's slide and sights) into their own objects (same baked
+    material and UVs) and re-exports the FBX with all of them, so the game
+    can animate them (reloads, the slide cycling on each shot)."""
     import json
-    g = gun.vertex_groups.get("mag")
-    if g is None:
+    parts = [gun]
+    for group, suffix, key in (("mag", "Mag", "mag_m"), ("slide", "Slide", "slide_m")):
+        g = gun.vertex_groups.get(group)
+        if g is None:
+            continue
+        gi = g.index
+        sel = {v.index for v in gun.data.vertices if any(e.group == gi and e.weight > 0.5 for e in v.groups)}
+        if not sel:
+            continue
+        tc.select_only([gun])
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        for v in gun.data.vertices:
+            v.select = v.index in sel
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_mode(type='VERT')
+        bpy.ops.mesh.separate(type='SELECTED')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        piece = [o for o in bpy.context.selected_objects if o is not gun][0]
+        piece.name = f"SM_{asset}_{suffix}"
+        vs = [piece.matrix_world @ v.co for v in piece.data.vertices]
+        manifest[key] = [round((min(v.x for v in vs) + max(v.x for v in vs)) / 2, 4),
+                         round((min(v.y for v in vs) + max(v.y for v in vs)) / 2, 4),
+                         round(max(v.z for v in vs), 4)]
+        parts.append(piece)
+    if len(parts) == 1:
         return
-    gi = g.index
-    in_mag = {v.index for v in gun.data.vertices if any(e.group == gi and e.weight > 0.5 for e in v.groups)}
-    if not in_mag:
-        return
-    tc.select_only([gun])
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    for v in gun.data.vertices:
-        v.select = v.index in in_mag
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_mode(type='VERT')
-    bpy.ops.mesh.separate(type='SELECTED')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    mag = [o for o in bpy.context.selected_objects if o is not gun][0]
-    mag.name = f"SM_{asset}_Mag"
-    vs = [mag.matrix_world @ v.co for v in mag.data.vertices]
-    top = [round((min(v.x for v in vs) + max(v.x for v in vs)) / 2, 4),
-           round((min(v.y for v in vs) + max(v.y for v in vs)) / 2, 4),
-           round(max(v.z for v in vs), 4)]
     path = os.path.join(tc.REPO, manifest["files"]["fbx_lod0"])
-    tc.export_fbx([gun, mag], path)
-    manifest["mag_m"] = top
-    manifest["triangles_lod0"] = tc.triangle_count(gun) + tc.triangle_count(mag)
+    tc.export_fbx(parts, path)
+    manifest["triangles_lod0"] = sum(tc.triangle_count(o) for o in parts)
     out = os.path.join(tc.REPO, "Assets", "Exports", asset, "manifest.json")
     with open(out, "w", newline="\n") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(tc.REPO, manifest["files"]["blend"]), compress=True)
+
+
+def tag(parts, names, group):
+    """Adds the parts whose object name is in `names` to vertex group `group`."""
+    for o in parts:
+        if o.name.split(".")[0] in names:
+            g = o.vertex_groups.get(group) or o.vertex_groups.new(name=group)
+            g.add(list(range(len(o.data.vertices))), 1.0, 'REPLACE')
 
 
 def build():

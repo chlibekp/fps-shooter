@@ -24,6 +24,7 @@ var _arms_root: Node3D
 var _arms_rig: TfpsRig
 var _arms_asset := ""
 var _hand_target = null   # support-hand override during reloads (Vector3 or null)
+var _slide_t := 0.0
 var _crouch_on := false
 var _prone_on := false
 var _last_weapon_slot := 0
@@ -134,6 +135,7 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	var sc := int(w.get("shot_counter", 0))
 	if _last_shot >= 0 and sc != _last_shot:
 		_kick = minf(_kick + 1.0, 1.6)
+		_slide_t = 1.0
 	_last_shot = sc
 	_kick = move_toward(_kick, 0.0, delta * 9.0)
 	# Sway follows the mouse, bob follows walking speed.
@@ -163,7 +165,22 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	_weapon.position = pos
 	_weapon.rotation_degrees = rot
 	_animate_magazine(rp)
+	_animate_slide(w, delta)
 	_pose_arms()
+
+
+## A pistol's slide snaps back on each shot and returns; it stays locked
+## back while the magazine is empty (until the reload).
+func _animate_slide(w: Dictionary, delta: float) -> void:
+	var slide := _weapon.find_child("*_Slide", true, false) as Node3D
+	if slide == null:
+		return
+	if not slide.has_meta("rest"):
+		slide.set_meta("rest", slide.position)
+	_slide_t = move_toward(_slide_t, 0.0, delta * 14.0)
+	var empty: bool = int(w.get("ammo", 1)) == 0 and not bool(w.get("reloading", false))
+	var back := 1.0 if empty else sin(_slide_t * PI * 0.5)
+	slide.position = (slide.get_meta("rest") as Vector3) + Vector3(0, 0, 0.035 * back)
 
 
 ## Reload: the magazine drops out, the support hand brings a fresh one up

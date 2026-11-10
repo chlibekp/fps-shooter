@@ -330,6 +330,7 @@ fn speed_hack_flooding_commands_gains_nothing() {
     let mut seq: u32 = 0;
     let mut pseq: u16 = 0;
     let start = Instant::now();
+    let mut sent: u32 = 0;
     while start.elapsed() < Duration::from_secs(1) {
         let mut bundle = InputBundle {
             newest_seq: 0,
@@ -359,7 +360,14 @@ fn speed_hack_flooding_commands_gains_nothing() {
         while let Ok(n) = sock.recv(&mut rb) {
             let _ = n;
         }
-        std::thread::sleep(Duration::from_micros(15_600));
+        // Pace against a schedule (one packet per 15.6 ms tick), not with a
+        // fixed sleep: on a loaded runner each sleep overshoots, and fixed
+        // sleeps would send far fewer packets than intended.
+        sent += 1;
+        let next = start + Duration::from_micros(15_600) * sent;
+        if let Some(wait) = next.checked_duration_since(Instant::now()) {
+            std::thread::sleep(wait);
+        }
     }
     let elapsed = start.elapsed().as_secs_f32();
     run(&mut [&mut honest], Duration::from_millis(300));
@@ -372,7 +380,7 @@ fn speed_hack_flooding_commands_gains_nothing() {
     let legit_max = tfps_sim::movement::SPRINT_SPEED * (elapsed + 0.4);
     assert!(
         moved > 1.0,
-        "cheater should still move normally ({moved} m)"
+        "cheater should still move normally ({moved} m, {sent} packets in {elapsed} s)"
     );
     assert!(
         moved <= legit_max,

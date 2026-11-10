@@ -81,7 +81,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Steps (≤ 0.35 m) and ground snapping | ✅ |
 | Vaulting, window climbing | ✅ Jump while moving forward at an obstacle whose top is 0.45–1.3 m up (barriers, low walls, crates, window sills) with room above it: the player is lifted just over it, carried forward and tucked to 0.9 m, so 1.1 m window openings fit; it ends on landing. In the shared simulation (C++ mirror): unit tests (barrier, crate top, window, not a 2 m wall) and 9 scripted vault runs in the conformance vectors (0 mismatches) |
 | Camera: eye position interpolated between ticks, lean roll, ADS FOV, recoil, explosion shake | ✅ (Godot, seen in screenshots; feel not yet judged on a GPU) |
-| First/third-person animation | 🟡 Other players: skinned Blender operator per team (21 bones). The skeleton is posed procedurally: walk cycle with feet placed by leg IK, crouch, lean, aim pitch, lying when prone or dead, and arms on the weapon by two-bone IK. First person: the team's skinned sleeves and gloves, hands on the grip and handguard by IK. No authored animation clips. |
+| First/third-person animation | 🟡 Other players: skinned Blender operator per team (21 bones). The skeleton is posed procedurally: walk cycle with feet placed by leg IK, crouch, lean, aim pitch, lying when prone or dead, and arms on the weapon by two-bone IK; while the replicated reloading flag is set the weapon dips and rolls and the support hand pulls the magazine out and seats it again. First person: the team's skinned sleeves and gloves, hands on the grip and handguard by IK. No authored animation clips. |
 
 ## Gunplay (spec §4) — Phase 2
 

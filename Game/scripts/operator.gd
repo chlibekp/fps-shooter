@@ -31,6 +31,9 @@ var _pitch := 0.0
 var _materials := {}
 var _skinned := false
 
+var _reload_t := 0.0
+var _reload_hand = null   # support-hand target while reloading (Vector3 or null)
+
 # Skinned character.
 var _char: Node3D
 var _rig: TfpsRig
@@ -100,7 +103,7 @@ func _animate_skinned(stride: float, on_ground: bool) -> void:
 	r.keep("clavicle.L")
 	r.keep("clavicle.R")
 	if _weapon:
-		r.hold(_weapon, to_skel)
+		r.hold(_weapon, to_skel, _reload_hand)
 	r.commit()
 
 
@@ -246,8 +249,31 @@ func _animate(delta: float, flags: int) -> void:
 		_weapon_pivot.position = Vector3(0, shoulder_y, 0)
 	else:
 		_weapon_pivot.position = Vector3(0, 0.5, 0)
-	_weapon_pivot.rotation.x = deg_to_rad(_pitch)
-	_weapon_pivot.rotation.z = -_lean * 0.3
+	# Reloading (replicated flag): the weapon tips down and rolls while the
+	# magazine is swapped; the support hand follows the magazine.
+	var reloading := (flags & TfpsNet.F_RELOADING) != 0
+	_reload_t = _reload_t + delta if reloading else 0.0
+	var r := clampf(_reload_t / 2.2, 0.0, 1.0)
+	var dip := sin(r * PI) if reloading else 0.0
+	_weapon_pivot.rotation.x = deg_to_rad(_pitch) - dip * 0.35
+	_weapon_pivot.rotation.z = -_lean * 0.3 + dip * 0.45
+	_reload_hand = null
+	if _weapon:
+		var mag := _weapon.find_child("*_Mag", true, false) as Node3D
+		if mag != null:
+			if not mag.has_meta("rest"):
+				mag.set_meta("rest", mag.transform)
+			var rest: Transform3D = mag.get_meta("rest")
+			var drop := 0.0
+			if reloading and r > 0.1 and r < 0.35:
+				drop = smoothstep(0.1, 0.35, r) * 0.4
+			elif reloading and r >= 0.35 and r < 0.8:
+				drop = (1.0 - smoothstep(0.45, 0.8, r)) * 0.25
+			mag.transform = Transform3D(rest.basis, rest.origin - Vector3(0, drop, 0))
+			mag.visible = not (reloading and r >= 0.35 and r < 0.45)
+			if reloading and r > 0.3 and r < 0.85 and mag is MeshInstance3D:
+				var mi := mag as MeshInstance3D
+				_reload_hand = mi.global_transform * (mi.get_aabb().get_center() - Vector3(0, mi.get_aabb().size.y * 0.3, 0))
 	# Prone and death lay the body down (prone face first, death to the side).
 	rotation.x = -_prone * 1.45
 	rotation.z = _dead * 1.4

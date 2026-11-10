@@ -44,7 +44,7 @@ func _initialize() -> void:
 	root3d.add_child(cam)
 	cam.look_at_from_position(Vector3(0.2, 1.4, 4.2), Vector3(0, 0.95, 0))
 	var poses := [
-		{"x": -1.6, "team": 0, "flags": 0x1 | 0x8, "pitch": 0.0, "weapon": 1, "move": 0.0},
+		{"x": -1.6, "team": 0, "flags": 0x1 | 0x8 | 0x20, "pitch": 0.0, "weapon": 1, "move": 0.0},   # reloading
 		{"x": -0.5, "team": 0, "flags": 0x1 | 0x8, "pitch": -15.0, "weapon": 4, "move": 3.0},
 		{"x": 0.6, "team": 1, "flags": 0x1 | 0x2 | 0x8, "pitch": 10.0, "weapon": 2, "move": 0.0},
 		{"x": 1.7, "team": 1, "flags": 0x1 | 0x8, "pitch": 0.0, "weapon": 5, "move": 3.5},

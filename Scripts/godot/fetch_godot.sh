@@ -21,7 +21,11 @@ if [[ ! -e "$BIN" ]]; then
   unzip -oq "$ZIP"
   rm -f "$ZIP"
 fi
-ln -sf "$DIR/$BIN" "$DIR/godot" 2>/dev/null || cp "$DIR/$BIN" "$DIR/godot"
+# A stable path for the other scripts (Windows keeps the .exe name).
+case "$(uname -s)" in
+  Linux*|Darwin*) ln -sf "$DIR/$BIN" "$DIR/godot" ;;
+  *) cp -f "$DIR/$BIN" "$DIR/godot.exe" ;;
+esac
 if [[ "${1:-}" == "--templates" ]]; then
   TPL_VERSION="${VERSION/-/.}"   # 4.7.2-stable -> 4.7.2.stable
   case "$(uname -s)" in
@@ -39,4 +43,4 @@ if [[ "${1:-}" == "--templates" ]]; then
   fi
   echo "templates: $TPL_DIR"
 fi
-"$DIR/godot" --headless --version
+"$REPO_ROOT/Scripts/godot/godot.sh" --headless --version

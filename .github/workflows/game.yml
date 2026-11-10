@@ -1,0 +1,119 @@
+# Builds the playable game for Linux, Windows and macOS on standard GitHub
+# runners: no login, no paid services. Each runner builds the native
+# extension (Game/native, CMake + the platform compiler), the server, lobby
+# and bots (Rust), downloads the pinned official Godot release with its
+# export templates, exports the game and packs the player download
+# (TacticalFPS-<version>-<os>-<arch>: game + local server + Play / Practice
+# launchers). On Linux the real game then joins a practice match headless.
+#
+# Runs on pushes to main (artifacts kept for 7 days) and is called by the
+# release workflow, which attaches the downloads to the release.
+name: Game
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["Documentation/**", "**.md"]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: Version label for the archive names (the release tag)
+        type: string
+        required: true
+      ref:
+        description: Git ref to build
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Game (${{ matrix.preset }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: Linux
+            preset: Linux
+            export_dir: Linux
+          - os: windows-latest
+            platform: Win64
+            preset: Windows
+            export_dir: Windows
+          - os: macos-latest
+            platform: Mac
+            preset: macOS
+            export_dir: Mac
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ inputs.version || format('dev-{0}', github.sha) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: game
+
+      - name: Godot version
+        id: godot
+        run: echo "version=$(cat Scripts/godot/GODOT_VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Godot and export templates
+        uses: actions/cache@v4
+        with:
+          key: godot-${{ steps.godot.outputs.version }}-${{ runner.os }}
+          path: |
+            build/godot
+            ~/.local/share/godot/export_templates
+            ~/Library/Application Support/Godot/export_templates
+            ~/AppData/Roaming/Godot/export_templates
+
+      - name: Fetch Godot
+        run: Scripts/godot/fetch_godot.sh --templates
+
+      - name: Build the native extension
+        run: Scripts/godot/build_extension.sh
+
+      - name: Build the server, lobby and bots
+        run: cargo build --release -p tfps-server -p tfps-lobby -p tfps-devclient
+
+      - name: Export the game
+        run: Scripts/godot/export_game.sh "${{ matrix.preset }}"
+
+      - name: Package the player download
+        id: pkg
+        run: |
+          ARCHIVE=$(Scripts/package_game.sh "${VERSION:0:24}" "${{ matrix.platform }}" "build/export/${{ matrix.export_dir }}" Dist/game | tail -n 1)
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+          ls -lh Dist/game
+
+      - name: Smoke test - the real game joins a practice match (headless)
+        if: runner.os == 'Linux'
+        env:
+          TFPS_CLIENT_ARGS: --headless
+        run: Scripts/smoke_test_game.sh "${{ steps.pkg.outputs.archive }}" 120
+
+      - name: Native extension test against the server
+        if: runner.os == 'Linux'
+        run: |
+          target/release/tfps-server --bind 127.0.0.1:17999 --stats-interval 3600 > server.log 2>&1 &
+          sleep 1
+          Scripts/godot/godot.sh --headless --path Game --script res://tests/native_test.gd -- --server 127.0.0.1:17999 | tee native_test.log
+          grep -q "NATIVE TEST PASSED" native_test.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-${{ matrix.platform }}
+          path: ${{ steps.pkg.outputs.archive }}
+          retention-days: 7

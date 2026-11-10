@@ -153,6 +153,13 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	_weapon.rotation_degrees = rot
 
 
+## Where spent casings leave the weapon: the right side of the receiver.
+func ejection_position() -> Vector3:
+	if _weapon:
+		return _weapon.to_global(Vector3(0.03, 0.075, -0.07))
+	return camera.global_position + camera.global_basis * Vector3(0.12, -0.1, -0.4)
+
+
 func muzzle_position() -> Vector3:
 	if _weapon:
 		var m := _weapon.get_node_or_null("muzzle")

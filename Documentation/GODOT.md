@@ -18,7 +18,7 @@ else from the server's snapshots.
 | `scripts/player.gd` | Mouse look, input, first-person camera and weapon view model (sway, bob, recoil, aim, reload, equip) |
 | `scripts/operator.gd`, `scripts/models.gd` | Other players as procedural operators, and weapons per class (Blender models, procedural fallback) |
 | `scripts/props.gd` | Blender props over matching map solids, and gadget models (`Scripts/godot/sync_assets.sh` copies them into `Game/assets`) |
-| `scripts/effects.gd` | Tracers, muzzle flashes, impacts per surface, bullet holes, explosions, breaking, flashbangs, volumetric smoke |
+| `scripts/effects.gd` | Tracers, muzzle flashes, spent casings, impacts per surface, bullet holes, explosions, breaking, flashbangs, volumetric smoke |
 | `scripts/audio.gd` | 3D audio from the native synthesiser |
 | `scripts/hud.gd` | HUD |
 | `scripts/menu.gd`, `scripts/lobby_client.gd`, `scripts/settings.gd`, `scripts/controls.gd` | Menus, lobby service client, settings, key bindings |

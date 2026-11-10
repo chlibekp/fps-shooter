@@ -240,7 +240,7 @@ func _handle_shots(shots: Array) -> void:
 		var origin := player.muzzle_position() if local else TfpsNet.vec(sh["origin"]) + Vector3(0, -0.1, 0)
 		var end := TfpsNet.vec(sh["end"])
 		var surface := int(sh.get("surface", 255))
-		effects.muzzle(origin, end - origin)
+		effects.muzzle(origin, end - origin, local)
 		effects.tracer(origin, end)
 		if surface != 255:
 			effects.impact(end, (origin - end).normalized(), surface)
@@ -248,6 +248,10 @@ func _handle_shots(shots: Array) -> void:
 		var cue := audio.shot_cue(int(sh.get("weapon_id", 1)))
 		if local:
 			audio.play_2d(cue, 0.9)
+			var wid := int(sh.get("weapon_id", 1))
+			var b := player.camera.global_basis
+			var throw := b * Vector3(randf_range(1.4, 2.2), randf_range(1.2, 1.9), randf_range(-0.2, 0.4))
+			effects.shell(player.ejection_position(), throw + TfpsNet.vec(hud.state.get("velocity", [0, 0, 0])), wid == 5)
 		else:
 			audio.play_at(cue, origin)
 

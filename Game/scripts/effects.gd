@@ -11,6 +11,9 @@ var _hole_tex: Texture2D
 var _decals: Array[Decal] = []
 var _clouds := {}   # gadget id -> FogVolume
 var shake := 0.0    # camera shake amount, read by the player camera
+var _shells: Array = []   # [MeshInstance3D, velocity, spin axis, age]
+var _shell_mesh: CylinderMesh
+const MAX_SHELLS := 24
 
 
 func _ready() -> void:
@@ -156,10 +159,60 @@ func tracer(from: Vector3, to: Vector3) -> void:
 	tw.tween_callback(mi.queue_free)
 
 
-func muzzle(at: Vector3, dir: Vector3) -> void:
+## Muzzle flash and smoke. `local`: our own weapon, a few centimetres from the
+## camera, so the flash is smaller and the smoke thin enough to see through.
+func muzzle(at: Vector3, dir: Vector3, local := false) -> void:
 	_flash_light(at, Color(1.0, 0.7, 0.35), 5.0, 6.0, 0.06)
+	if local:
+		_particles(5, 0.05, at, dir, Color(1.0, 0.65, 0.25), 5.0, Vector2(2, 5), 10.0, Vector2(0.03, 0.06), 0.0, 4.0)
+		_particles(2, 0.6, at + dir.normalized() * 0.15, dir, Color(0.6, 0.6, 0.6, 0.1), 0.0, Vector2(0.8, 1.6), 15.0, Vector2(0.04, 0.08), -0.05, 3.0)
+		return
 	_particles(6, 0.06, at, dir, Color(1.0, 0.65, 0.25), 6.0, Vector2(2, 6), 12.0, Vector2(0.08, 0.16), 0.0, 4.0)
 	_particles(4, 0.8, at, dir, Color(0.6, 0.6, 0.6, 0.35), 0.0, Vector2(0.5, 1.5), 20.0, Vector2(0.1, 0.2), -0.05, 3.0)
+
+
+## A spent casing thrown from the ejection port (local weapon only): brass for
+## cartridges, red for shotgun hulls. Falls with gravity and spins; it is
+## cosmetic and fades after a short time.
+func shell(at: Vector3, velocity: Vector3, hull := false) -> void:
+	if _shell_mesh == null:
+		_shell_mesh = CylinderMesh.new()
+		_shell_mesh.top_radius = 0.0045
+		_shell_mesh.bottom_radius = 0.0048
+		_shell_mesh.height = 0.022
+		_shell_mesh.radial_segments = 8
+		_shell_mesh.rings = 1
+	var mi := MeshInstance3D.new()
+	mi.mesh = _shell_mesh
+	if hull:
+		mi.scale = Vector3(2.3, 2.6, 2.3)
+		mi.material_override = TfpsModels.mat("shell_hull", Color(0.55, 0.08, 0.06), 0.5, 0.0)
+	else:
+		mi.material_override = TfpsModels.mat("shell_brass", Color(0.78, 0.6, 0.3), 0.3, 1.0)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = at
+	mi.rotation = Vector3(randf() * TAU, randf() * TAU, 0)
+	add_child(mi)
+	var axis := Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5).normalized()
+	_shells.append([mi, velocity, axis, 0.0])
+	if _shells.size() > MAX_SHELLS:
+		(_shells.pop_front()[0] as Node).queue_free()
+
+
+func _update_shells(delta: float) -> void:
+	for i in range(_shells.size() - 1, -1, -1):
+		var sh: Array = _shells[i]
+		var mi: MeshInstance3D = sh[0]
+		sh[3] += delta
+		if sh[3] > 0.9:
+			mi.queue_free()
+			_shells.remove_at(i)
+			continue
+		var v: Vector3 = sh[1]
+		v.y -= 9.8 * delta
+		sh[1] = v
+		mi.position += v * delta
+		mi.rotate(sh[2], 25.0 * delta)
 
 
 ## Bullet impact; surface: map material id or 254 (player).
@@ -275,3 +328,4 @@ func active_clouds() -> Array:
 
 func _process(delta: float) -> void:
 	shake = maxf(0.0, shake - delta * 2.5)
+	_update_shells(delta)

@@ -106,7 +106,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Armor | ❌ | Needs operator/loadout system |
 | Suppression effects | ❌ | |
 | Attachments (affect recoil/spread) | ❌ | The data model has room for multipliers |
-| Weapon inspection, shell ejection, weapon-specific animations, sound variation | 🟡 | Per-weapon gunshots with 3–4 variations each, reload and dry-fire sounds; no inspection, shell ejection or animations |
+| Weapon inspection, shell ejection, weapon-specific animations, sound variation | 🟡 | Per-weapon gunshots with 3–4 variations each, reload and dry-fire sounds; spent casings eject from the local weapon (cosmetic, no collision); no inspection or weapon animations |
 | Muzzle flash, tracers, impacts | 🟡 🔒 | Pooled engine-shape placeholders plus a point-light flash (`ATfpsShotFx`) |
 | HUD: health, ammo/mag/reserve, weapon, reload prompt, hit marker, damage direction, kill feed, death/respawn timer | 🟡 | Canvas HUD, not run |
 

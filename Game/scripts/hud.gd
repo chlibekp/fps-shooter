@@ -21,6 +21,9 @@ var flash_time := -10.0
 var flash_strength := 0.0
 var flash_hold := 3.0
 var center_message := ""
+var remote_view := ""           # "DRONE" / "CAMERA" while viewing through one
+var spots := {}                  # player id -> {position, until}
+var objectives: Array = []
 var camera: Camera3D
 var _font: Font
 
@@ -151,6 +154,10 @@ func _draw() -> void:
 		_text(label, Vector2(c.x / s - 150, c.y / s + 90) * s, int(16 * s), ACCENT, HORIZONTAL_ALIGNMENT_CENTER, 300 * s)
 		draw_rect(Rect2(Vector2(c.x / s - 150, c.y / s + 100) * s, Vector2(300, 6) * s), Color(1, 1, 1, 0.2))
 		draw_rect(Rect2(Vector2(c.x / s - 150, c.y / s + 100) * s, Vector2(300 * prog, 6) * s), ACCENT)
+	_draw_world_markers(vs, s, now)
+	_draw_round_banner(vs, s)
+	if remote_view != "":
+		_draw_remote_overlay(vs, s, now)
 	# Death screen.
 	if not alive:
 		draw_rect(Rect2(Vector2.ZERO, vs), Color(0.15, 0.0, 0.0, 0.25))
@@ -168,3 +175,78 @@ func _draw() -> void:
 	if ft < flash_hold + 1.5:
 		var a3 := flash_strength * (1.0 if ft < flash_hold else 1.0 - (ft - flash_hold) / 1.5)
 		draw_rect(Rect2(Vector2.ZERO, vs), Color(1, 1, 0.98, clampf(a3, 0.0, 1.0)))
+
+
+func _project(p: Vector3) -> Variant:
+	if camera == null or camera.is_position_behind(p):
+		return null
+	return camera.unproject_position(p)
+
+
+## Spotted enemies (red diamonds) and objective sites / the planted device.
+func _draw_world_markers(vs: Vector2, s: float, now: float) -> void:
+	for id in spots.keys():
+		var sp: Dictionary = spots[id]
+		if now > float(sp["until"]):
+			spots.erase(id)
+			continue
+		var at = _project((sp["position"] as Vector3) + Vector3(0, 2.0, 0))
+		if at == null:
+			continue
+		var c := Color(1.0, 0.3, 0.25, 0.9)
+		var r := 9.0 * s
+		draw_colored_polygon(PackedVector2Array([at + Vector2(0, -r), at + Vector2(r, 0), at + Vector2(0, r), at + Vector2(-r, 0)]), c)
+	var m: Dictionary = state.get("match", {})
+	if int(m.get("mode", 0)) != 2:
+		return
+	var device_site := int(m.get("device_site", 255))
+	for i in objectives.size():
+		var o: Dictionary = objectives[i]
+		var a := TfpsNet.vec(o["min"])
+		var b := TfpsNet.vec(o["max"])
+		var top := Vector3((a.x + b.x) * 0.5, maxf(a.y, b.y) + 0.5, (a.z + b.z) * 0.5)
+		var at2 = _project(top)
+		if at2 == null:
+			continue
+		var planted := device_site == i
+		var col := Color(1.0, 0.35, 0.25) if planted else ACCENT
+		var dist := camera.global_position.distance_to(top)
+		draw_circle(at2, 14.0 * s, Color(0, 0, 0, 0.45))
+		draw_arc(at2, 14.0 * s, 0, TAU, 24, col, 2.5 * s)
+		_text(char(65 + i), at2 + Vector2(-6, 7) * s, int(18 * s), col)
+		_text("%s  %dm%s" % [String(o.get("name", "")), int(dist), "  - DEVICE" if planted else ""], at2 + Vector2(-80, 34) * s, int(13 * s), col, HORIZONTAL_ALIGNMENT_CENTER, 160 * s)
+
+
+## Round / match result.
+func _draw_round_banner(vs: Vector2, s: float) -> void:
+	var m: Dictionary = state.get("match", {})
+	var phase := int(m.get("phase", 0))
+	var winner := int(m.get("last_winner", 255))
+	if (phase != 3 and phase != 4) or winner == 255:
+		return
+	var won := winner == my_squad
+	var reasons := ["", "ENEMY ELIMINATED", "TIME RAN OUT", "DEVICE DETONATED", "DEVICE DEFUSED", "SCORE LIMIT REACHED"]
+	var title := ("MATCH " if phase == 4 else "ROUND ") + ("WON" if won else "LOST")
+	var y := vs.y * 0.3
+	draw_rect(Rect2(Vector2(0, y - 60 * s), Vector2(vs.x, 110 * s)), Color(0, 0, 0, 0.55))
+	_text(title, Vector2(0, y + 10 * s), int(54 * s), Color(0.4, 0.8, 1.0) if won else Color(1.0, 0.4, 0.3), HORIZONTAL_ALIGNMENT_CENTER, vs.x)
+	_text(reasons[clampi(int(m.get("last_reason", 0)), 0, 5)], Vector2(0, y + 40 * s), int(16 * s), DIM, HORIZONTAL_ALIGNMENT_CENTER, vs.x)
+
+
+## Drone / camera feed: scan lines, vignette, label and a centre reticle.
+func _draw_remote_overlay(vs: Vector2, s: float, now: float) -> void:
+	var lines := int(vs.y / (4.0 * s))
+	for i in lines:
+		draw_line(Vector2(0, i * 4.0 * s), Vector2(vs.x, i * 4.0 * s), Color(0, 0, 0, 0.12), 1.0)
+	var e := 40.0 * s
+	for corner in [Vector2(e, e), Vector2(vs.x - e, e), Vector2(e, vs.y - e), Vector2(vs.x - e, vs.y - e)]:
+		var sx := 1.0 if corner.x < vs.x * 0.5 else -1.0
+		var sy := 1.0 if corner.y < vs.y * 0.5 else -1.0
+		draw_line(corner, corner + Vector2(sx * 60.0 * s, 0), TEXT, 2.0 * s)
+		draw_line(corner, corner + Vector2(0, sy * 60.0 * s), TEXT, 2.0 * s)
+	var blink := fmod(now, 1.0) < 0.5
+	_text(("● " if blink else "  ") + remote_view + " FEED", Vector2(70, 80) * s, int(20 * s), Color(1, 0.35, 0.3))
+	var c := vs * 0.5
+	draw_arc(c, 18.0 * s, 0, TAU, 32, Color(1, 1, 1, 0.7), 1.5 * s)
+	draw_line(c - Vector2(30, 0) * s, c - Vector2(20, 0) * s, Color(1, 1, 1, 0.7), 1.5 * s)
+	draw_line(c + Vector2(20, 0) * s, c + Vector2(30, 0) * s, Color(1, 1, 1, 0.7), 1.5 * s)

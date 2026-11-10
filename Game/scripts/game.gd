@@ -53,7 +53,11 @@ func _process(delta: float) -> void:
 	if net == null:
 		return
 	player.input_enabled = not paused
-	var s := net.frame(player.buttons(), player.yaw, player.pitch, player.slot)
+	var slot := player.slot
+	var device := _my_remote_device()
+	if not device.is_empty():
+		slot |= TfpsNet.REMOTE_CONTROL
+	var s := net.frame(player.buttons(), player.yaw, player.pitch, slot)
 	hud.state = s
 	var phase: String = s.get("phase", "offline")
 	if phase == "connecting":
@@ -66,10 +70,23 @@ func _process(delta: float) -> void:
 		return
 	hud.my_squad = int(s.get("squad", 0))
 	player.apply(s, delta, effects.shake)
+	# Viewing through a drone or wall camera of ours: the camera moves to it.
+	device = _my_remote_device()
+	hud.remote_view = ""
+	if not device.is_empty():
+		var at := TfpsNet.vec(device["position"])
+		var drone := int(device.get("kind", -1)) == 4
+		player.camera.global_position = at + Vector3(0, 0.12 if drone else 0.0, 0)
+		player.camera.fov = 100.0 if drone else 95.0
+		hud.remote_view = "DRONE" if drone else "CAMERA"
+	hud.objectives = net.world.get("objectives", [])
 	if audio:
 		audio.position = Vector3.ZERO
 	_update_players(s.get("players", []), delta)
 	_update_gadgets(s.get("gadget_entities", []))
+	# Our own drone / camera is not drawn while we look through it.
+	if not device.is_empty() and gadget_nodes.has(int(device["id"])):
+		gadget_nodes[int(device["id"])].visible = false
 	_handle_shots(s.get("shots", []))
 	_handle_events(s.get("events", []))
 	var destroyed: Array = s.get("destroyed", [])
@@ -131,6 +148,23 @@ func _update_players(list: Array, delta: float) -> void:
 			_remote_travel.erase(id)
 
 
+## A deployed drone / wall camera of ours that the selected gadget slot controls.
+func _my_remote_device() -> Dictionary:
+	if player.slot < 2 or hud.state.is_empty():
+		return {}
+	var stock: Array = hud.state.get("gadgets", [])
+	var idx := player.slot - 2
+	if idx >= stock.size():
+		return {}
+	var gid := int(stock[idx].get("id", 0))
+	var me := int(hud.state.get("player_id", -1))
+	for g in hud.state.get("gadget_entities", []):
+		var kind := int(g.get("kind", -1))
+		if int(g.get("owner", -2)) == me and int(g.get("gadget", -1)) == gid and (kind == 4 or kind == 5):
+			return g
+	return {}
+
+
 func _ground_material(at: Vector3) -> int:
 	var hit := net.request({"op": "raycast", "origin": [at.x, at.y + 0.1, at.z], "direction": [0, -1, 0], "max": 0.6})
 	return int(hit.get("material", 0)) if hit.get("hit", false) else 0
@@ -150,6 +184,7 @@ func _update_gadgets(list: Array) -> void:
 			gadget_nodes[id] = node
 			node.position = pos
 		node.position = node.position.lerp(pos, 0.5)
+		node.visible = true
 		if int(g["phase"]) == 4:  # smoking
 			effects.smoke_cloud(id, pos, float(g.get("radius", 4.0)))
 			node.visible = false
@@ -263,6 +298,8 @@ func _handle_events(events: Array) -> void:
 					_last_phase = ph
 			"player_joined":
 				names[int(e["player_id"])] = e.get("name", "")
+			"spotted":
+				hud.spots[int(e["player_id"])] = {"position": TfpsNet.vec(e["position"]), "until": now + float(e.get("duration", 3.0))}
 
 
 func _local_sounds(s: Dictionary) -> void:

@@ -1,6 +1,6 @@
 {
   "asset": "ReconDrone",
-  "unreal_mesh": "SM_ReconDrone",
+  "mesh": "SM_ReconDrone",
   "dimensions_m": [
     0.28,
     0.146,

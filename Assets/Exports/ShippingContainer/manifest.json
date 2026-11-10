@@ -1,6 +1,6 @@
 {
   "asset": "ShippingContainer",
-  "unreal_mesh": "SM_ShippingContainer",
+  "mesh": "SM_ShippingContainer",
   "dimensions_m": [
     6.061,
     2.532,

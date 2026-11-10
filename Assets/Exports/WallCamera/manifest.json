@@ -1,6 +1,6 @@
 {
   "asset": "WallCamera",
-  "unreal_mesh": "SM_WallCamera",
+  "mesh": "SM_WallCamera",
   "dimensions_m": [
     0.1,
     0.1266,

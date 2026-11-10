@@ -1,6 +1,6 @@
 {
   "asset": "BrickWallPanel",
-  "unreal_mesh": "SM_BrickWallPanel",
+  "mesh": "SM_BrickWallPanel",
   "dimensions_m": [
     2.4,
     0.3,

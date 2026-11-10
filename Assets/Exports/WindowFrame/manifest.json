@@ -1,6 +1,6 @@
 {
   "asset": "WindowFrame",
-  "unreal_mesh": "SM_WindowFrame",
+  "mesh": "SM_WindowFrame",
   "dimensions_m": [
     1.5,
     0.35,

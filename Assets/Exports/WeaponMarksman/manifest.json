@@ -1,0 +1,38 @@
+{
+  "asset": "WeaponMarksman",
+  "mesh": "SM_WeaponMarksman",
+  "dimensions_m": [
+    0.052,
+    1.334,
+    0.2938
+  ],
+  "triangles_lod0": 2540,
+  "triangles_lod1": 1142,
+  "collision_primitives": 0,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/WeaponMarksman/T_WeaponMarksman_BC.png",
+    "N": "Assets/Exports/WeaponMarksman/T_WeaponMarksman_N.png",
+    "ORM": "Assets/Exports/WeaponMarksman/T_WeaponMarksman_ORM.png",
+    "fbx_lod0": "Assets/Exports/WeaponMarksman/SM_WeaponMarksman.fbx",
+    "fbx_lod1": "Assets/Exports/WeaponMarksman/SM_WeaponMarksman_LOD1.fbx",
+    "preview": "Assets/Exports/WeaponMarksman/preview.png",
+    "blend": "Assets/Blender/WeaponMarksman.blend"
+  },
+  "notes": "Weapon model; barrel along +Y (Godot -Z). grip_m / muzzle_m / sight_m in model space (Blender axes).",
+  "grip_m": [
+    -0.0,
+    -0.268,
+    0.1048
+  ],
+  "muzzle_m": [
+    0.0,
+    0.672,
+    0.1828
+  ],
+  "sight_m": [
+    -0.0,
+    -0.168,
+    0.2548
+  ]
+}

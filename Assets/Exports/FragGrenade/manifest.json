@@ -1,6 +1,6 @@
 {
   "asset": "FragGrenade",
-  "unreal_mesh": "SM_FragGrenade",
+  "mesh": "SM_FragGrenade",
   "dimensions_m": [
     0.0678,
     0.0745,

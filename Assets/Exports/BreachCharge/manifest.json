@@ -1,6 +1,6 @@
 {
   "asset": "BreachCharge",
-  "unreal_mesh": "SM_BreachCharge",
+  "mesh": "SM_BreachCharge",
   "dimensions_m": [
     0.24,
     0.08,

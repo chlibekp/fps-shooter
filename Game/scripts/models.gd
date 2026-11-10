@@ -77,9 +77,64 @@ static func sphere(parent: Node3D, radius: float, pos: Vector3, m: Material, squ
 	return mi
 
 
+# weapon class -> Blender asset (Assets/Exports/<asset>, synced into Game/assets)
+const WEAPON_ASSETS := {
+	"rifle": "WeaponCarbine",
+	"smg": "WeaponSMG",
+	"marksman": "WeaponMarksman",
+	"pistol": "WeaponPistol",
+	"shotgun": "WeaponShotgun",
+}
+
+
 ## A weapon pointing along -Z (Godot forward), origin at the grip.
-## Returns the root; its "muzzle" child marks the barrel end.
+## Returns the root; its "muzzle" child marks the barrel end. Uses the Blender
+## model when the assets are synced, otherwise a procedural one.
 static func weapon(weapon_class: String) -> Node3D:
+	var asset: String = WEAPON_ASSETS.get(weapon_class, "WeaponCarbine")
+	var model := _asset_weapon(asset)
+	if model != null:
+		return model
+	return procedural_weapon(weapon_class)
+
+
+static func _asset_weapon(asset: String) -> Node3D:
+	var inst := TfpsProps.instance(asset)
+	if inst == null:
+		return null
+	var manifest := {}
+	var f := FileAccess.open("res://assets/%s/manifest.json" % asset, FileAccess.READ)
+	if f != null:
+		var parsed: Variant = JSON.parse_string(f.get_as_text())
+		if parsed is Dictionary:
+			manifest = parsed
+	if not manifest.has("grip_m") or not manifest.has("muzzle_m"):
+		inst.free()
+		return null
+	var grip := _blender_to_godot(manifest["grip_m"])
+	var muzzle_pos := _blender_to_godot(manifest["muzzle_m"])
+	var root := Node3D.new()
+	root.add_child(inst)
+	inst.position = -grip
+	var muzzle := Node3D.new()
+	muzzle.name = "muzzle"
+	muzzle.position = muzzle_pos - grip
+	root.add_child(muzzle)
+	if manifest.has("sight_m"):
+		var sight := Node3D.new()
+		sight.name = "sight"
+		sight.position = _blender_to_godot(manifest["sight_m"]) - grip
+		root.add_child(sight)
+	return root
+
+
+## Blender model space (Z up, barrel along +Y) to Godot (Y up, barrel along -Z).
+static func _blender_to_godot(v: Array) -> Vector3:
+	return Vector3(float(v[0]), float(v[2]), -float(v[1]))
+
+
+## The procedural weapon (primitives), used when the assets are not synced.
+static func procedural_weapon(weapon_class: String) -> Node3D:
 	var root := Node3D.new()
 	var dark := mat("gun_dark", Color(0.08, 0.085, 0.09), 0.45, 0.6)
 	var poly := mat("gun_poly", Color(0.14, 0.14, 0.13), 0.8, 0.0)
@@ -126,6 +181,11 @@ static func weapon(weapon_class: String) -> Node3D:
 	muzzle.name = "muzzle"
 	muzzle.position = Vector3(0, 0.035, -length * 0.85 - barrel - 0.02)
 	root.add_child(muzzle)
+	var sight := Node3D.new()
+	sight.name = "sight"
+	var optic := weapon_class != "pistol" and weapon_class != "shotgun"
+	sight.position = Vector3(0, 0.11 if optic else 0.08, -0.12)
+	root.add_child(sight)
 	for c in root.get_children():
 		if c is GeometryInstance3D:
 			c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON

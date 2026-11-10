@@ -1,6 +1,6 @@
 {
   "asset": "WoodDoor",
-  "unreal_mesh": "SM_WoodDoor",
+  "mesh": "SM_WoodDoor",
   "dimensions_m": [
     1.0,
     0.116,

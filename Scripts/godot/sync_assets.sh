@@ -8,5 +8,6 @@ for d in "$REPO_ROOT"/Assets/Exports/*/; do
   mkdir -p "$REPO_ROOT/Game/assets/$name"
   cp "$d/SM_$name.fbx" "$REPO_ROOT/Game/assets/$name/"
   cp "$d"/T_*.png "$REPO_ROOT/Game/assets/$name/"
+  if [[ -f "$d/manifest.json" ]]; then cp "$d/manifest.json" "$REPO_ROOT/Game/assets/$name/"; fi
 done
 ls "$REPO_ROOT/Game/assets"

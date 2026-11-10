@@ -3,7 +3,7 @@
 ##   --connect host:port --map NAME [--name NAME]   join a server directly
 ##   --lobby http://host:7700 [--invite CODE]       lobby service (Play launcher)
 ##   --quality 0..3
-## Test options: --shot PATH --after SECONDS [--yaw D --pitch D --fire --walk --menu SCREEN]
+## Test options: --shot PATH --after SECONDS [--yaw D --pitch D --fire --walk --aim --slot N --menu SCREEN]
 extends Node
 
 var args := {}
@@ -243,6 +243,10 @@ func _test_input() -> void:
 			Input.action_press("fire")
 		if args.has("walk"):
 			Input.action_press("forward")
+		if args.has("aim"):
+			Input.action_press("aim")
+		if args.has("slot"):
+			game.player.slot = int(args["slot"])
 	if Time.get_ticks_msec() / 1000.0 >= _shot_at:
 		get_viewport().get_texture().get_image().save_png(args["shot"])
 		print("saved ", args["shot"], " phase=", game.hud.state.get("phase") if game else "menu",

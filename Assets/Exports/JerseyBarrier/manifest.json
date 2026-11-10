@@ -1,6 +1,6 @@
 {
   "asset": "JerseyBarrier",
-  "unreal_mesh": "SM_JerseyBarrier",
+  "mesh": "SM_JerseyBarrier",
   "dimensions_m": [
     0.6,
     3.0,

@@ -1,6 +1,6 @@
 {
   "asset": "WoodCrate",
-  "unreal_mesh": "SM_WoodCrate",
+  "mesh": "SM_WoodCrate",
   "dimensions_m": [
     1.248,
     1.248,

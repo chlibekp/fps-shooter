@@ -1,0 +1,38 @@
+{
+  "asset": "WeaponPistol",
+  "mesh": "SM_WeaponPistol",
+  "dimensions_m": [
+    0.032,
+    0.2169,
+    0.1645
+  ],
+  "triangles_lod0": 1048,
+  "triangles_lod1": 470,
+  "collision_primitives": 0,
+  "texture_size": 512,
+  "files": {
+    "BC": "Assets/Exports/WeaponPistol/T_WeaponPistol_BC.png",
+    "N": "Assets/Exports/WeaponPistol/T_WeaponPistol_N.png",
+    "ORM": "Assets/Exports/WeaponPistol/T_WeaponPistol_ORM.png",
+    "fbx_lod0": "Assets/Exports/WeaponPistol/SM_WeaponPistol.fbx",
+    "fbx_lod1": "Assets/Exports/WeaponPistol/SM_WeaponPistol_LOD1.fbx",
+    "preview": "Assets/Exports/WeaponPistol/preview.png",
+    "blend": "Assets/Blender/WeaponPistol.blend"
+  },
+  "notes": "Weapon model; barrel along +Y (Godot -Z). grip_m / muzzle_m / sight_m in model space (Blender axes).",
+  "grip_m": [
+    0.0,
+    -0.0495,
+    0.0895
+  ],
+  "muzzle_m": [
+    0.0,
+    0.1105,
+    0.1415
+  ],
+  "sight_m": [
+    0.0,
+    0.0005,
+    0.1655
+  ]
+}

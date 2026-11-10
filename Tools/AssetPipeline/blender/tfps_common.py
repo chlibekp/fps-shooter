@@ -10,7 +10,7 @@ Conventions (see Documentation/ASSET_PIPELINE.md):
     Assets/Exports/<Name>/SM_<Name>.fbx          LOD0 + UCX_ collision
     Assets/Exports/<Name>/SM_<Name>_LOD1.fbx     reduced LOD
     Assets/Exports/<Name>/T_<Name>_BC.png        base colour (sRGB)
-    Assets/Exports/<Name>/T_<Name>_N.png         normal, DirectX (green down) for Unreal
+    Assets/Exports/<Name>/T_<Name>_N.png         normal, OpenGL (green up) for Godot
     Assets/Exports/<Name>/T_<Name>_ORM.png       R=AO, G=roughness, B=metallic (linear)
     Assets/Exports/<Name>/preview.png            look-dev render
     Assets/Exports/<Name>/manifest.json          triangle counts, dimensions, files
@@ -300,7 +300,7 @@ def _bake_image(o, mat, img, bake_type, **kw):
 
 
 def bake_textures(o, mat, out_dir, asset):
-    """Bakes BC, normal (DirectX) and packed ORM textures for `o`."""
+    """Bakes BC, normal (OpenGL) and packed ORM textures for `o`."""
     os.makedirs(out_dir, exist_ok=True)
     sc = bpy.context.scene
     sc.render.bake.use_selected_to_active = False
@@ -345,12 +345,9 @@ def bake_textures(o, mat, out_dir, asset):
         _bake_metallic_attr(o, mat, metallic_attr)
         metallic_attr = list(metallic_attr.pixels)
 
-    # Normal: Blender bakes OpenGL (Y+); Unreal expects DirectX (Y-): flip green.
-    px = list(nrm.pixels)
-    for i in range(1, len(px), 4):
-        px[i] = 1.0 - px[i]
+    # Normal: Blender bakes OpenGL (Y+), which is what Godot expects.
     n_out = img(f"T_{asset}_N", True)
-    n_out.pixels = px
+    n_out.pixels = list(nrm.pixels)
 
     # ORM pack.
     a = list(ao.pixels)
@@ -391,18 +388,8 @@ def make_baked_material(asset, bc, nrm, orm):
     nt.links.new(t_orm.outputs["Color"], sep.inputs["Color"])
     nt.links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
     nt.links.new(sep.outputs["Blue"], bsdf.inputs["Metallic"])
-    # Flip green back for Blender's OpenGL convention.
-    sep_n = nt.nodes.new("ShaderNodeSeparateColor")
-    nt.links.new(t_n.outputs["Color"], sep_n.inputs["Color"])
-    inv = node(nt, "ShaderNodeMath", operation='SUBTRACT', in_Value=1.0)
-    inv.inputs[0].default_value = 1.0
-    nt.links.new(sep_n.outputs["Green"], inv.inputs[1])
-    comb = nt.nodes.new("ShaderNodeCombineColor")
-    nt.links.new(sep_n.outputs["Red"], comb.inputs["Red"])
-    nt.links.new(inv.outputs["Value"], comb.inputs["Green"])
-    nt.links.new(sep_n.outputs["Blue"], comb.inputs["Blue"])
     nmap = nt.nodes.new("ShaderNodeNormalMap")
-    nt.links.new(comb.outputs["Color"], nmap.inputs["Color"])
+    nt.links.new(t_n.outputs["Color"], nmap.inputs["Color"])
     nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
     return m
 
@@ -513,11 +500,11 @@ def render_preview(o, path, distance_scale=3.3):
     return os.path.relpath(path, REPO)
 
 
-def finish_asset(asset, lod0, lod1, collisions, procedural_mat, notes=""):
+def finish_asset(asset, lod0, lod1, collisions, procedural_mat, notes="", extra=None):
     """Bakes, exports, previews and writes the manifest for one asset."""
     out_dir = os.path.join(REPO, "Assets", "Exports", asset)
     os.makedirs(out_dir, exist_ok=True)
-    # Pipeline convention: pivot at the bottom centre. Unreal places props by
+    # Pipeline convention: pivot at the bottom centre. The game places props by
     # this pivot, so a wrong one misplaces every instance; fail the build.
     ws = [lod0.matrix_world @ v.co for v in lod0.data.vertices]
     lo = [min(v[i] for v in ws) for i in range(3)]
@@ -548,7 +535,7 @@ def finish_asset(asset, lod0, lod1, collisions, procedural_mat, notes=""):
     files["blend"] = os.path.relpath(blend_path, REPO)
     manifest = {
         "asset": asset,
-        "unreal_mesh": mesh_name,
+        "mesh": mesh_name,
         "dimensions_m": dimensions(lod0),
         "triangles_lod0": triangle_count(lod0),
         "triangles_lod1": triangle_count(lod1),
@@ -557,6 +544,8 @@ def finish_asset(asset, lod0, lod1, collisions, procedural_mat, notes=""):
         "files": files,
         "notes": notes,
     }
+    if extra:
+        manifest.update(extra)
     with open(os.path.join(out_dir, "manifest.json"), "w", newline="\n") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")

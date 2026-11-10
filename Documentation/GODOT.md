@@ -16,7 +16,8 @@ else from the server's snapshots.
 | `scripts/world.gd` | Builds the map from the server's own map data; destruction cells, reinforcement, barricades, lighting, environment, quality presets |
 | `scripts/materials.gd`, `shaders/world_surface.gdshader`, `shaders/sky.gdshader` | Procedural materials per map material and a procedural sky (no texture files) |
 | `scripts/player.gd` | Mouse look, input, first-person camera and weapon view model (sway, bob, recoil, aim, reload, equip) |
-| `scripts/operator.gd`, `scripts/models.gd` | Other players as procedural operators, and weapons per class |
+| `scripts/operator.gd`, `scripts/models.gd` | Other players as procedural operators, and weapons per class (Blender models, procedural fallback) |
+| `scripts/props.gd` | Blender props over matching map solids, and gadget models (`Scripts/godot/sync_assets.sh` copies them into `Game/assets`) |
 | `scripts/effects.gd` | Tracers, muzzle flashes, impacts per surface, bullet holes, explosions, breaking, flashbangs, volumetric smoke |
 | `scripts/audio.gd` | 3D audio from the native synthesiser |
 | `scripts/hud.gd` | HUD |
@@ -128,14 +129,11 @@ Game options (after `--`):
 | `--invite CODE` | join that lobby at start-up |
 | `--quality 0..3` | graphics preset |
 
-Test options: `--shot PATH --after SECONDS [--yaw --pitch --fire --walk --menu SCREEN --test-host]`.
+Test options: `--shot PATH --after SECONDS [--yaw --pitch --fire --walk --aim --slot --menu SCREEN --test-host]`.
 They take a screenshot with scripted input, then quit.
 
 ## Not done yet
 
-* Drone and camera views, spot markers, objective markers, round result
-  banner.
-* Blender props and gadget models: FBX exports exist; Godot imports FBX, but
-  they are not wired in.
-* Operators and weapons are procedural primitives with no rig.
+* Operators are procedural primitives with no rig; the first-person view
+  has no hands.
 * Nothing has been played on a GPU, on Windows or on macOS yet.

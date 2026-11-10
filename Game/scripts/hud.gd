@@ -74,6 +74,19 @@ func _draw() -> void:
 			draw_line(c + d * gap, c + d * (gap + len), Color(0, 0, 0, 0.5 * col.a), 4.0 * s)
 			draw_line(c + d * gap, c + d * (gap + len), col, 2.0 * s)
 		draw_circle(c, 1.5 * s, col)
+	# Optic reticle when aiming through a red dot or a scope.
+	var wpn: Dictionary = state.get("weapon", {})
+	if alive and aim > 0.75 and int(wpn.get("active", 0)) < 2:
+		var cls := TfpsModels.weapon_class(int(wpn.get("id", 0)))
+		var ra := clampf((aim - 0.75) * 4.0, 0.0, 1.0)
+		if cls == "marksman":
+			var rc := Color(0.02, 0.02, 0.02, 0.85 * ra)
+			for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
+				draw_line(c + d * 5.0 * s, c + d * 60.0 * s, rc, 1.5 * s)
+			draw_circle(c, 1.5 * s, Color(0.9, 0.1, 0.05, ra))
+		elif cls == "rifle" or cls == "smg":
+			draw_circle(c, maxf(4.0 * s, 3.0), Color(1.0, 0.15, 0.08, 0.25 * ra))
+			draw_circle(c, maxf(2.2 * s, 1.6), Color(1.0, 0.2, 0.1, 0.95 * ra))
 	# Hit marker.
 	var ht := now - hit_time
 	if ht < 0.25:

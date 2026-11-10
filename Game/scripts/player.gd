@@ -132,7 +132,10 @@ func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	_bob += delta * speed * 2.2
 	var bob_amt := clampf(speed / 5.0, 0.0, 1.0) * (1.0 - _aim * 0.85) * (1.0 if s.get("on_ground", true) else 0.0)
 	var hip := Vector3(0.13, -0.15, -0.36)
-	var ads := Vector3(0.0, -0.11 * 0.72, -0.27)
+	# Aiming puts the sight (optic centre or iron-sight line) on the view axis.
+	var sight_node := _weapon.get_node_or_null("sight") as Node3D
+	var sight := sight_node.position if sight_node else Vector3(0, 0.11, 0)
+	var ads := Vector3(-sight.x * 0.72, -sight.y * 0.72, -0.31)
 	var pos := hip.lerp(ads, _aim)
 	pos += Vector3(sin(_bob) * 0.012, -absf(cos(_bob)) * 0.01, 0) * bob_amt
 	pos += Vector3(-_sway.x, _sway.y, 0) * (1.0 - _aim * 0.7)

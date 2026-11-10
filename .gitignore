@@ -38,3 +38,4 @@ Game/.godot/
 Game/defs/
 /build/
 Game/assets/
+__pycache__/

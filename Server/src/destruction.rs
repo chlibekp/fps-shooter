@@ -56,6 +56,20 @@ pub struct Obstacle {
 
 /// All intact solids/cells along a ray within `max_t`, sorted by entry.
 pub fn trace(world: &CollisionWorld, origin: Vec3, dir: Vec3, max_t: f32, out: &mut Vec<Obstacle>) {
+    trace_as_of(world, origin, dir, max_t, &[], out);
+}
+
+/// Like `trace`, with the destroyed cells in `revived` counted as intact:
+/// lag-compensated shots see the walls as they were at the shooter's view
+/// time (cells destroyed since then still stop the bullet).
+pub fn trace_as_of(
+    world: &CollisionWorld,
+    origin: Vec3,
+    dir: Vec3,
+    max_t: f32,
+    revived: &[u32],
+    out: &mut Vec<Obstacle>,
+) {
     out.clear();
     for (si, s) in world.solids.iter().enumerate() {
         if s.open {
@@ -95,6 +109,17 @@ pub fn trace(world: &CollisionWorld, origin: Vec3, dir: Vec3, max_t: f32, out: &
             }
             true
         });
+        for &id in revived {
+            if let Some((csi, cb)) = world.cell_info(id) {
+                if csi == si && world.is_destroyed(id) {
+                    if let Some((c0, c1)) = ray_aabb_interval(origin, dir, &cb) {
+                        if c0 <= max_t {
+                            cells.push((c0, c1, id));
+                        }
+                    }
+                }
+            }
+        }
         // Merge overlapping cell intervals into contiguous segments so rays
         // running along cell boundaries do not count thickness twice. Each
         // segment is damaged through its first-entered cell.
@@ -128,6 +153,9 @@ pub fn trace(world: &CollisionWorld, origin: Vec3, dir: Vec3, max_t: f32, out: &
 pub struct Destruction {
     health: Vec<f32>,
     pub destroyed_this_tick: Vec<u32>,
+    /// (tick, cell) of cells destroyed within the lag-compensation window,
+    /// oldest first (see `trace_as_of`).
+    pub recent: std::collections::VecDeque<(u32, u32)>,
 }
 
 impl Destruction {
@@ -144,7 +172,35 @@ impl Destruction {
         Self {
             health,
             destroyed_this_tick: Vec::new(),
+            recent: std::collections::VecDeque::new(),
         }
+    }
+
+    /// Remembers this tick's destroyed cells with `tick` and forgets those
+    /// older than `window` ticks.
+    pub fn remember(&mut self, tick: u32, window: u32) {
+        for &c in &self.destroyed_this_tick {
+            self.recent.push_back((tick, c));
+        }
+        while self
+            .recent
+            .front()
+            .is_some_and(|&(t, _)| t.wrapping_add(window) < tick)
+        {
+            self.recent.pop_front();
+        }
+    }
+
+    /// Cells destroyed after `tick` (fractional, as lag compensation
+    /// rewinds): they still stood at that time.
+    pub fn destroyed_after(&self, tick: f64, out: &mut Vec<u32>) {
+        out.clear();
+        out.extend(
+            self.recent
+                .iter()
+                .filter(|&&(t, _)| t as f64 > tick)
+                .map(|&(_, c)| c),
+        );
     }
 
     /// Adds health for cells of solids added to `world` after creation.

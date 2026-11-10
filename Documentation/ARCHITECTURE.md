@@ -184,11 +184,12 @@ Collision queries visit candidate boxes in the same order as a full scan of
 all intact boxes, using index ranges per solid. Results are therefore
 identical to the brute-force definition while touching only nearby cells.
 
-Shots use the current destruction state instead of the state at the
-shooter's render time. A hole made less than the rewind window ago can let
-a shot through a moment before the shooter saw it. This is accepted for
-now; rewinding destruction would require cell-destruction timestamps in the
-lag-compensation history.
+Shots see destruction as it stood at the shooter's view time: the server
+keeps the tick of every cell destroyed within the rewind window (one
+second), and a lag-compensated shot counts cells destroyed after its view
+time as intact. A hole made a moment ago therefore does not let a shot
+through before the shooter could see it. (Cells only ever go from intact to
+destroyed during a round, so the history is a list of timestamps.)
 
 ## Decision 12 — Gadgets are server entities; only the holstered weapon is predicted
 

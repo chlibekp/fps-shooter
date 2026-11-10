@@ -66,7 +66,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Server-side hit validation & damage | ✅ | Phase 2 |
 | Encryption | ✅ | X25519 key agreement in the handshake, ChaCha20-Poly1305 on every Data packet with a replay window (protocol v12). Rust: x25519-dalek and chacha20poly1305; C++: own implementation tested against the RFC 7748 / 8439 vectors and against Rust (golden vectors); every e2e and live test runs encrypted. No certificates (no protection against an active man in the middle) |
 | Snapshot packet budget and prioritisation | ✅ | Every snapshot ≤ 1200 bytes; changes nearest-first, held changes catch up in later deltas. Unit tests plus a 64-player e2e test (`Server/tests/full_server.rs`). No visibility-based culling yet. |
-| Multiple independent server instances | ✅ | Each process is self-contained (port per instance); orchestration ❌ |
+| Multiple independent server instances | ✅ | Each process is self-contained (port per instance); the lobby service starts a server per match (join token) and stops it after. Multi-machine deployment is not automated |
 
 ## Movement (spec §3)
 
@@ -136,7 +136,7 @@ to Godot 4.7 (see GODOT.md and ARCHITECTURE.md decision 16).
 | Replication of destruction events, full state for joiners | ✅ | CellsDestroyed messages; e2e-tested |
 | Local debris, dust, destruction sounds | ✅ | Godot GPU particles per broken cell (chunks and dust by material), explosions (fire, smoke, dust, debris), one breaking sound per material per frame |
 | Fracture meshes for broken walls | ❌ | Broken walls are drawn as their remaining cells; gameplay stays cell-based |
-| Shot-time rewind of destruction for lag compensation | ❌ | Shots use the current destruction state (documented in ARCHITECTURE.md) |
+| Shot-time rewind of destruction for lag compensation | ✅ | The server keeps one second of destroyed-cell history; a lag-compensated shot treats cells broken after the shooter's view time as intact, so walls stop it as they stood when the shooter fired (unit test) |
 | Doors that open/close (USE) | ✅ | USE on a door within 2 m toggles it (never closes on a player; a damaged door no longer moves). Replicated with DoorState (protocol v9) to everyone and joiners; an open door does not collide for movement, prediction, shots or explosions. Unit and e2e tests (prediction walks through with no corrections). The client swings the door about its hinge, plays a creak or slam, and shows a USE prompt |
 | Reinforced surfaces | ✅ | Defenders reinforce wood, drywall and brick walls (Phase 4) |
 

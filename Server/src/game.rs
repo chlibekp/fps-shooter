@@ -425,6 +425,7 @@ pub struct GameWorld {
     pending_shots: Vec<(u16, u32, Shot)>,
     destruction: Destruction,
     trace_buf: Vec<Obstacle>,
+    revived_buf: Vec<u32>,
     /// Explosions this tick (centre, radius), for effects.
     pub explosions: Vec<(Vec3, f32)>,
     /// Modes, rounds, objective.
@@ -496,6 +497,7 @@ impl GameWorld {
             pending_shots: Vec::with_capacity(64),
             destruction,
             trace_buf: Vec::with_capacity(64),
+            revived_buf: Vec::new(),
             explosions: Vec::new(),
             match_state: MatchState::default(),
             map_reset_this_tick: false,
@@ -715,6 +717,9 @@ impl GameWorld {
 
     /// Advances the world by one fixed step.
     pub fn tick(&mut self) {
+        // Cells destroyed last tick join the rewind history (one second).
+        let window = self.tick_rate as u32 + 8;
+        self.destruction.remember(self.tick, window);
         self.tick = self.tick.wrapping_add(1);
         self.shot_events.clear();
         self.events.clear();
@@ -895,10 +900,14 @@ impl GameWorld {
         let range = drone.map_or(def.range, |d| d.0);
         player_hits.retain(|h| h.0 < range);
 
-        // Walk the obstacles (current destruction state) in order: damage the
-        // cells crossed, penetrate while the bullet has power left.
+        // Walk the obstacles in order, as the shooter saw them (cells broken
+        // since their view time still stand): damage the cells crossed,
+        // penetrate while the bullet has power left.
         let mut obs = std::mem::take(&mut self.trace_buf);
-        destruction::trace(&self.collision, origin, dir, range, &mut obs);
+        let mut revived = std::mem::take(&mut self.revived_buf);
+        self.destruction.destroyed_after(t_rewind, &mut revived);
+        destruction::trace_as_of(&self.collision, origin, dir, range, &revived, &mut obs);
+        self.revived_buf = revived;
         let mut power = def.penetration;
         let mut dmg_mult = 1.0f32;
         let mut blocked_at: Option<(f32, u8)> = None;
@@ -1950,6 +1959,48 @@ mod tests {
         let ev = a.w.shot_events[0].1;
         assert_eq!(ev.surface, tfps_sim::Material::Brick as u8);
         assert!((ev.end_mm[0] - 10_000).abs() < 5, "{ev:?}");
+    }
+
+    #[test]
+    fn lag_compensated_shots_see_walls_as_they_stood() {
+        // Brick (stops bullets) between the shooter (x = 0) and the target (x = 20).
+        let wall = r#",{"min":[10,-3,0],"max":[10.3,3,3],"material":"brick"}"#;
+        let mut a = Arena::new(wall, MatchRules::default());
+        let si = a.w.collision.solids.len() - 1;
+        a.step(aim_at(buttons::AIM, 20.0, 0.0, 1.2), cmd(0), 32);
+        // Destruction injected between ticks is recorded with this tick, so
+        // a view of the tick before it predates the hole.
+        let before = a.w.tick - 1;
+        // A hole opens in the line of fire (as if blown a moment ago).
+        let cells: Vec<u32> =
+            a.w.collision
+                .cells_of_solid(si)
+                .filter(|&c| {
+                    let (_, b) = a.w.collision.cell_info(c).unwrap();
+                    b.max.y > -0.8 && b.min.y < 0.8 && b.max.z > 0.6 && b.min.z < 1.9
+                })
+                .collect();
+        for &c in &cells {
+            a.w.collision.destroy_cell(c);
+            a.w.destruction.destroyed_this_tick.push(c);
+        }
+        a.step(aim_at(buttons::AIM, 20.0, 0.0, 1.2), cmd(0), 6);
+        // The shooter's view predates the hole: the wall still stops it.
+        a.step_with_render_time(
+            aim_at(buttons::AIM | buttons::FIRE, 20.0, 0.0, 1.2),
+            cmd(0),
+            before * 256,
+        );
+        assert_eq!(a.hp(2), 100, "the wall stood at the shooter's view time");
+        // Seen after the hole opened: through it.
+        a.step(aim_at(buttons::AIM, 20.0, 0.0, 1.2), cmd(0), 24);
+        let now = a.w.tick;
+        a.step_with_render_time(
+            aim_at(buttons::AIM | buttons::FIRE, 20.0, 0.0, 1.2),
+            cmd(0),
+            now * 256,
+        );
+        assert!(a.hp(2) < 100, "through the hole the shooter saw");
     }
 
     #[test]

@@ -58,7 +58,10 @@ impl Brain {
         // Nearest visible enemy (aim at the chest).
         let mut best: Option<(u16, Vec3, f32)> = None;
         for p in bot.players.values() {
-            if !p.present || p.team == bot.team || p.flags & tfps_protocol::snapshot::entity_flags::ALIVE == 0 {
+            if !p.present
+                || p.team == bot.team
+                || p.flags & tfps_protocol::snapshot::entity_flags::ALIVE == 0
+            {
                 continue;
             }
             let chest = Vec3::new(p.render_pos.x, p.render_pos.y, p.render_pos.z + 1.25);
@@ -73,7 +76,10 @@ impl Brain {
         let mut b = 0u16;
         // Reload when the magazine is empty.
         let w = &bot.predicted_weapon;
-        if (w.active as usize) < w.slots.len() && w.slots[w.active as usize].ammo == 0 && !w.slots[w.active as usize].chambered {
+        if (w.active as usize) < w.slots.len()
+            && w.slots[w.active as usize].ammo == 0
+            && !w.slots[w.active as usize].chambered
+        {
             b |= buttons::RELOAD;
         }
         match best {
@@ -89,7 +95,8 @@ impl Brain {
                 let dy = at.y - eye.y;
                 let dz = at.z - eye.z;
                 let want_yaw = dy.atan2(dx).to_degrees() + self.aim_offset.0;
-                let want_pitch = dz.atan2((dx * dx + dy * dy).sqrt()).to_degrees() + self.aim_offset.1;
+                let want_pitch =
+                    dz.atan2((dx * dx + dy * dy).sqrt()).to_degrees() + self.aim_offset.1;
                 // Turn toward the target at a limited rate; the aim error shrinks while tracking.
                 let rate = (180.0 + 360.0 * self.skill) * dt;
                 let dyaw = wrap_deg(want_yaw - self.yaw);
@@ -112,7 +119,11 @@ impl Brain {
                     self.strafe_left = !self.strafe_left;
                     self.strafe_timer = 0.6 + self.rand() * 1.2;
                 }
-                b |= if self.strafe_left { buttons::LEFT } else { buttons::RIGHT };
+                b |= if self.strafe_left {
+                    buttons::LEFT
+                } else {
+                    buttons::RIGHT
+                };
                 if dist > 25.0 {
                     b |= buttons::FORWARD;
                 }
@@ -157,7 +168,11 @@ pub fn line_of_sight(map: &MapDef, from: Vec3, to: Vec3) -> bool {
         let mut t0 = 0.0f32;
         let mut t1 = 1.0f32;
         let mut blocked = true;
-        for (o, dd, lo, hi) in [(from.x, d.x, b.min.x, b.max.x), (from.y, d.y, b.min.y, b.max.y), (from.z, d.z, b.min.z, b.max.z)] {
+        for (o, dd, lo, hi) in [
+            (from.x, d.x, b.min.x, b.max.x),
+            (from.y, d.y, b.min.y, b.max.y),
+            (from.z, d.z, b.min.z, b.max.z),
+        ] {
             if dd.abs() < 1e-9 {
                 if o < lo || o > hi {
                     blocked = false;

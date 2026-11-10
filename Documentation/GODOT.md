@@ -135,5 +135,5 @@ They take a screenshot with scripted input, then quit.
 ## Not done yet
 
 * Operators are rigid Blender body parts turned at their joints, with no
-  skinning; first-person arms are simple procedural shapes.
+  skinning; first-person arms are simple procedural shapes in the team colour.
 * Nothing has been played on a GPU, on Windows or on macOS yet.

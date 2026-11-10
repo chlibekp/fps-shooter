@@ -18,6 +18,7 @@ var camera: Camera3D
 var _view: Node3D              # view-model root (child of the camera)
 var _weapon: Node3D
 var _weapon_id := -1
+var _team := 0
 var _crouch_on := false
 var _prone_on := false
 var _last_weapon_slot := 0
@@ -104,14 +105,16 @@ func apply(s: Dictionary, delta: float, shake: float) -> void:
 
 func _update_view_model(s: Dictionary, w: Dictionary, delta: float) -> void:
 	var id := int(w.get("id", 0)) if int(w.get("active", 0)) < 2 else 0
-	if id != _weapon_id:
+	var team := clampi(int(s.get("side", 0)), 0, 1)   # same as other players' "team"
+	if id != _weapon_id or team != _team:
 		_weapon_id = id
+		_team = team
 		if _weapon:
 			_weapon.queue_free()
 			_weapon = null
 		if id > 0:
 			_weapon = TfpsModels.weapon(TfpsModels.weapon_class(id))
-			TfpsModels.add_arms(_weapon, TfpsModels.weapon_class(id))
+			TfpsModels.add_arms(_weapon, TfpsModels.weapon_class(id), _team)
 			for g in _weapon.find_children("*", "GeometryInstance3D", true, false):
 				(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			_weapon.scale = Vector3.ONE * 0.72

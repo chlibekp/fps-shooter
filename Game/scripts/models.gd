@@ -222,8 +222,9 @@ static func segment(parent: Node3D, a: Vector3, b: Vector3, radius: float, m: Ma
 ## First-person arms holding a weapon made by weapon(): a gloved right hand
 ## on the grip and the left hand on the handguard (or around the right hand
 ## for a pistol). Added as children of the weapon, so they move with it.
-static func add_arms(weapon_root: Node3D, weapon_class: String) -> void:
-	var sleeve := mat("fp_sleeve", Color(0.17, 0.18, 0.15), 0.9)
+static func add_arms(weapon_root: Node3D, weapon_class: String, team := 0) -> void:
+	# Sleeve colours match the operator uniforms (team A olive, B slate).
+	var sleeve := mat("fp_sleeve_b", Color(0.25, 0.27, 0.31), 0.9) if team == 1 else mat("fp_sleeve_a", Color(0.36, 0.38, 0.28), 0.9)
 	var glove := mat("fp_glove", Color(0.06, 0.06, 0.055), 0.7)
 	var cuff := mat("fp_cuff", Color(0.1, 0.1, 0.09), 0.85)
 	var muzzle_node := weapon_root.get_node_or_null("muzzle") as Node3D

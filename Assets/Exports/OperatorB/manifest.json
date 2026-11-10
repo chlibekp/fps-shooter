@@ -2,11 +2,11 @@
   "asset": "OperatorB",
   "mesh": "SM_OperatorB",
   "dimensions_m": [
-    1.249,
+    1.1236,
     0.4256,
     1.802
   ],
-  "triangles_lod0": 47204,
+  "triangles_lod0": 55032,
   "texture_size": 2048,
   "files": {
     "BC": "Assets/Exports/OperatorB/T_OperatorB_BC.png",
@@ -39,5 +39,43 @@
     "shin.L",
     "foot.L",
     "toe.L"
-  ]
+  ],
+  "hand_frames": {
+    "R": [
+      1.0,
+      0.0,
+      0.0,
+      0.48,
+      0.0,
+      0.0,
+      -1.0,
+      0.112,
+      0.0,
+      1.0,
+      0.0,
+      1.07,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "L": [
+      1.0,
+      0.0,
+      0.0,
+      -0.468,
+      0.0,
+      0.0,
+      -1.0,
+      0.06,
+      0.0,
+      1.0,
+      0.0,
+      1.08,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  }
 }

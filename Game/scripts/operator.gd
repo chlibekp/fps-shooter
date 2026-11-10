@@ -32,7 +32,7 @@ var _materials := {}
 var _skinned := false
 
 var _reload_t := 0.0
-var _reload_hand = null   # support-hand target while reloading (Vector3 or null)
+var _reload_hand = null   # support-hand hold frame while reloading (global Transform3D or null)
 
 # Skinned character.
 var _char: Node3D
@@ -67,9 +67,11 @@ func _make_label() -> void:
 func _build_skinned(t: int) -> void:
 	if _char:
 		_char.queue_free()
-	_char = TfpsRig.instance("OperatorB" if t == 1 else "OperatorA")
+	var asset := "OperatorB" if t == 1 else "OperatorA"
+	_char = TfpsRig.instance(asset)
 	add_child(_char)
 	_rig = TfpsRig.new(TfpsRig.skeleton_of(_char))
+	_rig.hand_frames = TfpsRig.load_hand_frames(asset)
 
 
 func _animate_skinned(stride: float, on_ground: bool) -> void:
@@ -103,7 +105,10 @@ func _animate_skinned(stride: float, on_ground: bool) -> void:
 	r.keep("clavicle.L")
 	r.keep("clavicle.R")
 	if _weapon:
-		r.hold(_weapon, to_skel, _reload_hand)
+		if r.hand_frames.size() == 2:
+			r.hold_modelled(_weapon, to_skel, _reload_hand)
+		else:
+			r.hold(_weapon, to_skel, _reload_hand.origin if _reload_hand is Transform3D else null)
 	r.commit()
 
 
@@ -273,7 +278,8 @@ func _animate(delta: float, flags: int) -> void:
 			mag.visible = not (reloading and r >= 0.35 and r < 0.45)
 			if reloading and r > 0.3 and r < 0.85 and mag is MeshInstance3D:
 				var mi := mag as MeshInstance3D
-				_reload_hand = mi.global_transform * (mi.get_aabb().get_center() - Vector3(0, mi.get_aabb().size.y * 0.3, 0))
+				var at := mi.global_transform * (mi.get_aabb().get_center() - Vector3(0, mi.get_aabb().size.y * 0.32, 0))
+				_reload_hand = Transform3D(_weapon.global_basis.orthonormalized(), at)
 	# Prone and death lay the body down (prone face first, death to the side).
 	rotation.x = -_prone * 1.45
 	rotation.z = _dead * 1.4

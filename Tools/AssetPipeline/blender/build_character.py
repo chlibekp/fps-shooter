@@ -541,6 +541,10 @@ def build_team(team, colours):
     weight_body(body)
     arms = first_person_arms(body, parts, f"SM_{asset}Arms", GLOVES[team])
     arms.hide_render = True   # not in the operator preview
+    # Third person: the same modelled gloves in place of the body's hands.
+    cut_hands(body)
+    parts = [o for o in parts if not any(g.name.startswith("hand.") for g in o.vertex_groups)]
+    parts += [gloved_hand(tag, GLOVES[team]) for tag in ("R", "L")]
     mesh = tc.join([body] + parts, f"SM_{asset}")
     mesh.data.transform(mesh.matrix_world)
     mesh.matrix_world = Matrix.Identity(4)
@@ -574,6 +578,7 @@ def build_team(team, colours):
         "files": files,
         "notes": "Skinned operator; faces +Y (Godot -Z), A-pose. Bones: see build_character.py.",
         "bones": [b[0] for b in BONES],
+        "hand_frames": {tag: [round(x, 6) for row in hold_frame(tag) for x in row] for tag in ("R", "L")},
     }
     import json
     with open(os.path.join(out_dir, "manifest.json"), "w", newline="\n") as f:
@@ -692,6 +697,30 @@ def gloved_hand(tag, glove):
 ARM_BONES = ("upper_arm", "forearm", "hand")
 
 
+def hand_weights_to_forearm(o):
+    """The hand bone is placed freely on the weapon (modelled hands), so the
+    sleeve around the wrist follows the forearm only."""
+    vg = {g.name: g for g in o.vertex_groups}
+    for v in o.data.vertices:
+        for ge in list(v.groups):
+            name = o.vertex_groups[ge.group].name
+            if name.startswith("hand."):
+                vg["forearm." + name[-1]].add([v.index], ge.weight, 'ADD')
+                o.vertex_groups[ge.group].remove([v.index])
+
+
+def cut_hands(body):
+    """Removes the body's own (mitten) hands beyond the wrist; the modelled
+    gloves replace them."""
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    hand = lambda co: abs(co.x) > 0.135 and co.z > 0.85 and arm_t(co) >= 0.995  # noqa: E731
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if any(hand(v.co) for v in f.verts)], context='FACES')
+    bm.to_mesh(body.data)
+    bm.free()
+    hand_weights_to_forearm(body)
+
+
 def first_person_arms(body, parts, name, glove):
     """Sleeves, gloves, cuffs and patches for the first-person view: the
     arm region of the weighted body plus copies of the gear bound to arm
@@ -706,14 +735,7 @@ def first_person_arms(body, parts, name, glove):
     bmesh.ops.delete(bm, geom=[f for f in bm.faces if not all(keep(v.co) for v in f.verts)], context='FACES')
     bm.to_mesh(arms.data)
     bm.free()
-    # The hand bone is placed freely on the weapon, so the sleeve follows the forearm only.
-    vg = {g.name: g for g in arms.vertex_groups}
-    for v in arms.data.vertices:
-        for ge in list(v.groups):
-            name = arms.vertex_groups[ge.group].name
-            if name.startswith("hand."):
-                vg["forearm." + name[-1]].add([v.index], ge.weight, 'ADD')
-                arms.vertex_groups[ge.group].remove([v.index])
+    hand_weights_to_forearm(arms)
     extra = []
     for o in parts:
         names = [g.name.split(".")[0] for g in o.vertex_groups]
